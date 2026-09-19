@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Self-update a running firstmate and its secondmates to the latest origin.
 #
-# Mechanical half of the /updatefirstmate skill. Fast-forwards the running
+# Mechanical half of the /updatefirstmate skill, and the ORIGIN half only:
+# bin/fm-upstream.sh owns the public-upstream check and reconciliation that runs
+# before this, so "origin is current" is never read as "we have everything the
+# public upstream repo published".
+#
+# Fast-forwards the running
 # firstmate repo's default branch from origin, then fast-forwards every
 # registered secondmate home. Local homes are treehouse worktrees or standalone
 # clones; remote routes update their configured code root on that host and then

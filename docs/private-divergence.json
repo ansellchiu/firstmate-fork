@@ -1,0 +1,725 @@
+{
+  "version": 1,
+  "description": "Authoritative inventory of intentional firstmate-private divergence from public Firstmate core. bin/fm-private-divergence.sh owns this schema and validates these entries; docs/private-divergence.md is the human view.",
+  "entries": [
+    {
+      "id": "extension-contract",
+      "area": "Home extensions",
+      "paths": [
+        "bin/fm-ext.sh",
+        "bin/fm-ext-hook-lib.sh",
+        "bin/fm-extension.sh",
+        "bin/fm-extension.mjs",
+        "tests/fm-ext.test.sh",
+        "tests/fm-ext-hook.test.sh",
+        "tests/ext-fixture-helpers.sh",
+        "bin/fm-session-start.sh",
+        ".agents/skills/bootstrap-diagnostics/SKILL.md",
+        "README.md",
+        "docs/scripts.md",
+        "tests/fm-session-start.test.sh",
+        "AGENTS.md"
+      ],
+      "intent": "Private homes install extensions that register their own load triggers and contribute bounded session-start sections; a failing contributor must never block session start.",
+      "provenance": {
+        "commits": [
+          "878d5ff"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "automic-vault-injection",
+      "area": "Secret injection",
+      "paths": [
+        "bin/fm-vault-lib.sh",
+        "bin/fm-av-inject-lib.sh",
+        "bin/fm-av-run.sh",
+        "tests/fm-vault.test.sh",
+        "tests/fm-av-inject.test.sh",
+        "bin/fm-bootstrap.sh",
+        "docs/configuration.md",
+        ".agents/skills/bootstrap-diagnostics/SKILL.md",
+        "tests/fm-session-start.test.sh",
+        "tests/fm-bootstrap.test.sh"
+      ],
+      "intent": "A worker runs one key-dependent tool call through point-of-use injection; worker launches are never wrapped and no worker holds a key in its environment.",
+      "provenance": {
+        "commits": [
+          "57868e0",
+          "6b936e7"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "token-spend-view",
+      "area": "Cost reporting",
+      "paths": [
+        "bin/fm-spend.sh",
+        "tests/fm-spend.test.sh"
+      ],
+      "intent": "Per-task token spend is readable without leaving the home, so cost stays a courtesy report rather than a blocking gate.",
+      "provenance": {
+        "commits": [
+          "f9266d3"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "agy-harness-preflight",
+      "area": "Harness adapters",
+      "paths": [
+        "bin/fm-agy-lib.sh",
+        "tests/fm-agy-preflight.test.sh",
+        ".agents/skills/harness-adapters/references/harness/agy.md",
+        "bin/fm-spawn.sh",
+        "bin/fm-bootstrap.sh",
+        "bin/fm-busy-lib.sh",
+        "bin/fm-test-run.sh",
+        ".agents/skills/harness-adapters/SKILL.md",
+        "AGENTS.md",
+        "docs/configuration.md",
+        "docs/trace-context.md",
+        "docs/documentation-audiences.json",
+        "tests/fm-spawn-dispatch-profile.test.sh",
+        "bin/fm-composer-lib.sh",
+        "tests/fm-bootstrap.test.sh"
+      ],
+      "intent": "Every agy launch is gated on an authentication preflight, because agy has no interrupt or exit control path on tmux to recover a launch that started unauthenticated.",
+      "provenance": {
+        "commits": [
+          "69e375e"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "rate-limit-classification",
+      "area": "Supervision triage",
+      "paths": [
+        "bin/fm-rate-limit-lib.sh",
+        "tests/fm-rate-limit.test.sh",
+        "bin/fm-watch.sh",
+        "bin/fm-supervise-daemon.sh",
+        "bin/fm-crew-state.sh",
+        "tests/fm-watch-triage.test.sh",
+        "tests/fm-crew-state.test.sh"
+      ],
+      "intent": "A worker stalled on a provider rate limit is classified apart from a wedged worker, so a bounded external wait is not escalated as a failure.",
+      "provenance": {
+        "commits": [
+          "f7205a1"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "unmetered-quota-report",
+      "area": "Dispatch quota",
+      "paths": [
+        "bin/fm-quota-unmetered.sh",
+        "bin/fm-quota-unmetered-report.mjs",
+        "tests/fm-quota-unmetered.test.sh",
+        "docs/scripts.md",
+        "bin/fm-test-run.sh",
+        ".agents/skills/quota-array-dispatch/SKILL.md"
+      ],
+      "intent": "Providers quota-axi does not meter still get a quota perspective, so dispatch selection accounts for every candidate instead of silently skipping unmetered ones.",
+      "provenance": {
+        "commits": [
+          "2382d33"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "pi-branch-rotation",
+      "area": "Pi supervision branch",
+      "paths": [
+        ".pi/extensions/lib/fm-branch-rotation.ts",
+        "tests/fm-branch-rotation.test.sh",
+        ".pi/extensions/fm-branch-supervision.ts",
+        "docs/pi-supervision-branch.md",
+        "tests/fm-pi-branch-extension.test.sh",
+        "tests/fm-pi-branch-live-e2e.test.sh",
+        "AGENTS.md"
+      ],
+      "intent": "The supervision branch conversation rotates at safe boundaries and carries a durable session-start catch-up obligation across the rotation.",
+      "provenance": {
+        "commits": [
+          "6277477"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "wake-batch-coalescing",
+      "area": "Wake classification",
+      "paths": [
+        "bin/fm-classify-lib.sh",
+        "bin/fm-push-transition-lib.sh",
+        "tests/fm-wake-batching.test.sh",
+        "bin/fm-watch.sh",
+        "tests/fm-watch-triage.test.sh"
+      ],
+      "intent": "Routine supervision events coalesce into one bounded batch that never becomes a notification on its own - an absorbed batch rolls into local triage telemetry when its window elapses and only rides out with an independently admitted wake - and rehydration diffs only the records that actually changed.",
+      "provenance": {
+        "commits": [
+          "1d5b398"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "spawn-launch-postcondition",
+      "area": "Task dispatch",
+      "paths": [
+        "bin/fm-control-lib.sh",
+        "bin/fm-control.sh",
+        "bin/fm-spawn.sh",
+        "tests/fm-spawn-launch-postcondition.test.sh",
+        "tests/lib.sh"
+      ],
+      "intent": "A spawn confirms the agent is alive before reporting the task as spawned, so a dead launch is never recorded as dispatched work.",
+      "provenance": {
+        "commits": [
+          "b36ef90"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "upstream-reconciliation",
+      "area": "Self-update topology",
+      "paths": [
+        "bin/fm-upstream.sh",
+        "bin/fm-private-divergence.sh",
+        "bin/fm-update.sh",
+        "bin/fm-test-run.sh",
+        ".agents/skills/updatefirstmate/SKILL.md",
+        "docs/private-divergence.md",
+        "docs/private-divergence.json",
+        "docs/architecture.md",
+        "docs/scripts.md",
+        "docs/documentation-audiences.json",
+        "README.md",
+        "AGENTS.md",
+        "tests/fm-upstream.test.sh",
+        "tests/fm-private-divergence.test.sh"
+      ],
+      "intent": "This home has a private origin and a fetch-only public upstream, so \"origin is current\" never means \"we carry everything public upstream published\"; every self-update checks upstream first and reconciles genuinely new public commits through an isolated branch and a private pull request.",
+      "provenance": {
+        "commits": [
+          "ecfcdf0"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "stale-repeat-suppression",
+      "area": "Supervision triage",
+      "paths": [
+        "bin/fm-wake-lib.sh",
+        "bin/fm-wake-drain.sh",
+        "bin/fm-watch.sh",
+        "bin/fm-teardown.sh",
+        "docs/architecture.md",
+        "docs/configuration.md",
+        "AGENTS.md",
+        "tests/fm-wake-queue.test.sh",
+        "tests/fm-watch-triage.test.sh"
+      ],
+      "intent": "An UNDECLARED stale notification firstmate already handled and acknowledged is not re-presented byte-identically inside a bounded horizon, so a churny idle pane cannot spend a full-context turn per poll; a declared external wait is bounded by its own declaration instead, because the bare payload cannot tell one declaration from the next.",
+      "provenance": {
+        "commits": [
+          "636c4ba"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "auto-standdown",
+      "area": "Supervision triage",
+      "paths": [
+        "bin/fm-watch.sh",
+        "bin/fm-classify-lib.sh",
+        "tests/fm-watch-triage.test.sh",
+        "tests/fm-gotmp.test.sh",
+        "tests/lib.sh",
+        "tests/wake-helpers.sh"
+      ],
+      "intent": "A worker that never started stops escalating forever: the watcher stands the task down once, preserves its brief, and raises one loud check wake instead of an endless stale ladder.",
+      "provenance": {
+        "commits": [
+          "b9d709d"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "daemon-lock-liveness",
+      "area": "Away mode",
+      "paths": [
+        "bin/fm-wake-lib.sh",
+        "bin/fm-watch.sh",
+        "bin/fm-afk-start.sh",
+        "tests/fm-watch-triage.test.sh",
+        "tests/fm-wake-daemon-lifecycle-e2e.test.sh",
+        "tests/wake-helpers.sh"
+      ],
+      "intent": "Away mode is read from a lock a live daemon actually holds, verified portably, so a stale flag cannot silence the watcher after the daemon is gone.",
+      "provenance": {
+        "commits": [
+          "c3b13aa"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "claims-audit",
+      "area": "Captain calls",
+      "paths": [
+        "bin/fm-captain-hold.sh",
+        "docs/captain-hold-lifecycle.md",
+        ".agents/skills/captain-hold-lifecycle/SKILL.md",
+        "tests/fm-captain-hold-lifecycle.test.sh",
+        "tests/fm-backlog-atomicity.test.sh",
+        "tests/fm-cmux-claude-composer-live-e2e.test.sh"
+      ],
+      "intent": "Completing an origin that filed a report requires attesting how many load-bearing claims were spot-verified, with a higher floor and the offending line quoted when the negative-claim classifier fires, so a false \"X does not exist\" verdict is not relayed to the captain unchecked.",
+      "provenance": {
+        "commits": [
+          "c3cbf27",
+          "1cc00e2"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "batched-captain-answers",
+      "area": "Captain calls",
+      "paths": [
+        "bin/fm-captain-hold.sh",
+        "docs/captain-hold-lifecycle.md",
+        "tests/fm-captain-hold-lifecycle.test.sh"
+      ],
+      "intent": "A captain answer given as one item of a batch records that item position and the captain's words for it in the resolution block, so a batched decision stays attributable per item on replay.",
+      "provenance": {
+        "commits": [
+          "f3a4f14"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "scout-research-standards",
+      "area": "Crewmate briefs",
+      "paths": [
+        "bin/fm-brief.sh",
+        "tests/fm-brief.test.sh",
+        "AGENTS.md"
+      ],
+      "intent": "Every scout brief carries a standing, task-agnostic retrieval contract: live web-search with cited queries, an authoritative existence-surface check for every negative claim, and an explicit could-not-check statement when a surface is unreachable.",
+      "provenance": {
+        "commits": [
+          "94d362e"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "delivery-posture-gate",
+      "area": "Task dispatch",
+      "paths": [
+        "bin/fm-send.sh",
+        "bin/fm-spawn.sh",
+        "docs/architecture.md",
+        "tests/fm-task-delivery.test.sh",
+        "AGENTS.md"
+      ],
+      "intent": "A ship spawn or validation trigger more outward-facing than the project registry permits is refused before anything is created, rather than only warning when it drops below the registered rigor.",
+      "provenance": {
+        "commits": [
+          "1c68a87"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "pi-primary-growth",
+      "area": "Pi primary conversation",
+      "paths": [
+        ".pi/extensions/fm-primary-growth.ts",
+        ".pi/extensions/lib/fm-primary-growth.ts",
+        ".pi/extensions/lib/fm-primary-session-lock.ts",
+        ".pi/extensions/fm-primary-pi-watch.ts",
+        "bin/fm-pi-session-metrics.sh",
+        "bin/fm-pi-session-metrics.mjs",
+        "bin/fm-test-run.sh",
+        "docs/pi-primary-growth.md",
+        "docs/pi-supervision-branch.md",
+        "docs/architecture.md",
+        "docs/documentation-audiences.json",
+        "docs/verification/pi-primary-growth-baseline.md",
+        "AGENTS.md",
+        "tests/fm-primary-growth.test.sh",
+        "tests/fm-pi-session-metrics.test.sh",
+        "tests/fm-pi-watch-extension.test.sh",
+        "tests/fm-watch-recovery-loop.test.sh",
+        ".pi/extensions/lib/fm-operational-input.ts",
+        "tests/fm-calm-pi-extension.test.sh",
+        "tests/fm-pi-primary-live-e2e.test.sh",
+        "tests/fm-pi-primary-types.test.sh"
+      ],
+      "intent": "The Pi primary conversation is measured for the point where re-sending it stops being cheap, and calibrated circuit breakers rotate it without splitting a bounded action or dropping supervision.",
+      "provenance": {
+        "commits": [
+          "47566fc"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "portfolio-attention-limit",
+      "area": "Portfolio attention",
+      "paths": [
+        ".agents/skills/project-management/SKILL.md",
+        "AGENTS.md",
+        "bin/fm-attention-lib.sh",
+        "bin/fm-attention.sh",
+        "bin/fm-bearings-snapshot.sh",
+        "bin/fm-fleet-snapshot.sh",
+        "bin/fm-fleet-view.sh",
+        "bin/fm-project-mode.sh",
+        "bin/fm-spawn.sh",
+        "bin/fm-test-run.sh",
+        "docs/architecture.md",
+        "docs/configuration.md",
+        "docs/scripts.md",
+        "tests/fm-attention.test.sh",
+        "tests/fm-kimi-harness.test.sh"
+      ],
+      "intent": "The fleet enforces a configurable portfolio attention limit across focused projects and active work, while preserving an explicit off switch and reporting the counted set and reasons through shared projections.",
+      "provenance": {
+        "commits": [
+          "42cd407"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "herdr-native-submit-proof",
+      "area": "Herdr backend",
+      "paths": [
+        "bin/backends/herdr.sh",
+        "docs/herdr-backend.md",
+        "docs/architecture.md",
+        "tests/fm-backend-herdr.test.sh"
+      ],
+      "intent": "Herdr's native idle-to-busy agent-state transition is an independently sufficient proof that an Enter landed, so a harness whose rendered busy footer is hidden by a presentation setting is not reported as an unconfirmed steer and re-injected.",
+      "provenance": {
+        "commits": [
+          "0dd04ef"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "pr-forge-state-classification",
+      "area": "Crew state",
+      "paths": [
+        "bin/fm-crew-state.sh",
+        "bin/fm-pr-poll.sh",
+        "tests/fm-crew-state.test.sh",
+        "tests/fm-pr-check-security.test.sh"
+      ],
+      "intent": "A closed-unmerged pull request is classified apart from a merged one on GitHub and GitLab alike, so a terminal passed run whose PR was closed without merging reads as failed rather than done.",
+      "provenance": {
+        "commits": [
+          "099dfb5"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "teardown-dedupe-marker-sync",
+      "area": "Teardown",
+      "paths": [
+        "bin/fm-teardown.sh",
+        "bin/fm-backend.sh",
+        "bin/fm-classify-lib.sh",
+        "tests/fm-teardown.test.sh",
+        "tests/fm-wake-drain-unread-status.test.sh"
+      ],
+      "intent": "A retired task's dedupe and stale markers are synchronized at teardown, so the window it vacates cannot echo its wakes onto whatever occupies that window next.",
+      "provenance": {
+        "commits": [
+          "16a1a08"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "config-inherit-single-owner",
+      "area": "Secondmate provisioning",
+      "paths": [
+        "bin/fm-config-inherit-lib.sh",
+        ".agents/skills/secondmate-provisioning/SKILL.md",
+        "docs/configuration.md",
+        "tests/fm-secondmate-harness.test.sh"
+      ],
+      "intent": "The inheritable-config allowlist has exactly one owner in bin/fm-config-inherit-lib.sh, and every consumer and document derives from FM_INHERITABLE_CONFIG rather than restating the list.",
+      "provenance": {
+        "commits": [
+          "a418b46"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "changed-selection-deletions",
+      "area": "Test selection",
+      "paths": [
+        "bin/fm-test-run.sh",
+        "tests/fm-test-run.test.sh"
+      ],
+      "intent": "Changed-test selection treats a deleted path as having no behavior left to select for, so removing a source and its path rule in one commit does not make selection refuse on the removal itself.",
+      "provenance": {
+        "commits": [
+          "a1b2b24"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "away-escalation-delivery",
+      "area": "Away mode",
+      "paths": [
+        "bin/fm-afk-launch.sh",
+        "bin/fm-afk-return.sh",
+        "bin/fm-afk-start.sh",
+        "bin/fm-supervise-daemon.sh",
+        "tests/fm-daemon.test.sh"
+      ],
+      "intent": "An away-mode escalation the daemon could not deliver becomes a loud alarm rather than silence, and a repeatedly wedged submit is bounded by a counted circuit breaker whose count is retired with the rest of the away-mode artifacts.",
+      "provenance": {
+        "commits": [
+          "b353bf25",
+          "3348e080"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "catch-all-marker-crosscheck",
+      "area": "Supervision triage",
+      "paths": [
+        "bin/fm-classify-lib.sh",
+        "bin/fm-watch.sh",
+        "bin/fm-supervise-daemon.sh",
+        "tests/fm-daemon.test.sh",
+        "tests/fm-watch-triage.test.sh"
+      ],
+      "intent": "The always-on watcher and the away daemon cross-check each other's catch-all markers, so a status log one layer already presented is not presented again by the other.",
+      "provenance": {
+        "commits": [
+          "05507d1c"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "rearm-resurface-empty-queue",
+      "area": "Wake queue",
+      "paths": [
+        "bin/fm-wake-lib.sh",
+        "tests/fm-watch-arm.test.sh",
+        "tests/fm-watcher-lock.test.sh"
+      ],
+      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued.",
+      "provenance": {
+        "commits": [
+          "950421c7"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "herdr-native-idle-unknown",
+      "area": "Herdr backend",
+      "paths": [
+        "bin/backends/herdr.sh",
+        "tests/fm-backend-herdr.test.sh",
+        "tests/fm-busy-state.test.sh",
+        "tests/fm-remote-secondmate-lifecycle-e2e.test.sh"
+      ],
+      "intent": "Herdr's native idle agent state is read as unknown rather than idle, so a worker whose harness footer is hidden (Calm) is not classified idle mid-turn; only a positive busy record outranks it.",
+      "provenance": {
+        "commits": [
+          "a80d6499"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "session-lock-harness-case",
+      "area": "Session lock",
+      "paths": [
+        "bin/fm-session-lock-lib.sh",
+        "tests/fm-session-lock-ancestry.test.sh"
+      ],
+      "intent": "The harness-ancestry match folds the reported command name before testing it, so a macOS app bundle that reports a capitalized executable name is still recognized and the session is not refused its own home lock.",
+      "provenance": {
+        "commits": [
+          "ee2f2a4c"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "autoarm-actionable-rewake",
+      "area": "Watcher continuity",
+      "paths": [
+        "bin/fm-claude-stop-autoarm.sh",
+        "tests/fm-claude-stop-autoarm.test.sh"
+      ],
+      "intent": "An actionable Claude Stop wake always forces its continuation. The rewake commit accepts a handling recovery marker, and commits UNBOUND when the marker is acked or absent, instead of refusing into a silent exit 0 that would discard the banner already printed and stop the session on an unhandled supervision wake; an unbound entry names no recovery generation, so it still never claims mid-turn health.",
+      "provenance": {
+        "commits": [
+          "478c974",
+          "d0c2d76"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "mail-plane-input-hardening",
+      "area": "Mail plane",
+      "paths": [
+        "bin/fm-mail.sh",
+        "tests/fm-mail.test.sh"
+      ],
+      "intent": "Operator-supplied mail input fails safe: a .env line whose trimmed key is not a shell identifier is skipped rather than aborting every subcommand (including the standing poll) through indirect expansion under set -e, and a recipient or subject carrying CR or LF is refused before it can inject SMTP headers.",
+      "provenance": {
+        "commits": [
+          "478c974"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "launch-agent-xml-escaping",
+      "area": "Remote secondmates",
+      "paths": [
+        "bin/fm-remote-doctor.sh",
+        "tests/fm-remote-doctor.test.sh"
+      ],
+      "intent": "The Aqua launch-agent plist escapes the guard exec command as well as the login shell, so an ampersand or angle bracket in the repo root, the resolved herdr path, or the session name cannot render a malformed plist whose only symptom is an undiagnosable launchctl bootstrap error.",
+      "provenance": {
+        "commits": [
+          "d0c2d76"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "macos-platform-binary-holder",
+      "area": "Remote secondmates",
+      "paths": [
+        "tests/fm-remote-doctor.test.sh",
+        "tests/fm-remote-herdr-guard.test.sh"
+      ],
+      "intent": "Darwin socket-owner birth classification is proven with a real holder process whose environment can actually be read: on macOS the Apple-shipped /usr/bin/jq is a platform binary whose marker environment is hidden, so those tests hold the fifo with node instead of silently proving nothing.",
+      "provenance": {
+        "commits": [
+          "0a6e6a7"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    },
+    {
+      "id": "herdr-relaunch-identity-release",
+      "area": "Runtime backends",
+      "paths": [
+        "tests/fm-control-herdr-smoke.test.sh"
+      ],
+      "intent": "The real-herdr relaunch smoke drives a replacement harness that reports and then releases a native Herdr agent identity, and waits for that release before asserting re-homing, so the relaunch path is proven against the native agent registry the private submit and idle classification reads rather than against a pane that never carried an identity.",
+      "provenance": {
+        "commits": [
+          "0a6e6a7"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+    }
+  ]
+}
