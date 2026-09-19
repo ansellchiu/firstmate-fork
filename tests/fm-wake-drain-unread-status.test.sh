@@ -236,6 +236,7 @@ test_retired_task_id_starts_new_status_unread() {
       [ ! -e "$marker" ] && [ ! -L "$marker" ] || exit 1
     done
   ' _ "$ROOT" "$dir/old-ident" || fail "retiring the reused task presentation state failed"
+  rm -f "$state/reused.status"
   printf 'blocked: release host unavailable\nworking: routine padding after the reused task started again\nnote: first event from reused task id\n' \
     > "$state/reused.status"
   old_ident=$(cat "$dir/old-ident")
