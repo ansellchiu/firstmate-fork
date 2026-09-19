@@ -25,6 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/fm-lease-lib.sh"
 
 DRAIN_TMP=
+ACK_RETIRED=
 DRAIN_VIEW_TMP=
 DRAIN_LOCK_HELD=false
 RAW_ROWS=
@@ -613,6 +614,7 @@ print_status_presentation() {  # [<deduped-raw-rows>]
 cleanup() {
   local status=$?
   [ -z "$DRAIN_TMP" ] || rm -f -- "$DRAIN_TMP" 2>/dev/null || true
+  [ -z "$ACK_RETIRED" ] || rm -f -- "$ACK_RETIRED" 2>/dev/null || true
   [ -z "$DRAIN_VIEW_TMP" ] || rm -f -- "$DRAIN_VIEW_TMP" 2>/dev/null || true
   if [ "$DRAIN_LOCK_HELD" = true ]; then
     fm_lock_release "$FM_WAKE_QUEUE_LOCK"
@@ -685,6 +687,19 @@ if [ -n "$ACK_THROUGH" ]; then
   DRAIN_LOCK_HELD=true
   DRAIN_TMP=$(mktemp "$STATE/.wake-queue.ack.XXXXXX") || exit 1
   chmod 0600 "$DRAIN_TMP" || exit 1
+  # Record what this acknowledgement retires BEFORE consuming it, so an unchanged
+  # stale notification firstmate has now handled is not re-presented as new work
+  # (bin/fm-wake-lib.sh owns the horizon and the fail-open rules). Recording at
+  # acknowledgement rather than presentation is what keeps a presented-but-
+  # interrupted wake durable and re-presentable.
+  ACK_RETIRED=$(mktemp "$STATE/.wake-queue.retired.XXXXXX") || exit 1
+  chmod 0600 "$ACK_RETIRED" || exit 1
+  awk -F '\t' -v cutoff="$ACK_THROUGH" '
+    NF >= 5 && $2 ~ /^[0-9]+$/ && $2 <= cutoff { print }
+  ' "$FM_WAKE_QUEUE" > "$ACK_RETIRED" || exit 1
+  fm_wake_record_presented "$ACK_RETIRED" || true
+  rm -f -- "$ACK_RETIRED"
+  ACK_RETIRED=
   if [ "$ACTOR" = branch ]; then
     require_branch_eligible_rows || exit 1
     # Delete a row only when its sequence is <= cutoff AND it is named in the

@@ -328,6 +328,11 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 # leases).
 # shellcheck source=bin/fm-lease-lib.sh
 . "$SCRIPT_DIR/fm-lease-lib.sh"
+# Incidental findings: surface what the worker left for triage at this natural
+# checkpoint (contract: bin/fm-findings-lib.sh; the file itself is durable
+# data and survives this cleanup unchanged).
+# shellcheck source=bin/fm-findings-lib.sh
+. "$SCRIPT_DIR/fm-findings-lib.sh"
 # Role partition: forced teardown discards work, and the supervision branch
 # never discards anything - only an ordinary landed-work teardown is branch
 # territory (contract: bin/fm-lease-lib.sh).
@@ -1299,7 +1304,9 @@ remove_pr_poll_artifacts() {
   fm_pr_poll_merge_notified_remove "$state_dir" "$id" || return 1
   rm -f "$state_dir/$id.check.sh" "$state_dir/$id.pr-poll" \
     "$state_dir/$id.pr-poll-registration" "$state_dir/$id.pr-poll-retirement" \
-    "$state_dir/$id.merge-authority" "$state_dir/$id.check-trust" || return 1
+    "$state_dir/$id.merge-authority" \
+    "$state_dir/$id.pr-poll-merge-receipt-attempts" \
+    "$state_dir/$id.check-trust" || return 1
 }
 
 # Resolve the PR number for a worktree branch via gh-axi. Echoes the number on a
@@ -3132,12 +3139,30 @@ cleanup_firstmate_home_children() {
     remove_grok_turnend_auth "$sub_state" "$child_id" || return 1
     remove_kimi_turnend_auth "$sub_state" "$child_id" || return 1
     remove_pr_poll_artifacts "$sub_state" "$child_id" || return 1
+    child_target=$(meta_value "$child_meta" window)
     child_busy_gen=$(meta_value "$child_meta" busy_gen)
     if [ -z "$child_busy_gen" ]; then
       child_busy_gen=$(cat "$sub_state/$child_id.busy-gen" 2>/dev/null || true)
     fi
     retire_busy_state "$sub_state" "$child_id" "$child_busy_gen" || return 1
     status_retire_presentation_task "$sub_state" "$child_id" || return 1
+    if [ -f "$sub_state/$child_id.status" ]; then
+      fm_wake_status_mark_current "$sub_state" "$sub_state/$child_id.status" 2>/dev/null || true
+      child_hb_marker=$(status_heartbeat_seen_marker_path "$sub_state" "$child_id" 2>/dev/null || true)
+      if [ -n "$child_hb_marker" ]; then
+        child_size=$(_fm_status_file_size "$sub_state/$child_id.status" 2>/dev/null || true)
+        child_ident=$(_fm_open_decisions_file_ident "$sub_state/$child_id.status" 2>/dev/null || true)
+        if [ -n "$child_size" ] && [ -n "$child_ident" ]; then
+          status_presentation_marker_commit "$child_hb_marker" "$sub_state/$child_id.status" "$child_size" "$child_ident" 2>/dev/null || true
+        fi
+      fi
+    fi
+    if [ -n "$child_target" ]; then
+      child_key=$(printf '%s' "$child_target" | tr ':/.' '___')
+      rm -f "$sub_state/.stale-$child_key" "$sub_state/.stale-since-$child_key" \
+        "$sub_state/.wedge-escalations-$child_key" "$sub_state/.stale-sig-$child_key" \
+        "$sub_state/.paused-$child_key" "$sub_state/.paused-resurfaced-$child_key"
+    fi
     fm_backlog_atomic_transition remove "$sub_state/$child_id.meta" "task record" "$sub_state" || return 1
     rm -f "$sub_state/$child_id.turn-ended" "$sub_state/$child_id.progress" \
       "$sub_state/$child_id.pi-ext.ts" "$sub_state/$child_id.omp-ext.ts" \
@@ -3302,6 +3327,79 @@ if [ "$BACKEND" = herdr ]; then
   fm_backend_herdr_parse_target "$T" || exit 1
   TEARDOWN_HERDR_SESSION=$FM_BACKEND_HERDR_SESSION
   TEARDOWN_HERDR_PANE=$FM_BACKEND_HERDR_PANE
+fi
+
+# Structural receipt gate and archive (fm-receipt.v1, bin/fm-receipt.sh owns
+# the format). Every refusal above has passed, so this is the completion
+# moment the receipt freezes. A ship task with no receipt refuses exactly
+# like the landed-work refusals (a landing receipt is re-recordable by
+# bin/fm-receipt.sh upgrade-landing with the task's registered PR URL, or
+# bin/fm-merge-local.sh after its fast-forward); --force lifts the refusal
+# exactly as it lifts those and never fabricates a receipt. A scout's report
+# receipt is written here at completion. The archive is append-once and both
+# steps are idempotent, and they run BEFORE the pending-close record below,
+# so an interrupted cleanup always retries safely. Not for kind=secondmate.
+if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
+  if [ "$KIND" = ship ] && [ "$FORCE" != "--force" ]; then
+    RECEIPT_GATE_RC=0
+    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
+      "$SCRIPT_DIR/fm-receipt.sh" get "$ID" >/dev/null 2>&1 || RECEIPT_GATE_RC=$?
+    # Exit 3 is fm-receipt.sh saying receipts are unavailable on this host at
+    # all (no jq), not that this task lacks one: inability to verify, never
+    # evidence of unlanded work. The merge path treats rc=3 the same way, so
+    # the gate is not applicable here either - warn and proceed, rather than
+    # forcing --force through every ship cleanup on a jq-less host.
+    if [ "$RECEIPT_GATE_RC" -eq 3 ]; then
+      echo "warning: ship task $ID's completion receipt cannot be read: jq is not installed, so typed receipts are unavailable on this host; continuing without the receipt gate." >&2
+    elif [ "$RECEIPT_GATE_RC" -ne 0 ] && [ -s "$STATE/$ID.receipt" ]; then
+      # `get` exits 1 for an absent record and for a present but unreadable
+      # one alike. A record that is sitting right there must not be reported
+      # missing: the repair is to replace it, not to write a first one.
+      echo "REFUSED: ship task $ID's completion receipt (state/$ID.receipt) is present but does not read as a valid fm-receipt.v1 record." >&2
+      echo "Run bin/fm-receipt.sh get $ID to see why, then remove state/$ID.receipt and rewrite it with bin/fm-receipt.sh upgrade-landing --task $ID --pr-url ${PR_URL:-<pr-url>} (PR tasks) or bin/fm-merge-local.sh $ID (local-only), or use --force after explicit approval to discard the record as it stands." >&2
+      exit 1
+    elif [ "$RECEIPT_GATE_RC" -ne 0 ]; then
+      # The work already landed (every landed-work refusal above passed), so
+      # the repair must record a LANDING. The registration writer would mint
+      # an unverified "PR ready" receipt with no landed commit instead.
+      echo "REFUSED: ship task $ID has no completion receipt (state/$ID.receipt)." >&2
+      echo "Every landed ship task records one; run bin/fm-receipt.sh upgrade-landing --task $ID --pr-url ${PR_URL:-<pr-url>} (PR tasks) or re-run bin/fm-merge-local.sh $ID (local-only) to write it, or use --force after explicit approval to discard the record." >&2
+      exit 1
+    fi
+  fi
+  if [ "$KIND" = scout ] && [ -s "$DATA/$ID/report.md" ]; then
+    RECEIPT_WRITE_RC=0
+    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
+      "$SCRIPT_DIR/fm-receipt.sh" write-report --task "$ID" \
+        --report-path "$DATA/$ID/report.md" >/dev/null || RECEIPT_WRITE_RC=$?
+    if [ "$RECEIPT_WRITE_RC" -eq 3 ]; then
+      # Same rc=3 reading as the ship gate above: receipts are unavailable on
+      # this host, which is never a reason to retain a completed task's records.
+      echo "warning: scout task $ID's completion receipt cannot be written: jq is not installed, so typed receipts are unavailable on this host; continuing without it." >&2
+    elif [ "$RECEIPT_WRITE_RC" -ne 0 ]; then
+      if [ "$FORCE" = "--force" ]; then
+        echo "warning: scout task $ID's completion receipt could not be written; continuing under --force" >&2
+      else
+        echo "error: could not write scout task $ID's completion receipt; retaining every durable task record" >&2
+        exit 1
+      fi
+    fi
+  fi
+  if [ -s "$STATE/$ID.receipt" ]; then
+    RECEIPT_ARCHIVE_RC=0
+    FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
+      "$SCRIPT_DIR/fm-receipt.sh" archive --task "$ID" >/dev/null || RECEIPT_ARCHIVE_RC=$?
+    if [ "$RECEIPT_ARCHIVE_RC" -eq 3 ]; then
+      echo "warning: task $ID's completion receipt cannot be archived: jq is not installed, so typed receipts are unavailable on this host; continuing without the durable index row." >&2
+    elif [ "$RECEIPT_ARCHIVE_RC" -ne 0 ]; then
+      if [ "$FORCE" = "--force" ]; then
+        echo "warning: task $ID's completion receipt could not be archived; continuing under --force" >&2
+      else
+        echo "error: could not archive task $ID's completion receipt into the durable index; retaining every durable task record" >&2
+        exit 1
+      fi
+    fi
+  fi
 fi
 
 BACKLOG_CLOSED=0
@@ -3566,6 +3664,27 @@ fm_backend_clear_transition "$BACKEND" "$STATE" "$T" || true
 remove_pr_poll_artifacts "$STATE" "$ID" || exit 1
 retire_busy_state "$STATE" "$ID" "$BUSY_GEN" || exit 1
 status_retire_presentation_task "$STATE" "$ID" || exit 1
+# Drop this window's recorded stale notifications so a retired task can never
+# suppress the FIRST notification of whatever next occupies the same window
+# (bin/fm-wake-lib.sh owns the record and its horizon).
+fm_wake_repeat_retire_key "$T"
+if [ -f "$STATE/$ID.status" ]; then
+  fm_wake_status_mark_current "$STATE" "$STATE/$ID.status" 2>/dev/null || true
+  hb_marker=$(status_heartbeat_seen_marker_path "$STATE" "$ID" 2>/dev/null || true)
+  if [ -n "$hb_marker" ]; then
+    status_size=$(_fm_status_file_size "$STATE/$ID.status" 2>/dev/null || true)
+    status_ident=$(_fm_open_decisions_file_ident "$STATE/$ID.status" 2>/dev/null || true)
+    if [ -n "$status_size" ] && [ -n "$status_ident" ]; then
+      status_presentation_marker_commit "$hb_marker" "$STATE/$ID.status" "$status_size" "$status_ident" 2>/dev/null || true
+    fi
+  fi
+fi
+if [ -n "$T" ]; then
+  key=$(printf '%s' "$T" | tr ':/.' '___')
+  rm -f "$STATE/.stale-$key" "$STATE/.stale-since-$key" \
+    "$STATE/.wedge-escalations-$key" "$STATE/.stale-sig-$key" \
+    "$STATE/.paused-$key" "$STATE/.paused-resurfaced-$key"
+fi
 rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$STATE/$ID.pi-ext.ts" "$STATE/$ID.omp-ext.ts" "$STATE/$ID.grok-turnend-token" \
   "$STATE/$ID.kimi-turnend-token" "$STATE/$ID.muse-session" \
@@ -3574,6 +3693,11 @@ rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
   "$STATE/$ID.control-relaunch.brief-prior" "$STATE/$ID.control-relaunch.note" \
   "$STATE/$ID.reconcile-nudged" "$STATE/$ID.gemini-settings.json" \
   "$STATE/.$ID.branch-outcome-index"
+# A later task may reuse this id, and its first outcome must reach the captain
+# as a first-of-a-kind fact rather than as a repeat of the retired task's.
+# A cache that cannot be updated only costs one collapsed note, never a
+# teardown, so this never fails the retirement.
+"$SCRIPT_DIR/fm-branch-outcome.sh" forget --task "$ID" >/dev/null 2>&1 || true
 # The steering inbox (bin/fm-task-inbox-lib.sh) is runtime state for the
 # retired endpoint; teardown only runs after landing is confirmed, so any
 # leftover unhandled steer here is moot rather than unlanded work.
@@ -3619,11 +3743,38 @@ fi
 if [ -d "$STATE" ]; then
   "$SCRIPT_DIR/fm-home-summary-refresh.sh" --best-effort || true
 fi
+# The per-task receipt file is discarded only here at the very end: the gate
+# and every later refusal read it, so a teardown that refuses anywhere keeps
+# it for the retry (the archived index row is already durable).
+if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
+  # The merge poll may have upgraded this receipt to verified since the archive
+  # above, in the window every step between them opened. The archive is
+  # append-once and already supersedes an unverified row with the verified one,
+  # so re-running it here is what stops the index answering "what landed" with
+  # a state the record had already outgrown when it was discarded.
+  if [ -s "$STATE/$ID.receipt" ]; then
+    if ! FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
+        "$SCRIPT_DIR/fm-receipt.sh" archive --task "$ID" >/dev/null; then
+      echo "warning: task $ID's completion receipt could not be re-archived before discard; the earlier index row remains durable" >&2
+    fi
+  fi
+  if ! FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
+      "$SCRIPT_DIR/fm-receipt.sh" discard --task "$ID" >/dev/null; then
+    echo "warning: task $ID's archived receipt file could not be removed; the index row is durable" >&2
+  fi
+fi
 if [ "$TEARDOWN_LEGACY_ACCEPTED" = 1 ]; then
   echo "teardown $ID complete (window $T, worktree $WT, legacy record accepted without spawn_gen: endpoint $TEARDOWN_LEGACY_ENDPOINT, incarnation $TEARDOWN_META_SPAWN_GEN)"
 elif teardown_owns_worktree; then
   echo "teardown $ID complete (window $T, worktree $WT)"
 else
   echo "teardown $ID complete (window $T; pool slot $WT left to task $TEARDOWN_SLOT_REASSIGNED_TO${TEARDOWN_SLOT_REASSIGNED_HOME:+ (home $TEARDOWN_SLOT_REASSIGNED_HOME)}, which it was reassigned to)"
+fi
+# The findings file survives cleanup by design (data/<id>/ is durable), so a
+# worker's out-of-scope observation outlives the task record; surface pending
+# entries here so the task record's removal is never what kills them.
+if FINDINGS_TAIL=$(fm_findings_pending_lines "$DATA" "$ID" 6); then
+  echo "pending incidental findings for $ID (data/$ID/findings.md) - triage with bin/fm-findings.sh list / triage:"
+  printf '%s\n' "$FINDINGS_TAIL"
 fi
 backlog_refresh_reminder

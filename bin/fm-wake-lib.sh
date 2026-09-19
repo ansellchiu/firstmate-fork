@@ -173,6 +173,59 @@ fm_watcher_healthy() {
   return 0
 }
 
+# Daemon lock helpers: portable liveness verification for state/.supervise-daemon.lock.
+# A lock is held by a live daemon iff:
+#   1. the lock path exists (symlink or dir) and resolves to an owner directory;
+#   2. the owner directory records a pid;
+#   3. that pid belongs to a live process (fm_pid_alive);
+#   4. the recorded pid matches the lock's pid-identity (when present) or the
+#      running process command matches fm-supervise-daemon.
+fm_daemon_lock_owner() {
+  local state=${1:-$STATE} lock owner
+  lock="$state/.supervise-daemon.lock"
+  if [ -L "$lock" ]; then
+    owner=$(readlink "$lock" 2>/dev/null) || return 1
+    [ -n "$owner" ] || return 1
+    case "$owner" in
+      /*) printf '%s\n' "$owner" ;;
+      *) printf '%s/%s\n' "$(dirname "$lock")" "$owner" ;;
+    esac
+    return 0
+  fi
+  [ -d "$lock" ] || return 1
+  printf '%s\n' "$lock"
+}
+
+fm_daemon_lock_pid() {
+  local state=${1:-$STATE} owner
+  owner=$(fm_daemon_lock_owner "$state") || return 1
+  cat "$owner/pid" 2>/dev/null || true
+}
+
+fm_daemon_pid_matches() {
+  local pid=$1 owner=$2 identity current command daemon_script
+  identity=$(cat "$owner/pid-identity" 2>/dev/null || true)
+  if [ -n "$identity" ]; then
+    current=$(fm_pid_identity "$pid") || return 1
+    [ "$current" = "$identity" ]
+    return
+  fi
+  daemon_script=${FM_DAEMON_SCRIPT_OVERRIDE:-fm-supervise-daemon.sh}
+  command=$(ps -p "$pid" -o command= 2>/dev/null || true)
+  case "$command" in
+    *"$daemon_script"*|*"fm-supervise-daemon"*) return 0 ;;
+  esac
+  return 1
+}
+
+fm_daemon_lock_held() {
+  local state=${1:-$STATE} owner pid
+  owner=$(fm_daemon_lock_owner "$state") || return 1
+  pid=$(cat "$owner/pid" 2>/dev/null || true)
+  fm_pid_alive "$pid" || return 1
+  fm_daemon_pid_matches "$pid" "$owner"
+}
+
 # fm_watcher_healthy above is the PID-STRICT primitive: true only when a live,
 # identity-matched watcher PROCESS holds this home's lock with a fresh beacon. The
 # arm layer (bin/fm-watch-arm.sh, bin/fm-claude-stop-autoarm.sh) needs exactly
@@ -633,7 +686,7 @@ _fm_atomic_replace() {
 _fm_recovery_marker_write_locked() {
   local marker=$1 kind=$2 generation=${3:-} status=${4:-pending} tmp
   case "$kind" in handling|downtime) ;; *) return 1 ;; esac
-  case "$status" in pending|announced) ;; *) return 1 ;; esac
+  case "$status" in pending|announced|acked) ;; *) return 1 ;; esac
   tmp=$(mktemp "${marker}.tmp.XXXXXX") || return 1
   [ -n "$generation" ] || generation="$(fm_current_pid).$(date +%s).${tmp##*.}"
   if ! printf '%s:%s:%s\n' "$status" "$kind" "$generation" > "$tmp" \
@@ -805,13 +858,23 @@ _fm_recovery_marker_arm_check() {
       return 0
       ;;
     pending:downtime:*)
-      if ! _fm_recovery_marker_write_locked "$marker" downtime "${line##*:}" announced; then
-        fm_lock_release "$lock"
-        fm_lock_release "$FM_WAKE_QUEUE_LOCK"
-        return 1
+      if [ -s "$FM_WAKE_QUEUE" ]; then
+        if ! _fm_recovery_marker_write_locked "$marker" downtime "${line##*:}" announced; then
+          fm_lock_release "$lock"
+          fm_lock_release "$FM_WAKE_QUEUE_LOCK"
+          return 1
+        fi
+        FM_RECOVERY_MARKER_TOKEN="announced:downtime:${line##*:}"
+        FM_RECOVERY_MARKER_ACTION='recover'
+      else
+        if ! _fm_recovery_marker_write_locked "$marker" downtime "${line##*:}" acked; then
+          fm_lock_release "$lock"
+          fm_lock_release "$FM_WAKE_QUEUE_LOCK"
+          return 1
+        fi
+        FM_RECOVERY_MARKER_TOKEN="acked:downtime:${line##*:}"
+        FM_RECOVERY_MARKER_ACTION='none'
       fi
-      FM_RECOVERY_MARKER_TOKEN="announced:downtime:${line##*:}"
-      FM_RECOVERY_MARKER_ACTION='recover'
       ;;
     acked:*)
       if [ -s "$FM_WAKE_QUEUE" ]; then
@@ -1392,8 +1455,11 @@ fm_failure_episode_reset() {
 #
 #   - The CURRENT claim is the ledger's latest entry: line 1 begins with the
 #     "epoch=N owner_pid=P outcome=O updated_at=T" record. A "rewake" outcome
-#     also records "session_pid=S recovery_generation=G", binding that
-#     handling turn to its live session-lock owner and watcher recovery episode.
+#     also records "session_pid=S", and "recovery_generation=G" whenever the
+#     recovery marker names a generation, binding that handling turn to its live
+#     session-lock owner and watcher recovery episode. A rewake for a wake with
+#     no recovery episode to name records no generation and is therefore never
+#     accepted as mid-turn health below.
 #     Line 2 is the claiming process's pid-identity, the same identity every other
 #     supervision lock in this repo records (fm_pid_identity above). The
 #     identity is MANDATORY: a claimant that cannot record it does not claim
@@ -1844,6 +1910,113 @@ fm_wake_append_locked() {
     printf '%s\t%s\t%s\t%s\t%s\n' "$epoch" "$seq" "$kind" "$clean_key" "$clean_payload" >> "$FM_WAKE_QUEUE" || status=$?
   fi
   return "$status"
+}
+
+# --- unchanged stale-repeat suppression -------------------------------------
+#
+# A stale wake's payload IS the whole notification: a bare "stale: <window>", or a
+# reason decorated with an age, an escalation count, or a classification. Once
+# firstmate has HANDLED one of those payloads and acknowledged it, re-presenting a
+# byte-identical payload for the same window spends a full-context turn to tell it
+# nothing it did not just act on. These two functions are the one owner of that
+# judgement: the drain records what an acknowledgement actually retired, and the
+# supervision owner asks whether a candidate payload is exactly that same
+# already-handled notification.
+#
+# Scope is deliberately stale-only. A "signal: <file>" payload is byte-identical
+# every time that file changes, so its repeat means genuinely NEW status content
+# behind an unchanged name; suppressing it would swallow the next blocker. Check
+# and heartbeat payloads carry their own changing evidence. Only a stale wake
+# repeats with an unchanged payload AND unchanged meaning.
+#
+# Nothing is suppressed forever: FM_WAKE_REPEAT_SUPPRESS_SECS bounds every
+# record, so an unchanged condition that genuinely persists re-notifies once the
+# horizon passes. Recording happens at ACKNOWLEDGEMENT, never at presentation, so
+# a wake that was presented but interrupted before its post-handling
+# acknowledgement stays durable and is re-presented exactly as before. Every read
+# failure - missing, unreadable, symlinked, or malformed manifest - reports "not a
+# repeat", so a damaged record can only cost an extra notification, never a lost
+# one.
+FM_WAKE_PRESENTED="${FM_WAKE_PRESENTED:-$STATE/.wake-presented}"
+FM_WAKE_REPEAT_SUPPRESS_SECS_DEFAULT=900
+
+fm_wake_repeat_horizon() {
+  local secs=${FM_WAKE_REPEAT_SUPPRESS_SECS:-$FM_WAKE_REPEAT_SUPPRESS_SECS_DEFAULT}
+  case "$secs" in
+    ''|*[!0-9]*) secs=$FM_WAKE_REPEAT_SUPPRESS_SECS_DEFAULT ;;
+  esac
+  printf '%s' "$secs"
+}
+
+# 0 when <payload> is byte-identical to the stale notification already handled and
+# acknowledged for <key> within the horizon. Fails open on every read problem.
+fm_wake_stale_repeat_suppressed() {  # <key> <payload>
+  local key=$1 payload=$2 horizon now data row_epoch row_kind row_key row_payload
+  horizon=$(fm_wake_repeat_horizon)
+  [ "$horizon" -gt 0 ] || return 1
+  [ -f "$FM_WAKE_PRESENTED" ] && [ -r "$FM_WAKE_PRESENTED" ] && [ ! -L "$FM_WAKE_PRESENTED" ] || return 1
+  key=$(printf '%s' "$key" | fm_wake_clean_field)
+  payload=$(printf '%s' "$payload" | fm_wake_clean_field)
+  now=$(date +%s)
+  data=$(LC_ALL=C command cat "$FM_WAKE_PRESENTED" 2>/dev/null) || return 1
+  [ -n "$data" ] || return 1
+  while IFS=$(printf '\t') read -r row_epoch row_kind row_key row_payload; do
+    [ "$row_kind" = stale ] || continue
+    [ "$row_key" = "$key" ] || continue
+    case "$row_epoch" in ''|*[!0-9]*) continue ;; esac
+    [ "$row_payload" = "$payload" ] || continue
+    [ $(( now - row_epoch )) -lt "$horizon" ] || continue
+    return 0
+  done <<EOF
+$data
+EOF
+  return 1
+}
+
+# Record the stale notifications an acknowledgement retired, pruning rows past the
+# horizon so the manifest stays bounded. <rows> is the raw queue text being
+# acknowledged (epoch, sequence, kind, key, payload). Callers hold the queue lock.
+# Best effort by contract: a manifest that cannot be written only costs the next
+# unchanged repeat a notification.
+fm_wake_record_presented() {  # <rows-file>
+  local rows=$1 horizon now tmp
+  horizon=$(fm_wake_repeat_horizon)
+  now=$(date +%s)
+  # Refuse to follow a symlink or clobber a non-regular file planted at the path.
+  if [ -e "$FM_WAKE_PRESENTED" ] || [ -L "$FM_WAKE_PRESENTED" ]; then
+    if [ ! -f "$FM_WAKE_PRESENTED" ] || [ -L "$FM_WAKE_PRESENTED" ]; then
+      return 0
+    fi
+  fi
+  tmp=$(mktemp "${FM_WAKE_PRESENTED}.tmp.XXXXXX") || return 0
+  {
+    awk -F '\t' -v now="$now" -v horizon="$horizon" '
+      NF >= 4 && $2 == "stale" && $1 ~ /^[0-9]+$/ && now - $1 < horizon { print }
+    ' "$FM_WAKE_PRESENTED" 2>/dev/null
+    awk -F '\t' -v now="$now" '
+      NF >= 5 && $3 == "stale" { print now "\t" $3 "\t" $4 "\t" $5 }
+    ' "$rows" 2>/dev/null
+  } | awk -F '\t' '{ latest[$2 SUBSEP $3] = $0 } END { for (k in latest) print latest[k] }' > "$tmp" 2>/dev/null
+  if ! chmod 0600 "$tmp" 2>/dev/null || ! _fm_atomic_replace "$tmp" "$FM_WAKE_PRESENTED" 2>/dev/null; then
+    rm -f -- "$tmp" 2>/dev/null || true
+  fi
+  return 0
+}
+
+# Drop every recorded stale notification for <key>, so a retired task's window can
+# never suppress the first notification of whatever next occupies that window.
+fm_wake_repeat_retire_key() {  # <key>
+  local key=$1 tmp
+  [ -f "$FM_WAKE_PRESENTED" ] && [ ! -L "$FM_WAKE_PRESENTED" ] || return 0
+  key=$(printf '%s' "$key" | fm_wake_clean_field)
+  tmp=$(mktemp "${FM_WAKE_PRESENTED}.tmp.XXXXXX") || return 0
+  if awk -F '\t' -v key="$key" 'NF >= 4 && $3 != key { print }' "$FM_WAKE_PRESENTED" > "$tmp" 2>/dev/null \
+    && chmod 0600 "$tmp" 2>/dev/null; then
+    _fm_atomic_replace "$tmp" "$FM_WAKE_PRESENTED" 2>/dev/null || rm -f -- "$tmp" 2>/dev/null || true
+  else
+    rm -f -- "$tmp" 2>/dev/null || true
+  fi
+  return 0
 }
 
 # fm_wake_queued_keys <kind>

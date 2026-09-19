@@ -1980,6 +1980,66 @@ test_historical_annotation_skips_announced_status() {
   pass "historical annotations replay nothing already announced and keep everything new"
 }
 
+# The unchanged-stale-repeat record must be recorded only by an acknowledgement,
+# scoped to stale wakes, bounded by its horizon, and fail open on every damaged
+# read. Those five properties are what keep it a noise filter rather than a way to
+# lose a notification, so each is asserted through the public library interface.
+test_stale_repeat_record_is_ack_scoped_bounded_and_fails_open() {
+  local dir state sequence generation err
+  dir=$(make_case stale-repeat-record); state="$dir/state"; err="$dir/drain.err"
+
+  suppressed() {  # <key> <payload>
+    FM_STATE_OVERRIDE="$state" bash -c '
+      # shellcheck disable=SC1090,SC1091
+      . "$1"
+      if fm_wake_stale_repeat_suppressed "$2" "$3"; then echo yes; else echo no; fi
+    ' _ "$ROOT/bin/fm-wake-lib.sh" "$1" "$2"
+  }
+
+  append_wake "$state" stale "test:fm-w" "stale: test:fm-w" || fail "stale append failed"
+  # PRESENTED but not yet acknowledged: the wake must stay durable and repeatable.
+  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null 2> "$err" || fail "drain failed"
+  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
+    || fail "a presented-but-unacknowledged wake was already treated as handled"
+
+  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) .*$/\1/p' "$err")
+  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-]*\)$/\1/p' "$err")
+  [ -n "$sequence" ] && [ -n "$generation" ] || fail "drain printed no acknowledgement command"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$sequence" --recovery-generation "$generation" >/dev/null \
+    || fail "acknowledgement failed"
+
+  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = yes ] \
+    || fail "an acknowledged stale notification did not suppress its byte-identical repeat"
+  [ "$(suppressed "test:fm-w" "stale: test:fm-w (idle 500s, possible wedge, escalation 1)")" = no ] \
+    || fail "a materially changed reason was suppressed"
+  [ "$(suppressed "test:fm-other" "stale: test:fm-w")" = no ] \
+    || fail "a different window was suppressed by an unrelated record"
+
+  # Bounded: a zero horizon suppresses nothing, so no condition is silenced forever.
+  [ "$(FM_WAKE_REPEAT_SUPPRESS_SECS=0 suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
+    || fail "the suppression horizon did not bound the record"
+
+  # Scoped: signal wakes repeat with an identical payload whenever their status
+  # file gains NEW content, so they must never be suppressed.
+  append_wake "$state" signal "$state/w.status" "signal: $state/w.status" || fail "signal append failed"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null 2> "$err" || fail "second drain failed"
+  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) .*$/\1/p' "$err")
+  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-]*\)$/\1/p' "$err")
+  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$sequence" --recovery-generation "$generation" >/dev/null \
+    || fail "second acknowledgement failed"
+  [ "$(suppressed "$state/w.status" "signal: $state/w.status")" = no ] \
+    || fail "a signal wake was recorded as a suppressible stale repeat"
+
+  # Fails open: a damaged record can only cost an extra notification.
+  printf 'not\va\vrecord\n' > "$state/.wake-presented"
+  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
+    || fail "a malformed record suppressed a notification"
+  rm -f "$state/.wake-presented"
+  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
+    || fail "a missing record suppressed a notification"
+  pass "the stale-repeat record is written only by acknowledgement, stale-scoped, horizon-bounded, and fails open"
+}
+
 test_self_held_lock_reclaims_instead_of_deadlocking
 test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention
@@ -2022,3 +2082,4 @@ test_stale_ack_that_consumes_nothing_names_the_current_wake
 test_branch_stale_ack_that_consumes_nothing_names_its_granted_wake
 test_recovery_ack_failure_is_reported
 test_interruption_before_and_after_raw_commit
+test_stale_repeat_record_is_ack_scoped_bounded_and_fails_open
