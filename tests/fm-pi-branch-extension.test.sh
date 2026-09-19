@@ -15,6 +15,13 @@ set -u
 TMP_ROOT=$(fm_test_tmproot fm-pi-branch-extension)
 EXT="$ROOT/.pi/extensions/fm-branch-supervision.ts"
 export NODE_NO_WARNINGS=1
+# This suite pins dispatch, delivery, mirror, and model-selection contracts,
+# not the branch's rotation policy: a rotation firing part-way through a
+# scripted fixture would replace the session under the contract being asserted
+# and add its loud line to the asserted output. Rotation has its own coverage
+# in tests/fm-branch-rotation.test.sh.
+export FM_BRANCH_ROTATE=0
+
 # The Pi release whose stock renderer stopped supplying an implicit reset at
 # multiline boundaries, which is the contract this file's renderer cases
 # compare against.
@@ -57,6 +64,7 @@ install_pi_branch_extension_fixture() {
   cp "$ROOT/.pi/extensions/lib/fm-native-contract.ts" "$repo/.pi/extensions/lib/fm-native-contract.ts"
   cp "$ROOT/.pi/extensions/lib/fm-async-exec.ts" "$repo/.pi/extensions/lib/fm-async-exec.ts"
   cp "$ROOT/.pi/extensions/lib/fm-branch-model-picker.ts" "$repo/.pi/extensions/lib/fm-branch-model-picker.ts"
+  cp "$ROOT/.pi/extensions/lib/fm-branch-rotation.ts" "$repo/.pi/extensions/lib/fm-branch-rotation.ts"
   cp "$ROOT/.pi/extensions/lib/fm-calm-visibility.ts" "$repo/.pi/extensions/lib/fm-calm-visibility.ts"
   cp "$ROOT/.pi/extensions/lib/fm-operational-input.ts" "$repo/.pi/extensions/lib/fm-operational-input.ts"
   mkdir -p "$repo/bin"
@@ -1490,8 +1498,8 @@ SH
   PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
     DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
 const prelude = process.env.DRIVER_PRELUDE;
-await eval(`(async () => { ${prelude}; globalThis.__t = { dispatch, fire, settle, home, sentToMain, mainEntries, defaultSessionCtx }; })()`);
-const { dispatch, fire, settle, home, sentToMain, mainEntries, defaultSessionCtx } = globalThis.__t;
+await eval(`(async () => { ${prelude}; globalThis.__t = { dispatch, fire, settle, home, sentToMain, mainEntries, outcomeScript, defaultSessionCtx }; })()`);
+const { dispatch, fire, settle, home, sentToMain, mainEntries, outcomeScript, defaultSessionCtx } = globalThis.__t;
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 // Default-on: with no config/pi-supervision-branch grant file present at
@@ -1565,6 +1573,69 @@ const taskRoutineMerge = sentToMain[sentToMain.length - 1];
 if (taskRoutineMerge.message.display !== true) throw new Error("a task-scoped routine outcome must render");
 if (!taskRoutineMerge.message.content.startsWith("⛵ task-9: worker healthy, no action needed")) {
   throw new Error(`task-scoped routine note changed: ${taskRoutineMerge.message.content}`);
+}
+// Repeating an unchanged fact about one task is stored but not delivered
+// again: a repeat the captain has already read teaches them to skim past
+// outcomes, which is how a real one gets missed.
+await heartbeatReport.execute(
+  "task-routine-repeat",
+  { task: "task-9", verdict: "routine", summary: "worker healthy, no action needed" },
+  undefined,
+  undefined,
+  {},
+);
+const repeatMerge = sentToMain[sentToMain.length - 1];
+if (repeatMerge.message.display !== false) {
+  throw new Error("an unchanged routine fact was delivered to the captain twice");
+}
+const storedRepeat = readFileSync(`${home}/state/branch-outcomes.jsonl`, "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line))
+  .filter((row) => row.task === "task-9" && row.summary === "worker healthy, no action needed");
+if (storedRepeat.length !== 2 || storedRepeat[0].present !== true || storedRepeat[1].present !== false) {
+  throw new Error("suppression must be presentation-only: both outcomes stay in the durable store");
+}
+// A changed fact about the same task reaches the captain immediately.
+await heartbeatReport.execute(
+  "task-routine-changed",
+  { task: "task-9", verdict: "routine", summary: "worker restarted itself and resumed" },
+  undefined,
+  undefined,
+  {},
+);
+const changedMerge = sentToMain[sentToMain.length - 1];
+if (changedMerge.message.display !== true) throw new Error("a changed routine fact was suppressed");
+if (!changedMerge.message.content.startsWith("⛵ task-9: worker restarted itself and resumed")) {
+  throw new Error(`changed routine note changed: ${changedMerge.message.content}`);
+}
+// When a standing fact outlives its window it is delivered once more, and the
+// note says how many identical updates it stands for so it cannot read as news.
+process.env.FM_BRANCH_OUTCOME_DEDUPE_WINDOW = "4";
+outcomeScript(["append", "--task", "task-11", "--verdict", "routine", "--summary", "still idle"]);
+outcomeScript(["append", "--task", "task-11", "--verdict", "routine", "--summary", "still idle"]);
+await new Promise((resolve) => setTimeout(resolve, 4500));
+outcomeScript(["append", "--task", "task-11", "--verdict", "routine", "--summary", "still idle"]);
+delete process.env.FM_BRANCH_OUTCOME_DEDUPE_WINDOW;
+await heartbeatReport.execute(
+  "drain-seeded-outcomes",
+  { task: "fleet", verdict: "routine", summary: "swept the fleet after the standing wait" },
+  undefined,
+  undefined,
+  {},
+);
+const seededNotes = sentToMain.filter((sent) => (sent.message.content || "").includes("task-11: still idle"));
+if (seededNotes.length !== 3) {
+  throw new Error(`every stored outcome must still be delivered as its own note, got ${seededNotes.length}`);
+}
+if (seededNotes[0].message.display !== true || seededNotes[1].message.display !== false) {
+  throw new Error("the in-window repeat of a standing fact was delivered again");
+}
+if (seededNotes[2].message.display !== true) {
+  throw new Error("an expired window never re-delivered the standing fact");
+}
+if (seededNotes[2].message.content !== "⛵ task-11: still idle (unchanged; 1 identical update suppressed since the last note)") {
+  throw new Error(`re-delivered note lost its repeat count: ${seededNotes[2].message.content}`);
 }
 await heartbeatReport.execute(
   "heartbeat-finding",
@@ -4547,6 +4618,186 @@ JS
   pass "the installed Pi still bounds the picker's list and ranks its search"
 }
 
+# Rotation's OBSERVABLE contract, driven through the real extension: a
+# conversation is replaced only after a wake's action has fully settled, the
+# outgoing session gets its capture turn first, and the successor is told to
+# re-run session start before it acts. The policy module's own decision table
+# lives in tests/fm-branch-rotation.test.sh; what this pins is the extension's
+# behavior at the boundary, which only the real extension can show.
+test_rotation_replaces_the_conversation_only_after_a_settled_wake() {
+  local repo home out status
+  repo="$TMP_ROOT/rotate-root"
+  home="$TMP_ROOT/rotate-home"
+  mkdir -p "$home/state" "$home/config"
+  install_pi_branch_extension_fixture "$repo"
+  # Compaction is the only live trigger here, so the assertions below cannot
+  # be satisfied by an age or milestone rotation firing incidentally.
+  PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+    FM_BRANCH_ROTATE=1 FM_BRANCH_ROTATE_COMPACTIONS=1 \
+    FM_BRANCH_ROTATE_MAX_AGE_SECONDS=0 FM_BRANCH_ROTATE_MILESTONES=0 \
+    DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
+const prelude = process.env.DRIVER_PRELUDE;
+await eval(`(async () => { ${prelude}; globalThis.__t = { pi, fire, dispatch, settle, home }; })()`);
+const { dispatch, fire, settle, home } = globalThis.__t;
+import { existsSync, readFileSync } from "node:fs";
+
+const pointer = `${home}/state/.branch-session`;
+const record = `${home}/state/.branch-rotation`;
+
+// A settled wake is one that produced a durable outcome for the rows it
+// claimed, so this driver answers every supervision wake with the real
+// fm_branch_report tool. The rotation capture turn is deliberately not
+// answered: it is told never to report.
+fire("session_start", {}, { sessionManager: { getSessionFile: () => `${home}/main.jsonl`, getEntries: () => [] } });
+globalThis.__fmOnBranchPrompt = async ({ session, text }) => {
+  if (!text.includes("FIRSTMATE SUPERVISION WAKE")) return;
+  const task = /FIRSTMATE SUPERVISION WAKE: signal: (task-[0-9]+)/.exec(text)?.[1] ?? "branch-driver";
+  const report = session.options.customTools.find((tool) => tool.name === "fm_branch_report");
+  const result = await report.execute(
+    `wake-${task}`,
+    { task: "branch-driver", verdict: "routine", summary: `handled ${task}` },
+    undefined,
+    undefined,
+    {},
+  );
+  if (result.isError) throw new Error(`the wake could not report its outcome: ${JSON.stringify(result.content)}`);
+};
+
+// One handled wake, so a conversation exists and has settled once.
+dispatch("signal: task-1 working: first wake");
+await settle(() => (globalThis.__fmPrompts ?? []).length === 1, "first wake prompt");
+const first = globalThis.__fmSessions[0];
+if (!existsSync(pointer)) throw new Error("a live conversation must record its session pointer");
+if (first.disposed) throw new Error("a settled wake must not dispose its own conversation");
+
+// The branch observes its OWN compaction through the extension surface it
+// registers with Pi, so this is the same path a real compaction takes.
+const entry = globalThis.__fmLoaders[0].options.extensionFactories[0];
+const factory = typeof entry === "function" ? entry : entry.factory;
+let compacted = null;
+factory({ on: (event, handler) => { if (event === "session_compact") compacted = handler; } });
+if (!compacted) throw new Error("the branch must register for its own session_compact");
+
+// The next wake's prompt is held open. While it is in flight the conversation
+// is mid-action, and nothing may rotate underneath it.
+let release;
+globalThis.__fmPromptGate = new Promise((resolve) => { release = resolve; });
+dispatch("signal: task-2 working: second wake");
+await settle(() => globalThis.__fmPromptStarted === true, "second wake prompt start");
+// The compaction is observed only now, with this wake genuinely in flight.
+// Signalling it earlier lets the PREVIOUS wake's boundary check consume it as
+// soon as that wake's outcome delivery drains, which rotates at a settled
+// boundary - legal, but it leaves nothing mid-action for this case to guard.
+compacted({});
+if (first.disposed) throw new Error("a rotation split a wake that was still running");
+if (!existsSync(pointer)) throw new Error("a rotation dropped the pointer mid-action");
+if (existsSync(record) && JSON.parse(readFileSync(record, "utf8")).rotations > 0) {
+  throw new Error("a rotation was committed before the action finished");
+}
+
+// Boundary crossed: the action returns, and only now may the conversation go.
+release();
+globalThis.__fmPromptGate = null;
+await settle(
+  () => first.disposed && (globalThis.__fmPrompts ?? []).some((text) => text.includes("FIRSTMATE ROTATION CAPTURE")),
+  "outgoing conversation captured and disposed at the boundary",
+);
+
+const capture = (globalThis.__fmPrompts ?? []).find((text) => text.includes("FIRSTMATE ROTATION CAPTURE"));
+if (!capture) throw new Error("the outgoing conversation must get its capture turn");
+if (globalThis.__fmPrompts.indexOf(capture) < 1) throw new Error("capture ran before the wake it follows");
+if (existsSync(pointer)) throw new Error("a rotated conversation must not leave its pointer behind");
+const state = JSON.parse(readFileSync(record, "utf8"));
+if (state.rotations !== 1) throw new Error(`exactly one rotation must be recorded: ${JSON.stringify(state)}`);
+if (!state.pendingCatchUp) throw new Error("the successor's catch-up obligation must be durable");
+
+// The successor is a genuinely new conversation, and its first wake carries
+// the requirement to reconcile from the durable records before acting.
+const before = globalThis.__fmSessions.length;
+const wakeMarker = "FIRSTMATE SUPERVISION WAKE: signal: task-3";
+dispatch("signal: task-3 working: third wake");
+// Building the successor and prompting it are separate steps, and outcome
+// delivery is asynchronous, so waiting on the session count alone - or on any
+// new prompt - can read the retired conversation's capture turn instead.
+await settle(
+  () => globalThis.__fmSessions.length > before
+    && (globalThis.__fmPrompts ?? []).some((text) => text.includes(wakeMarker)),
+  "successor conversation built and prompted",
+);
+const successor = globalThis.__fmSessions[globalThis.__fmSessions.length - 1].options.sessionManager;
+if (successor.opened || successor.getSessionFile() === first.options.sessionManager.getSessionFile()) {
+  throw new Error(`the successor must not reopen the retired conversation: ${successor.getSessionFile()}`);
+}
+// The catch-up obligation must ride the wake rather than replace it, so the
+// prompt carrying the wake is the one that must also carry the preamble.
+const successorPrompt = globalThis.__fmPrompts.find((text) => text.includes(wakeMarker));
+if (!successorPrompt.includes("bin/fm-session-start.sh")) {
+  throw new Error(`the catch-up preamble must ride the successor's wake: ${successorPrompt}`);
+}
+if (successorPrompt.indexOf("bin/fm-session-start.sh") > successorPrompt.indexOf(wakeMarker)) {
+  throw new Error("the catch-up preamble must come before the wake it precedes");
+}
+// The obligation clears once the successor's turn returns, which is strictly
+// after the prompt was recorded, so this waits rather than reading it early.
+await settle(
+  () => !JSON.parse(readFileSync(record, "utf8")).pendingCatchUp,
+  "catch-up obligation cleared once the successor has been told",
+);
+EOF
+  status=$?
+  out=$(cat "$TMP_ROOT/node-output")
+  expect_code 0 "$status" "rotation must replace the conversation only at a settled boundary: $out"
+  case $out in
+    *"supervision branch rotated"*"reason=compaction"*) ;;
+    *) fail "a rotation must print one loud line naming its reason: $out" ;;
+  esac
+  pass "rotation replaces the conversation only after a wake has settled, capturing first"
+}
+
+# Counting a wake and committing a rotation are separate obligations, because
+# the delivery body's durable-outcome guards sit between the settled prompt
+# and the rotation boundary. A turn that settles and then trips one of those
+# guards is still a turn this conversation spent, so it must appear in the
+# durable rotation record even though the boundary is never reached.
+test_a_settled_wake_counts_even_when_its_outcome_guard_rejects_it() {
+  local repo home out status
+  repo="$TMP_ROOT/rotate-count-root"
+  home="$TMP_ROOT/rotate-count-home"
+  mkdir -p "$home/state" "$home/config"
+  install_pi_branch_extension_fixture "$repo"
+  # No trigger is armed, so nothing can rotate here and the record's wake
+  # count is the only thing under test.
+  PLUGIN="$repo/.pi/extensions/fm-branch-supervision.ts" FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" \
+    FM_BRANCH_ROTATE=1 FM_BRANCH_ROTATE_COMPACTIONS=0 \
+    FM_BRANCH_ROTATE_MAX_AGE_SECONDS=0 FM_BRANCH_ROTATE_MILESTONES=0 \
+    DRIVER_PRELUDE="$DRIVER_PRELUDE" node --input-type=module > "$TMP_ROOT/node-output" 2>&1 <<'EOF'
+const prelude = process.env.DRIVER_PRELUDE;
+await eval(`(async () => { ${prelude}; globalThis.__t = { dispatch, settle, home }; })()`);
+const { dispatch, settle, home } = globalThis.__t;
+import { readFileSync } from "node:fs";
+
+const record = `${home}/state/.branch-rotation`;
+
+// The prompt settles normally and reports nothing, so the delivery body's
+// durable-outcome guard rejects the wake after the turn is already spent.
+dispatch("signal: task-1 working: unreported wake");
+await settle(() => (globalThis.__fmPrompts ?? []).length === 1, "wake prompt");
+await settle(() => {
+  try {
+    return JSON.parse(readFileSync(record, "utf8")).wakes === 1;
+  } catch {
+    return false;
+  }
+}, "the settled wake recorded in the durable rotation record");
+const state = JSON.parse(readFileSync(record, "utf8"));
+if (state.rotations !== 0) throw new Error(`no trigger was armed, so nothing may rotate: ${JSON.stringify(state)}`);
+EOF
+  status=$?
+  out=$(cat "$TMP_ROOT/node-output")
+  expect_code 0 "$status" "a settled wake must count even when its outcome guard rejects it: $out"
+  pass "a settled wake counts even when the durable-outcome guard rejects it"
+}
+
 test_outcomes_tool_uses_stock_execution_and_export_consumers() {
   if ! command -v node >/dev/null 2>&1; then
     echo "skip: node not found for Pi outcomes rendering test"
@@ -4580,6 +4831,7 @@ test_outcomes_tool_uses_stock_execution_and_export_consumers() {
   cp "$ROOT/.pi/extensions/lib/fm-native-contract.ts" "$fixture/.pi/extensions/lib/fm-native-contract.ts"
   cp "$ROOT/.pi/extensions/lib/fm-async-exec.ts" "$fixture/.pi/extensions/lib/fm-async-exec.ts"
   cp "$ROOT/.pi/extensions/lib/fm-branch-model-picker.ts" "$fixture/.pi/extensions/lib/fm-branch-model-picker.ts"
+  cp "$ROOT/.pi/extensions/lib/fm-branch-rotation.ts" "$fixture/.pi/extensions/lib/fm-branch-rotation.ts"
   cp "$ROOT/.pi/extensions/lib/fm-calm-visibility.ts" "$fixture/.pi/extensions/lib/fm-calm-visibility.ts"
   cp "$ROOT/.pi/extensions/lib/fm-operational-input.ts" "$fixture/.pi/extensions/lib/fm-operational-input.ts"
   ln -s "$package_dir" "$fixture/node_modules/@earendil-works/pi-coding-agent"
@@ -5309,6 +5561,9 @@ test_queued_actions_recheck_lock_ownership
 test_stale_generation_boundaries_are_side_effect_free
 test_secondary_session_stays_inert
 test_rebind_remirrors_undelivered_dialog_from_durable_cursor
+test_rotation_replaces_the_conversation_only_after_a_settled_wake
+test_a_settled_wake_counts_even_when_its_outcome_guard_rejects_it
+
 test_delivery_keeps_the_event_loop_live_and_ordered
 test_session_replacement_during_delivery_neither_loses_nor_duplicates
 test_store_failure_during_delivery_neither_loses_nor_duplicates

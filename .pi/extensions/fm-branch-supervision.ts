@@ -126,6 +126,19 @@ import {
   type BranchPickerItem,
 } from "./lib/fm-branch-model-picker.ts";
 import {
+  newRotationState,
+  parseRotationState,
+  readRotationThresholds,
+  recordCompaction,
+  recordMilestone,
+  recordWake,
+  rotatedState,
+  rotationDecision,
+  rotationLogLine,
+  serializeRotationState,
+  type RotationState,
+} from "./lib/fm-branch-rotation.ts";
+import {
   classifyFirstmateOperationalText,
   encodeFirstmateOperationalInputWith,
 } from "./lib/fm-operational-input.ts";
@@ -140,6 +153,7 @@ const config = process.env.FM_CONFIG_OVERRIDE || `${fmHome}/config`;
 const sessionsDir = join(state, "branch-session");
 const sessionPointer = join(state, ".branch-session");
 const mirrorCursorFile = join(state, ".branch-mirror-cursor");
+const rotationFile = join(state, ".branch-rotation");
 const promptScript = join(fmRoot, "bin", "fm-branch-prompt.sh");
 const afkContractScript = join(fmRoot, "bin", "fm-afk-contract.sh");
 const outcomeScript = join(fmRoot, "bin", "fm-branch-outcome.sh");
@@ -211,6 +225,11 @@ type OutcomeRow = {
   verdict: Verdict;
   summary: string;
   silent: boolean;
+  // The store's presentation decision and its repeat count
+  // (bin/fm-branch-outcome.sh, "Repeat suppression"). This side only OBEYS
+  // them: the row itself is always stored and always readable.
+  present: boolean;
+  repeat: number;
 };
 type VisibleOutcomeRecord = OutcomeRow & { version: 1 };
 type ProviderRecovery = {
@@ -492,7 +511,18 @@ function parseOutcomeRow(value: unknown): OutcomeRow | null {
   if (row.silent !== undefined && typeof row.silent !== "boolean") return null;
   const silent = row.silent === true;
   if (silent && (row.task !== "fleet" || row.verdict !== "routine")) return null;
-  return { seq: row.seq, task: row.task, verdict: row.verdict, summary: row.summary, silent };
+  if (row.present !== undefined && typeof row.present !== "boolean") return null;
+  if (row.repeat !== undefined && (typeof row.repeat !== "number" || !Number.isSafeInteger(row.repeat) || row.repeat < 0)) {
+    return null;
+  }
+  // A row predating repeat suppression carries neither field; a silent fleet
+  // review was already unrendered, and everything else was rendered.
+  const present = row.present === undefined ? !silent : row.present === true;
+  const repeat = row.repeat === undefined ? 0 : row.repeat;
+  // The store refuses to write these, so reading one means the store is not
+  // what this code thinks it is.
+  if (row.verdict === "captain" && (!present || repeat > 0)) return null;
+  return { seq: row.seq, task: row.task, verdict: row.verdict, summary: row.summary, silent, present, repeat };
 }
 
 function parseVisibleOutcomeRecord(value: unknown): VisibleOutcomeRecord | null {
@@ -506,7 +536,9 @@ function sameOutcome(left: OutcomeRow, right: OutcomeRow): boolean {
     left.task === right.task &&
     left.verdict === right.verdict &&
     left.summary === right.summary &&
-    left.silent === right.silent;
+    left.silent === right.silent &&
+    left.present === right.present &&
+    left.repeat === right.repeat;
 }
 
 // Volatile mirror-collection state. Instance-scoped and cleared at the
@@ -993,11 +1025,18 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
+  // Delivery obeys the store's presentation decision rather than recomputing
+  // it: a routine fact the captain has already read is suppressed for a
+  // bounded window, and the note that reopens that window says how many
+  // identical updates it stands for so a repeat never reads as news.
   function deliverRoutineOutcome(row: OutcomeRow): void {
+    const repeated = row.repeat > 0
+      ? ` (unchanged; ${row.repeat} identical update${row.repeat === 1 ? "" : "s"} suppressed since the last note)`
+      : "";
     const message = {
       customType: "fm-branch-merge",
-      content: `${MERGE_NOTE_BOAT} ${row.task}: ${row.summary}`,
-      display: !(row.task === "fleet" && row.silent),
+      content: `${MERGE_NOTE_BOAT} ${row.task}: ${row.summary}${repeated}`,
+      display: row.present,
     };
     if (mainStreaming) pi.sendMessage(message, { deliverAs: "nextTurn" });
     else pi.sendMessage(message, {});
@@ -1175,7 +1214,7 @@ export default function (pi: ExtensionAPI) {
       name: "fm_branch_report",
       label: "Report supervision outcome",
       description:
-        "Record the outcome of one handled fleet event: write it durably to the outcome store, then merge it into the captain-facing main conversation. verdict captain persists an exact visible entry and opens one sequence-keyed processing turn on main that stays open until main acknowledges it; routine notes render unless silent marks a no-change heartbeat.",
+        "Record the outcome of one handled fleet event: write it durably to the outcome store, then merge it into the captain-facing main conversation. verdict captain persists an exact visible entry and opens one sequence-keyed processing turn on main that stays open until main acknowledges it; routine notes render unless silent marks a no-change heartbeat. Report every handled event honestly and identically each time: the store, not you, collapses a routine fact you have already reported about the same task, and reporting a captain outcome or a genuinely changed fact always reaches the captain.",
       parameters: Type.Object({
         task: Type.String({ description: "The task id the event belongs to (or 'fleet' for fleet-wide events)" }),
         verdict: Type.Union([Type.Literal("routine"), Type.Literal("captain")], {
@@ -1240,6 +1279,10 @@ export default function (pi: ExtensionAPI) {
               isError: true,
             };
           }
+          // A captain-worthy outcome is this conversation's meaningful
+          // milestone: it is the point where the work it was holding context
+          // for has actually landed somewhere durable.
+          if (verdict === "captain") noteBranchMilestone();
           return {
             content: [{ type: "text", text: `recorded seq ${appended.stdout} and delivered [${verdict}] into main` }],
             details: undefined,
@@ -1247,6 +1290,153 @@ export default function (pi: ExtensionAPI) {
         });
       },
     };
+  }
+
+  // --- Supervision-branch rotation -----------------------------------------
+  //
+  // Why: the branch conversation is persistent by design, so every handled
+  // wake becomes context that the NEXT wake re-sends. Rotation retires that
+  // transcript at a boundary that is safe to cross, and only there.
+  //
+  // Safe boundary: rotation is evaluated exactly once per COMPLETED branch
+  // action, inside branchChain after the wake's prompt has returned and its
+  // wake-row grant has been released. Because branchChain serializes every
+  // branch action, a rotation can never land between a prompt's start and its
+  // end, and a mid-action session is therefore never rotated.
+  //
+  // Continuity is not carried in the conversation and so survives rotation
+  // untouched: queued steers and open decisions live in the durable wake
+  // queue and the status logs, in-flight task state lives in state/<id>.meta,
+  // held rows live in the per-actor grant files, per-task leases are held by
+  // the branch ACTOR (not the session) and are deliberately left alone, and
+  // the outcome store keeps every merged outcome. What the replacement
+  // conversation genuinely loses is chat-only context, which is exactly what
+  // the pre-rotation capture sweep and the successor's session-start
+  // catch-up exist to replace.
+  const rotationThresholds = readRotationThresholds(process.env);
+  let rotation: RotationState = loadRotationState();
+
+  function loadRotationState(): RotationState {
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      return parseRotationState(readFileSync(rotationFile, "utf8"), now);
+    } catch {
+      return newRotationState(now);
+    }
+  }
+
+  function persistRotationState(): void {
+    try {
+      mkdirSync(state, { recursive: true });
+      writeFileSync(rotationFile, serializeRotationState(rotation));
+    } catch {
+      // Durability of the counters only. A lost record costs one delayed
+      // rotation; it must never break the wake being handled.
+    }
+  }
+
+  function noteBranchCompaction(): void {
+    rotation = recordCompaction(rotation);
+    persistRotationState();
+  }
+
+  function noteBranchMilestone(): void {
+    rotation = recordMilestone(rotation);
+    persistRotationState();
+  }
+
+  // A wake counts as soon as its prompt turn has genuinely settled. Counting
+  // is deliberately kept apart from committing the rotation below: upstream's
+  // durable-outcome guards sit between a settled prompt and the completed-
+  // action boundary and can throw, and a settled turn that trips one is still
+  // a turn this conversation spent, so the trigger must not undercount it.
+  function noteBranchWake(): void {
+    rotation = recordWake(rotation);
+    persistRotationState();
+  }
+
+  // A fresh conversation must not act on a fleet it has never looked at, so
+  // its first wake carries the session-start requirement. The flag is durable
+  // (pendingCatchUp), so a rotation interrupted before the successor's first
+  // wake still produces a catching-up successor.
+  function catchUpPreamble(): string {
+    if (!rotation.pendingCatchUp) return "";
+    return (
+      "This supervision conversation was just rotated and starts with no chat history.\n" +
+      "Before acting on anything below, run bin/fm-session-start.sh and read the whole digest, " +
+      "then reconcile current state from the durable records rather than from memory.\n\n"
+    );
+  }
+
+  function clearCatchUp(): void {
+    if (!rotation.pendingCatchUp) return;
+    rotation = { ...rotation, pendingCatchUp: false };
+    persistRotationState();
+  }
+
+  // The /stow equivalent for a conversation that is about to be discarded:
+  // one bounded capture turn on the OUTGOING session, using the same tools it
+  // already has, before anything is disposed. A capture that fails does not
+  // block the rotation - a session that can no longer answer is exactly the
+  // one that must be replaced - but the failure is logged loudly with the
+  // rotation line.
+  async function captureBeforeRotation(session: AgentSession): Promise<boolean> {
+    try {
+      await session.prompt(
+        "FIRSTMATE ROTATION CAPTURE: this supervision conversation is being replaced right after this turn.\n" +
+          "Persist anything durable that currently exists only in this chat - operational facts and gotchas to " +
+          "data/learnings.md, task-scoped findings to the task's own record, and anything still unresolved to the " +
+          "backlog or its open decision - using your normal tools.\n" +
+          "Write nothing you cannot support with evidence, and do NOT call fm_branch_report for this capture.",
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Commits the rotation: the conversation is dropped and the in-memory
+  // binding createBranch reopens from is invalidated, so the next
+  // ensureBranch() builds a brand-new session instead of continuing this one.
+  // Never called anywhere but the completed-action boundary below.
+  function commitRotation(decision: ReturnType<typeof rotationDecision>, captured: boolean): void {
+    const previous = branch;
+    branch = null;
+    // This pair is what createBranch continues a conversation from; clearing
+    // it is what actually rotates.
+    branchSessionGeneration = -1;
+    branchSessionFile = "";
+    try {
+      previous?.session.dispose();
+    } catch {
+      // Already gone; the binding cleared above is what actually rotates.
+    }
+    try {
+      rmSync(sessionPointer, { force: true });
+    } catch {
+      // The pointer is the durable operator record and the effort picker's
+      // last-resort model lookup, so removing it keeps that record honest
+      // rather than aimed at a retired transcript; a successful rebuild
+      // rewrites it. The loud line below reports the rotation either way.
+    }
+    const line = rotationLogLine(decision, rotation);
+    rotation = rotatedState(rotation, Math.floor(Date.now() / 1000));
+    persistRotationState();
+    console.error(captured ? line : `${line} capture=failed`);
+  }
+
+  async function maybeRotateAtBoundary(expectedGeneration: number): Promise<void> {
+    const decision = rotationDecision(rotation, rotationThresholds, Math.floor(Date.now() / 1000));
+    if (!decision.rotate) return;
+    // Ownership is rechecked here for the same reason every other guarded
+    // side effect rechecks it: a replaced or lock-losing session must not
+    // mutate the successor's records.
+    if (!actingAsOwner(expectedGeneration)) return;
+    const current = branch;
+    if (!current) return;
+    const captured = await captureBeforeRotation(current.session);
+    if (!actingAsOwner(expectedGeneration)) return;
+    commitRotation(decision, captured);
   }
 
   async function createBranch(
@@ -1287,6 +1477,10 @@ export default function (pi: ExtensionAPI) {
     }
     if (!sessionManager) {
       sessionManager = SessionManager.create(fmRoot, sessionsDir);
+      // A genuinely new conversation restarts the rotation clock and counters;
+      // a reopen of the persistent one deliberately keeps them.
+      rotation = newRotationState(Math.floor(Date.now() / 1000), rotation.rotations, rotation.pendingCatchUp);
+      persistRotationState();
     }
     branchSessionGeneration = branchGeneration;
     branchSessionFile = sessionManager.getSessionFile() ?? "";
@@ -1307,6 +1501,14 @@ export default function (pi: ExtensionAPI) {
         {
           name: "fm-branch-cache-key",
           factory: (branchPi: ExtensionAPI) => {
+            // The branch's OWN compaction is the first rotation trigger:
+            // a compacted conversation has already outgrown its window and
+            // still pays to re-send its summary, so replacing it beats
+            // compacting it again. Recorded only; the boundary check below
+            // decides when to act on it.
+            branchPi.on?.("session_compact", () => {
+              noteBranchCompaction();
+            });
             branchPi.on("before_provider_request", (event) => {
               const payload = event.payload;
               // Only providers whose request already carries Pi's default
@@ -1526,13 +1728,16 @@ ${context.command}
         // lets this prompt proceed; the guarded scripts revalidate, and the
         // durable queue keeps every row (bin/fm-lease-lib.sh role-partition).
         const postureTail = afk ? await awayPostureTail() : "";
+        const preamble = catchUpPreamble();
         try {
           await session.prompt(
-            `FIRSTMATE SUPERVISION WAKE: ${message}\n\nHandle this per your operating procedure and finish with fm_branch_report.${postureTail}`,
+            `${preamble}FIRSTMATE SUPERVISION WAKE: ${message}\n\nHandle this per your operating procedure and finish with fm_branch_report.${postureTail}`,
           );
         } finally {
           wakeTaskScope = null;
         }
+        clearCatchUp();
+        noteBranchWake();
         const providerError = settledPromptProviderError(sessionManager, entryOffset);
         if (providerError) {
           const detail = `supervision branch provider failed after construction: ${providerError}`;
@@ -1551,6 +1756,9 @@ ${context.command}
         if (!(await releaseEligibleRowsSnapshot(state, wakeGrantScript, String(acceptedGeneration)))) {
           throw new Error("could not release the branch's settled wake-row grant");
         }
+        // The one safe boundary: this wake's action is complete and its grant
+        // is released, so replacing the conversation here splits nothing.
+        await maybeRotateAtBoundary(acceptedGeneration);
       })
       .catch(async (error: unknown) => {
         await releaseEligibleRowsSnapshot(state, wakeGrantScript, String(acceptedGeneration));
@@ -2313,8 +2521,9 @@ ${context.command}
     );
   });
 
-  // Pi only calls this renderer for a message with display: true, which every
-  // routine note uses except an explicitly silent fleet heartbeat.
+  // Pi only calls this renderer for a message with display: true, which a
+  // routine note uses unless it is an explicitly silent fleet heartbeat or a
+  // suppressed repeat of a fact the captain has already read.
   pi.registerMessageRenderer?.("fm-branch-merge", (message, _options, theme) => {
     const note = textOfContent(message.content);
     const hasGlyph = note.startsWith(MERGE_NOTE_BOAT);
