@@ -35,6 +35,11 @@ When that retained arm later closes, its actual close is classified as a new sup
 After the configured retry bound is exhausted, it delivers the original wake with a typed continuity-restoration failure even if every successor arm hung without reporting readiness.
 This is deliberate Option B ordering: the fleet is protected before the model handles the wake whenever restoration succeeds, but the model is never left blind when it does not.
 
+On Pi that restoration is owned by the arm child's close handler rather than by the notification pipeline: it starts as soon as the child closes, so a successor is never held behind an in-flight wake delivery, and delivery only consumes the verdict the close handler attaches.
+Coupling the successor launch to delivery is what leaves real stretches with no watcher running, which is the hole this ordering closes; omp and OpenCode still start theirs from inside their delivery pipelines.
+Restoration is single-flight per Pi generation: an actionable close that lands while one is already in flight shares that verdict instead of racing a second loop for the same successor.
+A wake that crosses a Pi session replacement carries only the wake, never the retiring generation's restoration verdict, because that verdict names an arm child the replacement does not own; the replacement's own arm speaks for continuity, so an inherited wake is delivered without a fresh handling confirmation.
+
 Claude's Stop hook starts the successor arm at the next Stop after the handling turn, rather than before notification as Pi, omp, and OpenCode do.
 The durable wake queue preserves actionable events during the residual active-turn window, and the bounded turn-end guard enforces recovery at Stop when no watcher is live and no open generation claim is still deciding, so a finished, hung, or identity-mismatched claim cannot suppress it ([`turnend-guard.md`](turnend-guard.md#harness-integrations) owns that boundary).
 The recovery-episode contract below owns once-per-generation announcement.

@@ -95,7 +95,11 @@ OpenCode 1.18.4 has one busy-queue exception.
 While OpenCode is mid-turn, Enter queues the message but leaves its text visible until the turn completes.
 After the normal retry budget, only structurally proven pending text in a provably busy pane is accepted as queued, while an idle pane remains `pending` as a genuine swallowed Enter.
 Ambiguous pending text never receives the busy-queue conversion.
-A second, baseline-gated conversion covers harnesses whose mid-turn screen the classifier cannot identify (Pi replaces its separated composer while working): when and only when the pane was idle before the text was typed, an idle-to-busy transition across the submit's own Enter confirms delivery, the same turn-started signal Herdr reads natively.
+A second, baseline-gated conversion covers harnesses whose mid-turn screen the classifier cannot identify: when and only when the pane was idle before the text was typed, an idle-to-busy transition across the submit's own Enter confirms delivery, the same turn-started signal Herdr reads natively.
+It is deliberately unreachable for Pi 0.85 and later, whose working shape carries no token in the harness-less union this read uses: the captured Pi 0.85 busy shapes are scoped to the Herdr adapter, which pairs a busy reading with a pre-Enter composer narrowing this core does not have, so a generating Pi 0.85 reads idle here and this path confirms nothing for it ([`verification/pi-composer-shapes.md`](verification/pi-composer-shapes.md)).
+It remains reachable for Pi 0.84 and earlier through the legacy `Working...` token, which that union still carries - the same carve-out the verification record already records for the queued-Enter exclusion.
+A generating Pi's composer is readable now - the shared classifier learned Pi's titled composer border in the same commit - but a pair opened by that titled border is refused `empty`, because the border is itself proof the pane is generating, so a landed steer on a stock Pi is still unconfirmed here while a Calm-on one is confirmed by its cleared composer.
+Activating the busy shapes for this core, and narrowing this conversion the way the Herdr submit core is narrowed, needs its own tmux captures and is follow-up work.
 Without that baseline, an `unknown` verdict is preserved untouched, so a busy-looking pane can never convert an unread composer into a confirmation.
 `tests/fm-tmux-submit-busy.test.sh` covers busy and idle panes with proven, ambiguous, and cleared composers.
 

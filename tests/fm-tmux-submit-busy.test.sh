@@ -342,6 +342,63 @@ test_claude_busy_signature_uses_real_capture_shapes() {
   pass "fm_pane_is_busy: Claude spinner is scoped, multi-frame, and backward-compatible"
 }
 
+# --- the away-mode injection boundary on the tmux plane ---------------------
+# `empty` is the one verdict that authorizes bin/fm-supervise-daemon.sh to type
+# an escalation digest into a supervisor pane, so it must never be reachable
+# for a pane that is mid-turn. On this plane the agent_status the classifier
+# receives comes from fm_pane_busy_state with harness=pi, and pi 0.85's
+# working shapes are deliberately NOT activated here (they are scoped to the
+# herdr delivery read pending tmux captures of their own), so a genuinely
+# generating pi 0.85 is reported to the classifier as idle. This test drives
+# the real tmux composer read against the committed captures to prove the
+# verdict is safe anyway - the titled composer border carries the proof
+# structurally, with no busy shape involved.
+# Only the process-identity probe is stubbed, because it needs a live pi
+# process; the capture, the capability descriptor, and the classifier are real.
+pi_085_tmux_verdict() {  # <fixture> -> the tmux composer verdict
+  local fixture=$1 dir composer
+  dir="$TMP_ROOT/pi085-$fixture"; mkdir -p "$dir/fakebin"
+  composer="$dir/composer"
+  cat "$ROOT/tests/assets/pi-0.85-composer/$fixture.ansi" > "$composer"
+  cat > "$dir/fakebin/tmux" <<SH
+#!/usr/bin/env bash
+set -u
+case "\${1:-}" in
+  display-message) printf '%s\\n' "\$(cat "$ROOT/tests/assets/pi-0.85-composer/$fixture.cursor")"; exit 0 ;;
+  capture-pane) cat "$composer"; exit 0 ;;
+esac
+exit 0
+SH
+  chmod +x "$dir/fakebin/tmux"
+  # The identity a REAL tmux pi pane produces while generating: pi, and idle,
+  # because fm_pane_busy_state does not carry pi 0.85's working shapes here.
+  PATH="$dir/fakebin:$PATH" bash -c '
+    . "$1/bin/fm-tmux-lib.sh"
+    fm_tmux_composer_identity() { printf "pi\tidle"; }
+    fm_tmux_pane_is_cursor() { return 1; }
+    fm_tmux_composer_state pane
+  ' _ "$ROOT"
+}
+
+test_generating_pi_is_never_injectable_through_the_tmux_read() {
+  local out
+  out=$(pi_085_tmux_verdict stock-working)
+  [ "$out" != empty ] \
+    || fail "a generating stock pi 0.85 must never read empty through the tmux composer read"
+  [ "$out" = unknown ] \
+    || fail "a generating stock pi 0.85 should defer as unknown on the tmux plane, got '$out'"
+  # The counterpart that must keep working: a settled pi is still injectable,
+  # so this refusal has not blinded the away-mode injector on the tmux plane.
+  out=$(pi_085_tmux_verdict calm-idle)
+  [ "$out" = empty ] \
+    || fail "a settled pi must still read empty through the tmux composer read, got '$out'"
+  # And a pi holding real unsent text still defers, as it always did.
+  out=$(pi_085_tmux_verdict calm-typed-idle)
+  [ "$out" = pending ] \
+    || fail "a pi holding unsent text must read pending through the tmux composer read, got '$out'"
+  pass "fm_tmux_composer_state: a generating pi 0.85 is never injectable on the tmux plane, while a settled one still is"
+}
+
 test_busy_pane_pending_returns_empty
 test_idle_pane_pending_returns_pending
 test_wrapped_continuation_retries_swallowed_enter
@@ -353,3 +410,4 @@ test_failed_baseline_capture_keeps_busy_unknown_unconfirmed
 test_busy_pane_ambiguous_pending_retries_without_conversion
 test_unrecognized_state_skips_busy_conversion
 test_claude_busy_signature_uses_real_capture_shapes
+test_generating_pi_is_never_injectable_through_the_tmux_read

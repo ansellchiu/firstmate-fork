@@ -1366,6 +1366,35 @@ ok - real herdr: an agent that does not stop fails closed instead of being repor
 The registry read through `herdr pane report-agent` is the same source `fm_backend_herdr_agent_state` classifies, and since 2026-09-10 that registration counts as an agent only while `pane process-info` shows a harness process behind it, so the guard backs the registration with a real process named like a harness (a symlink to `sleep`) and then stops that process, with no real harness launched.
 That command is the guard that refreshes this record; run it after every Herdr upgrade rather than trusting the version above.
 
+The agy adapter was verified end to end on 2026-09-17 with Antigravity CLI 1.2.5 and Herdr 0.8.0.
+Google's current [CLI reference](https://www.antigravity.google/docs/cli/reference/) names `Esc` as the active-stream halt and `/exit` as the canonical exit command with `/quit` as an alias.
+The installed binary independently exposed the same version and command family:
+
+```sh
+agy --version
+agy --help
+agy remote-control stop --help
+FM_AGY_CONTROL_LIVE_E2E=1 bin/fm-test-run.sh tests/fm-agy-control-live-e2e.test.sh
+```
+
+Observed bounded output:
+
+```text
+1.2.5
+--remote-control                Create a remote connection for the CLI session on start up
+remote-control  Manage the remote-control background daemon (start, status, stop)
+Stop the daemon and unregister it
+ok - agy interrupt: fm-control delivers one Escape and leaves the agent alive and settled
+ok - agy exit: fm-control submits /exit and Herdr proves the agent gone while preserving pane and repository
+# verified agy 1.2.5 through Herdr 0.8.0
+```
+
+Before the interrupt, the real pane exposed `esc to cancel` and Herdr reported the native agy registration `working`.
+After one Escape, the pane rendered `Interrupted`, the native registration became settled (`idle` in the manual probe and `done` in the scripted guard), and `fm-control` deliberately reported `cancel=unconfirmed` because neither rendered text nor a generic settled state is an adapter-owned cancellation receipt.
+After `/exit`, Herdr returned `agent_not_found`, process inspection showed the preserved pane back at its shell, and the repository remained present.
+The same capability is intentionally backend-limited: tmux still classifies the agy process as unattributed, while Zellij, Orca, and cmux have no recovery-grade agent-state classifier, so those backends refuse before claiming lifecycle success.
+`agy remote-control stop` is excluded because its own help identifies it as daemon unregistration rather than control of one interactive session.
+
 For Pi on Herdr 0.9.0, `herdr agent get` reflects whether the agent process remains live; its registration does not persist merely because the pane and parent shell do.
 A Pi launched as a child of the pane shell (not via `exec`) that then `/quit`s or is SIGKILL'd leaves the pane and shell in place, and `agent get` returns `agent_not_found`.
 A sibling live idle Pi stays `agent=pi` with `agent_status=idle`.

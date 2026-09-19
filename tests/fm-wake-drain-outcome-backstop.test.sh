@@ -29,6 +29,68 @@ backstop_body() {  # <drain-output>
   ' "$1"
 }
 
+test_suppressed_repeat_does_not_cover_a_new_captain_event() {
+  local dir state first_out second_out old
+  dir=$(make_case suppressed-repeat-coverage)
+  state="$dir/state"
+  first_out="$dir/first.out"
+  second_out="$dir/second.out"
+  old=$(( $(date +%s) - 20 ))
+
+  printf 'done: first completion\n' > "$state/repeat-task.status"
+  set_mtime "$old" "$state/repeat-task.status"
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task repeat-task \
+    --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "presented routine outcome could not be appended"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$first_out" \
+    || fail "main drain failed for the presented routine outcome"
+  [ ! -s "$first_out" ] \
+    || fail "a presented routine outcome did not cover its own status event: $(cat "$first_out")"
+
+  printf 'failed: deploy credential rotated out\n' >> "$state/repeat-task.status"
+  set_mtime "$old" "$state/repeat-task.status"
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task repeat-task \
+    --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "repeat routine outcome could not be appended"
+  [ "$(jq -s '[.[] | select(.present == false)] | length' "$state/branch-outcomes.jsonl")" = 1 ] \
+    || fail "the identical repeat was not suppressed: $(cat "$state/branch-outcomes.jsonl")"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$second_out" \
+    || fail "main drain failed after the suppressed repeat"
+  grep -F 'repeat-task failed: deploy credential rotated out' "$second_out" >/dev/null \
+    || fail "a suppressed repeat hid a new captain-facing status event: $(cat "$second_out")"
+  pass "a suppressed routine repeat cannot claim coverage of a new captain-facing status event"
+}
+
+test_rebuilt_index_reconstructs_presented_coverage() {
+  local dir state out old
+  dir=$(make_case suppressed-repeat-rebuild)
+  state="$dir/state"
+  out="$dir/drain.out"
+  old=$(( $(date +%s) - 20 ))
+
+  printf 'done: first completion\n' > "$state/rebuilt-task.status"
+  set_mtime "$old" "$state/rebuilt-task.status"
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task rebuilt-task \
+    --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "presented routine outcome could not be appended"
+  printf 'failed: deploy credential rotated out\n' >> "$state/rebuilt-task.status"
+  set_mtime "$old" "$state/rebuilt-task.status"
+  FM_STATE_OVERRIDE="$state" "$OUTCOMES" append --task rebuilt-task \
+    --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "repeat routine outcome could not be appended"
+  rm -f -- "$state/.rebuilt-task.branch-outcome-index" "$state/.branch-outcome-index-ready"
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" \
+    || fail "main drain failed while rebuilding the outcome indexes"
+  [ -f "$state/.branch-outcome-index-ready" ] \
+    || fail "the rebuild did not publish the outcome-index ready marker"
+  grep -F 'rebuilt-task failed: deploy credential rotated out' "$out" >/dev/null \
+    || fail "a rebuilt index claimed coverage of a suppressed repeat: $(cat "$out")"
+  pass "a rebuilt outcome index reconstructs presented coverage rather than stored coverage"
+}
+
 test_uncovered_keyless_captain_events_surface_on_the_next_main_drain() {
   local dir state out body old
   dir=$(make_case uncovered-keyless)
@@ -523,3 +585,5 @@ test_held_lock_mode_accepts_a_lock_owner_descendant
 test_index_self_heal_runs_under_the_outcome_lock
 test_overbound_routine_event_stays_silent
 test_backstop_output_is_bounded
+test_suppressed_repeat_does_not_cover_a_new_captain_event
+test_rebuilt_index_reconstructs_presented_coverage
