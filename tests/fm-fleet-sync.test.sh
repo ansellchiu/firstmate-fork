@@ -417,11 +417,11 @@ test_local_only_skipped() {
 # would silently void the local-only guard. Project names are unique within the
 # file because every test shares one fixture home.
 test_mistyped_annotation_refuses_sync() {
-  local home clone_iota clone_theta out status
+  local home clone_iota out status
   home=$(new_home)
   clone_iota=$(build_pair "$home" pm-iota)
   advance_origin "$home" pm-iota C1
-  clone_theta=$(build_pair "$home" pm-theta)
+  build_pair "$home" pm-theta >/dev/null
   advance_origin "$home" pm-theta C1
   mkdir -p "$home/data"
   printf -- '- pm-iota [local-only +parkd] (added 2026-06-27) - test project\n- pm-theta [no-mistakes] (added 2026-06-27) - test project\n' > "$home/data/projects.md"

@@ -2473,7 +2473,8 @@ EOF
             [ -z "$merge_sha" ] || merge_sha_source=$FM_PR_MERGE_COMMIT_SOURCE
           fi
           fm_merge_outcome_report "$FM_HOME" "$STATE" "$id" "$url" poll \
-            "$merge_authority" || merge_outcome_rc=$?
+            "$merge_authority" "$merge_sha" "$merge_sha_source" \
+            || merge_outcome_rc=$?
           if [ "$merge_outcome_rc" -ne 0 ]; then
             triage_log "merge outcome for $id could not be recorded (rc=$merge_outcome_rc)"
             exit 1

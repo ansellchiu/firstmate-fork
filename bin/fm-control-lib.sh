@@ -98,7 +98,6 @@ fm_control_harness_family() {  # <recorded-harness>
     gemini*) printf 'gemini' ;;
     muse*) printf 'muse' ;;
     rovo*) printf 'rovo' ;;
-    agy) printf 'agy' ;;
     *) return 1 ;;
   esac
 }

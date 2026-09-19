@@ -63,6 +63,7 @@ _FM_MERGE_OUTCOME_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_MERGE_OUTCOME_ALREADY_RECORDED=false
 
 # fm_merge_outcome_report <home> <state> <task-id> <pr-url> <origin> [authority]
+#                         [commit-sha] [sha-source] [head-sha] [head-sha-source]
 #
 # <origin> says who observed the merge, because that decides whether the
 # existing poll path also needs a local wake:
@@ -87,10 +88,12 @@ FM_MERGE_OUTCOME_ALREADY_RECORDED=false
 # enough to say where the outcome belongs, and 1 on any other failure to
 # record. A caller that has already merged must report a non-zero return rather
 # than treat it as success: the merge landed and the record did not.
-fm_merge_outcome_report() {  # <home> <state> <task-id> <pr-url> <origin> [authority]
+fm_merge_outcome_report() {  # <home> <state> <task-id> <pr-url> <origin> [authority] [commit-sha] [sha-source] [head-sha] [head-sha-source]
   local home=$1 state=$2 id=$3 url=$4 origin=$5
   local authority=${6-} suffix=
-  local self_rc=0 destination='' line lock status=0
+  local merge_sha=${7:-} merge_sha_source=${8:-}
+  local head_sha=${9:-} head_sha_source=${10:-}
+  local self_rc=0 destination='' line lock status=0 receipt_rc=0 repair='' attempts=0
   local provider host path number
   # shellcheck disable=SC2034 # Sourced wake helpers consume these scoped globals.
   local STATE FM_WAKE_QUEUE FM_WAKE_QUEUE_LOCK

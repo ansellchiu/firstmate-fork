@@ -1281,7 +1281,9 @@ case "$PROVIDER" in
 esac
 outcome_rc=0
 fm_merge_outcome_report "$FM_HOME" "$STATE" "$ID" "$URL" self \
-  "${FM_PR_MERGE_AUTHORITY:-}" || outcome_rc=$?
+  "${FM_PR_MERGE_AUTHORITY:-}" \
+  "$MERGE_COMMIT_SHA" "$MERGE_COMMIT_SOURCE" \
+  "$MERGE_HEAD_SHA" "$MERGE_HEAD_SOURCE" || outcome_rc=$?
 case "$outcome_rc" in
   0) ;;
   3)
