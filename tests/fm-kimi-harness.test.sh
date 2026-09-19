@@ -22,6 +22,20 @@ PYTHON_BIN_DIR=$(dirname "$PYTHON_BIN")
 JQ_BIN=$(command -v jq) || fail "test needs jq"
 BASE_PATH=${FM_TEST_BASE_PATH:-$PYTHON_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin}
 
+# bin/fm-kimi-turnend-hook.sh validates config.toml with python3's tomllib,
+# which only exists from python 3.11 on.
+# On an older interpreter the hook refuses by design, so every case that drives
+# a real hook install would assert against that refusal instead of the behavior
+# it is written to prove.
+# Skip those cases explicitly, naming the reason, rather than letting them fail
+# for an environment gap or pass vacuously.
+kimi_tomllib_available() {  # <case-name>
+  "$PYTHON_BIN" -c 'import tomllib' >/dev/null 2>&1 && return 0
+  printf 'skip: python3 lacks tomllib (needs 3.11+, found %s); %s\n' \
+    "$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')" "$1"
+  return 1
+}
+
 cleanup_kimi_harness() {
   [ -z "$KIMI_RUNTIME_TASK_TMP" ] || rm -rf "$KIMI_RUNTIME_TASK_TMP"
   rm -rf "$TMP_ROOT"
@@ -271,6 +285,7 @@ EOF
 }
 
 test_kimi_launch_then_send_is_verified() {
+  kimi_tomllib_available "spawn installs the guarded turn-end hook region" || return 0
   local id rec out rc launch pointer brief_real meta task_tmp
   id="kimi-success-z1-$$"
   task_tmp="/tmp/fm-$id"
@@ -313,6 +328,7 @@ test_kimi_launch_then_send_is_verified() {
 }
 
 test_kimi_hook_install_is_surgical_idempotent_and_removable() {
+  kimi_tomllib_available "hook install is idempotent and removal restores foreign bytes" || return 0
   local home config original once stripped count
   home="$TMP_ROOT/config-surgery"
   config="$home/.kimi-code/config.toml"
@@ -358,6 +374,7 @@ EOF
 }
 
 test_kimi_hook_remove_preserves_owned_newline_boundary() {
+  kimi_tomllib_available "hook removal preserves owned newline boundaries" || return 0
   local appended config expected home original
   home="$TMP_ROOT/config-owned-newline"
   config="$home/.kimi-code/config.toml"
@@ -395,6 +412,7 @@ PY
 }
 
 test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config() {
+  kimi_tomllib_available "hook install fails closed on missing, malformed, and partial config" || return 0
   local missing malformed partial out rc
   missing="$TMP_ROOT/config-missing"
   malformed="$TMP_ROOT/config-malformed"
@@ -429,6 +447,7 @@ test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config() {
 }
 
 test_kimi_hook_install_refuses_without_jq() {
+  kimi_tomllib_available "hook install refuses without jq" || return 0
   local home config before fakebin out rc
   home="$TMP_ROOT/config-no-jq"
   config="$home/.kimi-code/config.toml"
@@ -451,6 +470,7 @@ test_kimi_hook_install_refuses_without_jq() {
 }
 
 test_kimi_hook_is_silent_and_requires_registered_workspace_token() {
+  kimi_tomllib_available "turn-end hook is silent and requires a registered workspace token" || return 0
   local id rec out rc hook target token no_token snapshot_before snapshot_after fakebin
   id=kimi-hook-auth-z6
   rec=$(make_spawn_case hook-auth "$id")
@@ -496,6 +516,7 @@ test_kimi_hook_is_silent_and_requires_registered_workspace_token() {
 }
 
 test_kimi_spawn_refuses_unsafe_global_config_before_pane_creation() {
+  kimi_tomllib_available "spawn refuses an unsafe global config before pane creation" || return 0
   local id rec out rc
   id=kimi-config-refuse-z7
   rec=$(make_spawn_case config-refuse "$id")
@@ -512,6 +533,7 @@ test_kimi_spawn_refuses_unsafe_global_config_before_pane_creation() {
 }
 
 test_kimi_teardown_removes_pointer_and_registry_token() {
+  kimi_tomllib_available "teardown removes the pointer and registry token" || return 0
   local id rec out rc token
   id=kimi-teardown-z8
   rec=$(make_spawn_case teardown "$id")
@@ -533,6 +555,7 @@ test_kimi_teardown_removes_pointer_and_registry_token() {
 }
 
 test_kimi_falls_back_to_expanded_home_binary() {
+  kimi_tomllib_available "spawn falls back to the expanded HOME binary" || return 0
   local id rec out rc launch fallback
   id=kimi-fallback-z4
   rec=$(make_spawn_case fallback "$id")
@@ -569,6 +592,7 @@ test_kimi_missing_binary_refuses_before_pane_creation() {
 }
 
 test_kimi_unconfirmed_delivery_fails_loudly() {
+  kimi_tomllib_available "unconfirmed brief delivery fails loudly" || return 0
   local id rec out rc
   id=kimi-drop-z2
   rec=$(make_spawn_case drop "$id")
@@ -585,6 +609,7 @@ test_kimi_unconfirmed_delivery_fails_loudly() {
 }
 
 test_kimi_readiness_gate_precedes_pointer() {
+  kimi_tomllib_available "the readiness gate precedes pointer delivery" || return 0
   local id rec out rc
   id=kimi-not-ready-z3
   rec=$(make_spawn_case not-ready "$id")

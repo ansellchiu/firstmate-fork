@@ -145,7 +145,8 @@ Default collection performs bounded concurrent remote-ledger reads for registere
 remote homes under one shared snapshot budget and may refresh the parent-side cache.
 --include-prs additionally performs live GitHub discovery and checks.
 
-Default fields: schema, home, generated, prs, in_flight{id,kind,state,repo,name,doing},
+Default fields: schema, home, generated, prs, attention,
+  portfolio{project,attention,why}, in_flight{id,kind,state,repo,name,doing},
   secondmates{id,state,doing,provenance,freshness,age_seconds,contradiction,reason},
   secondmate_reconcile{id,spawn_gen,host,kind,ids},
   decisions_open{id,key,verb,summary,owner}, landed{id,what,artifact,owner},
@@ -624,6 +625,24 @@ MODEL=$(printf '%s' "$SNAP" | jq \
            missing_verdicts:([$measured[].missing_verdicts] | add // 0),
            captain_omitted:([$measured[].captain_omitted] | add // 0),
            captain:[$measured[] as $h | $h.captain[]? | . + {owner:$h.owner}]}),
+      attention: (if .portfolio.available == false then
+                    "classification unavailable: \(.portfolio.reason // "the portfolio classification could not be computed")"
+                  else
+                    (if .portfolio.enforced == false then
+                       "\(.portfolio.counted) carried; limit disabled in config/attention-limit"
+                     else
+                       "\(.portfolio.counted)/\(.portfolio.limit)"
+                     end)
+                    + (if (.portfolio.focus // null) != null then " focus=\(.portfolio.focus)" else "" end)
+                    + (if .portfolio.over_limit then " OVER LIMIT"
+                       elif .portfolio.at_limit then " at limit"
+                       else "" end)
+                  end),
+      portfolio: [ (.portfolio.projects // [])[]
+                   | select(.counts)
+                   | {project:.name,
+                      attention:.class,
+                      why:(if (.reasons | length) > 0 then (.reasons | join(", ") | trunc(60)) else "-" end)} ],
       in_flight: (if $all_in_flight == 1 then $in_flight_all else $in_flight_all[:$in_flight_n] end),
       secondmates: (if $all_secondmates == 1 then $secondmates_all else $secondmates_all[:$secondmates_n] end),
       secondmate_reconcile: [ (.secondmate_current.records // [])[]
@@ -682,6 +701,10 @@ MODEL=$(printf '%s' "$SNAP" | jq \
         (if $all_unhealthy == 0 and ($unhealthy_all | length) > $unhealthy_n then {surface:("unhealthy_endpoints showing \($unhealthy_n) of \($unhealthy_all | length)"), reveal:"--all-unhealthy"} else empty end),
         (if $include_prs == 1 and $pr_repos_total > $pr_repos_shown then {surface:("PR repositories showing \($pr_repos_shown) of \($pr_repos_total)"), reveal:"--all-pr-repos"} else empty end),
         (if $include_prs == 1 and $pr_rows_capped > 0 then {surface:("candidate_prs showing \($candidate_prs | length) of at least \($pr_rows_min_total); capped in \($pr_rows_capped) repo(s)"), reveal:"raise FM_BEARINGS_PR_LIMIT"} else empty end),
+        (if $snap.portfolio.available == false then {surface:("portfolio classification unavailable: " + ($snap.portfolio.reason // "it could not be computed")), reveal:"bin/fm-attention.sh status"} else empty end),
+        (([ ($snap.portfolio.projects // [])[] | select(.counts | not) ] | length) as $n
+         | if $n > 0 then {surface:("projects not attention-active: \($n)"), reveal:"bin/fm-attention.sh status"} else empty end),
+        (if (($snap.portfolio.focus_conflict // []) | length) > 0 then {surface:("more than one project flagged +focus: " + (($snap.portfolio.focus_conflict // []) | join(", "))), reveal:"the captain has one focus project; correct data/projects.md"} else empty end),
         (if $include_prs == 1 then empty else {surface:"live PR discovery + checks", reveal:"--include-prs"} end) ]) }
 ') || { echo "fm-bearings-snapshot: projection failed" >&2; exit 1; }
 

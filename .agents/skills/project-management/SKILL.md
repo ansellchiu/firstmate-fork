@@ -4,7 +4,7 @@ description: >-
   Agent-only procedure for Firstmate project management.
   Use before adding, creating, removing, or initializing a project.
   Cloning or registering a project is add intake and uses the same trigger.
-  Owns project add, create, clone, remove, initialization, registry, delivery-mode, autonomy, and outward-consent decisions.
+  Owns project add, create, clone, remove, initialization, registry, delivery-mode, portfolio focus and parking, autonomy, and outward-consent decisions.
 user-invocable: false
 metadata:
   internal: true
@@ -21,6 +21,16 @@ It does not replace `secondmate-provisioning`, which owns project clones inside 
 
 Projects live flat under `projects/`, and `data/projects.md` is the private fleet registry.
 Use the registry format and parser contract owned by the header of `bin/fm-project-mode.sh`.
+Every entry must carry the `(added <date>)` tail, with a real `YYYY-MM-DD` date: the portfolio classification refuses to answer at all for an entry that omits it, rather than dropping the line and silently losing its `+parked` or `+focus` flag.
+A bullet carrying nothing but a project name is a half-written entry, not a note, so it is refused by name until it carries its `(added <date>)` tail.
+That holds even for a two-word bullet meant as prose, such as `- Ideas`, and the loud failure is the deliberate trade: the correction is one line, while quietly ignoring the bullet could discard a real project's parking decision.
+Put the `[...]` annotation immediately after the project name, with a space before it: a bullet carrying a `+` flag in brackets anywhere else is refused by name, because reading it as prose would drop the flag.
+That covers brackets glued to a word and a second bracket group beside the first, neither of which is parsed as the annotation.
+Register each project exactly once: a name that appears on two entries is refused by name, because either row could be the one carrying a `+parked` or `+focus` decision.
+Registry prose must not be written in an entry's shape - a bullet whose first word is followed by a `[...]` annotation or a ` - ` clause reads as a dateless entry and is refused by name - so keep notes in a plainer shape.
+A bullet whose first word is followed by nothing but an `(added <date>)` tail is an entry and is listed, so a note must not be written that way either; a note that merely ends in such a tail after other words is prose and is ignored.
+That rule covers column-0 bullets only: an indented bullet is a note on the entry above it, never an entry, so a nested note may be written in any shape.
+The exception is an indented bullet carrying an `(added <date>)` tail or any `+` token in a `[...]` annotation, mistyped ones included: that is a misplaced entry and is refused by name, so unindent it to column 0 rather than leaving a parking or focus decision in a note.
 Keep each registry description useful for identifying the project, but keep delivery posture, captain-private state, and detailed project knowledge in their existing designated homes.
 Do not turn the registry into project documentation.
 
@@ -51,6 +61,21 @@ Registering a conditional policy is a one-time choice and never requires classif
 The optional `+yolo` posture changes merge authority only and does not change the delivery mode.
 Default it off for every project and every posture, and enable it only on the captain's explicit instruction.
 `AGENTS.md` section 7 owns the merge-authority contract.
+
+## Portfolio attention flags
+
+Two further registry annotations are portfolio state rather than delivery posture, and neither changes the mode or merge authority:
+
+- `+focus` marks the captain's single focus project.
+  Move it rather than adding a second one; `bin/fm-attention.sh status` reports two as a conflict.
+  The flag makes the project visible as the focus, not attention-consuming: like any project it occupies a slot only while an open captain lane names it.
+- `+parked` marks a project deliberately quiet: it never consumes an attention slot, is never named as the focus, and new captain-facing work on it is refused until the captain reopens it by removing the flag.
+
+Clear `+focus` when parking the focus project, or move the focus first, because a parked project keeps its designation for the conflict check and a second `+focus` elsewhere would then stand as a conflict on every surface.
+
+Park a project only on the captain's decision, including when parking is what clears a slot at the attention limit, and say which project is being parked when proposing it.
+Never park a project to work around a refusal on the captain's behalf.
+`bin/fm-attention-lib.sh` owns what the classification and the limit mean, and `AGENTS.md` section 7 owns the intake rule.
 
 ## Add or clone an existing project
 

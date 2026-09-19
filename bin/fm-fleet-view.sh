@@ -52,6 +52,8 @@ printf '%s\n' "$SNAPSHOT" | jq -r '
     else $t.actions.watch end;
   def task_row($t):
     "| \($t.id) | \($t.current_state.state) / \($t.current_state.source) | \($t.kind) | \(dash($t.backlog.repo // $t.project)) | \($t.backend) | \(endpoint_of($t)) | \(artifact($t)) | \(path_of($t)) | \(action_of($t)) |";
+  def portfolio_row($p):
+    "| \($p.name) | \($p.class) | \(if $p.registered then "yes" else "no" end) | \(if $p.mode_recognized == false then "\($p.mode) (unrecognized; ships no-mistakes off)" else dash($p.mode) end) | \(dash($p.yolo)) | \(if ($p.reasons | length) > 0 then ($p.reasons | join(", ")) else "-" end) |";
   def blocker($r):
     if ($r.blocked_by // "") == "" then "-"
     elif ($r.blocked_reason // "") == "" then $r.blocked_by
@@ -63,6 +65,34 @@ printf '%s\n' "$SNAPSHOT" | jq -r '
   "",
   "Schema: \(.schema)",
   "Home: \(.fm_home)",
+  "",
+  "## Portfolio",
+  (if .portfolio.available == false then
+    ("Classification unavailable: \(.portfolio.reason // "the portfolio classification could not be computed").",
+     "This is not an empty portfolio: no project is shown, and none can be read as quiet.")
+   else
+    (if .portfolio.enforced == false then
+       "Captain attention: \(.portfolio.counted) carried; the limit is disabled in config/attention-limit\(if (.portfolio.counted_projects | length) > 0 then " (\(.portfolio.counted_projects | join(", ")))" else "" end). Focus: \(.portfolio.focus // "none")."
+     else
+       "Captain attention: \(.portfolio.counted)/\(.portfolio.limit)\(if (.portfolio.counted_projects | length) > 0 then " (\(.portfolio.counted_projects | join(", ")))" else "" end). Focus: \(.portfolio.focus // "none")."
+     end),
+    "",
+    (if (.portfolio.projects | length) == 0 then
+      "No registered or worked-on projects found."
+     else
+      "| Project | Attention | Registered | Mode | Yolo | Why |",
+      "| --- | --- | --- | --- | --- | --- |",
+      (.portfolio.projects[] | portfolio_row(.))
+     end),
+    (if (.portfolio.focus_conflict | length) > 0 then
+      ("", "More than one project is flagged +focus (\(.portfolio.focus_conflict | join(", "))); the captain has one focus project.")
+     else empty end),
+    (if .portfolio.over_limit then
+      ("", "Over the attention limit: finish or park a project before starting another.")
+     elif .portfolio.at_limit then
+      ("", "At the attention limit: a new attention-consuming project needs one of these finished or parked first.")
+     else empty end)
+   end),
   "",
   "## Under Way",
   (if (.tasks | length) == 0 then
