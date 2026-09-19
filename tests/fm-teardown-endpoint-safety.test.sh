@@ -925,6 +925,7 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
   fm_write_meta "$dir/home/state/$id.meta" \
     "window=firstmate:fm-$id" "endpoint_task_id=$id" \
     "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
+  seed_landing_receipt "$dir/home" "$id"
   claim_pool_slot "$dir" "$other" "$dir/other-home"
   ( cd "$dir/worktree" && exec sleep 30 ) &
   worker=$!
@@ -1039,11 +1040,29 @@ SH
 # write_endpoint_close_meta: a task record whose worktree and project do not
 # exist, which keeps the cases below on the endpoint close itself - the pool
 # return and its own refusals are covered elsewhere in this file.
+# A landed ship task carries a completion receipt and cleanup refuses without
+# one (bin/fm-receipt.sh, bin/fm-teardown.sh's receipt gate). These fixtures
+# stamp landed tasks rather than landing them, so they record the receipt the
+# landing path would have written.
+seed_landing_receipt() {  # <home> <task-id>
+  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$1" FM_STATE_OVERRIDE="$1/state" \
+    FM_DATA_OVERRIDE="$1/data" "$ROOT/bin/fm-receipt.sh" write-landing \
+    --task "$2" --commit-sha 1111111111111111111111111111111111111111 \
+    --sha-source "git -C <worktree> rev-parse HEAD (fixture)" \
+    --verification verified >/dev/null \
+    || fail "could not record a landing receipt for $2"
+}
+
 write_endpoint_close_meta() {  # <case-dir> <id> <window>
   fm_write_meta "$1/home/state/$2.meta" \
     "window=$3" "endpoint_task_id=$2" \
     "worktree=$1/nonexistent-worktree" "project=$1/nonexistent-project" \
     "kind=ship" "mode=no-mistakes"
+  seed_landing_receipt "$1/home" "$2"
+  # These cases exercise the ENDPOINT close, which happens after the landed-work
+  # and completion-receipt gates; a ship task with no receipt refuses before the
+  # close is ever attempted (bin/fm-receipt.sh, bin/fm-teardown.sh).
+  seed_landing_receipt "$1/home" "$2"
 }
 
 test_failed_endpoint_close_refuses_before_removing_the_record() {
@@ -1287,6 +1306,7 @@ test_orca_close_failure_refuses_even_under_force() {
     "window=fm-$id" "endpoint_task_id=$id" "terminal=term-7" \
     "worktree=$dir/nonexistent-worktree" "project=$dir/nonexistent-project" \
     "backend=orca" "orca_worktree_id=worktree-9::/orca/worktree-9" "kind=ship" "mode=no-mistakes"
+  seed_landing_receipt "$dir/home" "$id"
 
   set +e
   env -u TMUX -u TMUX_PANE \

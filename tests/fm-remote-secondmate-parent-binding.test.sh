@@ -240,6 +240,17 @@ write_child_meta() {
     "window=firstmate:fm-work-child" "endpoint_task_id=work-child" \
     "worktree=$CHILD_WT" "project=$CHILD_WT" "harness=codex" "kind=ship" \
     "mode=local-only" "yolo=off"
+  # A landed ship task carries a completion receipt and cleanup refuses without
+  # one (bin/fm-receipt.sh, bin/fm-teardown.sh's receipt gate). This fixture
+  # stamps the task rather than landing it, so it records the receipt the
+  # landing path would have written.
+  FM_ROOT_OVERRIDE="$REMOTE_ROOT" FM_HOME="$REMOTE_HOME" \
+    FM_STATE_OVERRIDE="$REMOTE_HOME/state" FM_DATA_OVERRIDE="$REMOTE_HOME/data" \
+    "$REMOTE_ROOT/bin/fm-receipt.sh" write-landing --task work-child \
+    --commit-sha 1111111111111111111111111111111111111111 \
+    --sha-source "git -C <worktree> rev-parse HEAD (fixture)" \
+    --verification verified >/dev/null \
+    || fail "could not record the child's landing receipt"
 }
 mkdir -p "$TMP_ROOT/childfake"
 for t in tmux treehouse no-mistakes gh gh-axi tasks-axi; do
