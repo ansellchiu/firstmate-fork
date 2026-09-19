@@ -173,6 +173,57 @@ Neither this per-source shape nor `state.authStatus` exists before quota-axi 0.1
 Grok also reports `credits.remaining: 0` alongside `percentRemaining: 41` on a healthy account.
 That zero is a prepaid balance, not the subscription window, and is never headroom.
 
+## Providers quota-axi does not meter
+
+Verified 2026-08-19 against quota-axi 0.1.28.
+
+`quota-axi`'s provider adapters are compiled in and it publishes no plugin, config, or discovery surface, so its provider set is fixed at `claude`, `codex`, `cursor`, `copilot`, `grok`, and `kimi`.
+A dispatch candidate on any other provider therefore has no quota evidence from `quota-axi` at all, and the first observable sign of exhaustion is an HTTP 429 taken by a live worker.
+`bin/fm-quota-unmetered.sh` reports the credentialed providers outside that set in the same schema v3 shape, so one parser reads both; its own header owns the flags, environment, and exit status.
+
+Z.ai GLM publishes real usage windows:
+
+```sh
+curl -H "Authorization: <key>" https://api.z.ai/api/monitor/usage/quota/limit
+```
+
+```json
+{ "code": 200, "data": { "limits": [
+    { "type": "CREDIT_LIMIT", "unit": 3, "number": 5, "usage": 2000, "currentValue": 0, "remaining": 2000, "percentage": 0 },
+    { "type": "CREDIT_LIMIT", "unit": 6, "number": 1, "usage": 10000, "currentValue": 2098, "remaining": 7901, "percentage": 20, "nextResetTime": 1787498417997 } ],
+  "level": "lite" }, "success": true }
+```
+
+- `percentage` is percent USED, and `unit`/`number` name the period. Only `unit: 3` (hour) and `unit: 6` (week) have been observed, so the two windows above are a 5-hour cycle and a 7-day cycle; the weekly `nextResetTime` above resolved to 2026-08-23T15:20:17.997Z, 117 hours out, which is consistent with a 7-day period and not a monthly one.
+- Both the raw key and the `Bearer` form return HTTP 200, so Z.ai accepts either.
+- An unverified `unit` code is the risk this evidence bounds: mapping one onto a familiar duration would misreport remaining runway, so `bin/fm-quota-unmetered.sh` reports an unlisted code as a window with no duration and kind `unknown`. Re-run the command above and extend the mapping together with this list when a new code appears.
+
+DeepSeek publishes no usage window at all:
+
+```sh
+curl -H "Authorization: Bearer <key>" https://api.deepseek.com/user/balance
+```
+
+```json
+{ "is_available": true, "balance_infos": [
+    { "currency": "CNY", "total_balance": "62.07", "granted_balance": "0.00", "topped_up_balance": "62.07" },
+    { "currency": "USD", "total_balance": "3.53", "granted_balance": "0.00", "topped_up_balance": "3.53" } ] }
+```
+
+- This balance endpoint is the only usage-adjacent surface DeepSeek publishes. There is no usage-window, quota-cycle, or rate-limit query; its documented limits are per-account concurrency ceilings (`deepseek-v4-pro` 500, `deepseek-v4-flash` 2500) that surface only as an HTTP 429 at request time.
+- Balance is money, not headroom, and the same trap as Grok's prepaid `credits.remaining` above: it is reported as `credits` with an EMPTY `windows` array and `quotaSemantics.status: "unknown"`, so no dispatch decision can read a percentage that measures nothing.
+- Unlike Z.ai, DeepSeek requires the `Bearer` form: the raw key returns HTTP 401 and `Bearer <key>` returns HTTP 200.
+
+The credential for both is read from `<home>/.pi/agent/auth.json` (`zai.key`, `deepseek.key`), or from `ZAI_API_KEY`/`Z_AI_API_KEY` and `DEEPSEEK_API_KEY` when set.
+Neither provider appears in `quota-axi auth --json`, so the per-provider source shape above does not cover them.
+
+Gemini publishes no usage or billing endpoint at all yet, unlike zai and deepseek:
+
+agy (Google's Gemini CLI, branded Antigravity CLI in its own banner) authenticates through a local OAuth session, not an API key.
+The captain confirmed a logged-in OAuth session on 2026-08-19 (account shown in-banner as `Google AI Pro`).
+No Cloud Billing export is wired to read Gemini usage, and agy exposes no auth or usage subcommand (`agy --help` lists no `whoami`/`auth`/`status`), so `bin/fm-quota-unmetered.sh` makes no network call for this provider at all: it reports `gemini` entirely from record, with an empty `windows[]`, `quotaSemantics.status: "unknown"`, `source: "unmetered"`, and `state.authStatus: "usable"` that reflects the captain's confirmed login rather than a live read - `state.error` says so explicitly, so a consumer never mistakes it for a fresh probe.
+This changes the moment a Cloud Billing export is wired; re-verify and update this section together with that work.
+
 ## Standalone Grok discovery probe
 
 Verified 2026-07-30 on `grok 0.2.117 (f1c06093089f) [stable]`.
@@ -197,6 +248,8 @@ Re-run the two commands above and update this section and the pinned version tog
 
 `tests/fm-vendor-auth-probe.test.sh` drives the real script against a fake vendor CLI that records every invocation's argv and anything readable on stdin.
 It asserts that the script accepts no harness, model, or provider input, never calls `quota-axi`, exits alike for every probe result because it renders no verdict, invokes only the two fixed non-destructive argv forms with stdin closed, holds a real bound even when the configured bound is zero or malformed, and never echoes raw vendor output.
+`tests/fm-quota-unmetered.test.sh` drives the real script against a local fake provider endpoint, so it needs no network, credential, or vendor account.
+It asserts that DeepSeek's balance never becomes a window or a percentage, that an unverified Z.ai period code is reported as unknown rather than mapped onto a familiar duration, that a non-model window never shrinks model headroom, that a missing or rejected credential is reported as unavailable rather than filled in, that each provider receives the authorization form it requires, that the credential never reaches the output, that gemini makes no network call and reports empty windows with unknown quota, and that gemini's `authStatus` is disclosed as the captain's confirmed login rather than a live read.
 `tests/fm-spawn-dispatch-profile.test.sh` owns spawn's deterministic profile and harness refusals.
 `tests/fm-bootstrap.test.sh` owns the quota-axi version-floor diagnostic.
 `tests/fm-quota-array-dispatch-live-e2e.test.sh` drives the public Pi skill-loading interface against one fake schema-5 snapshot per case, served as quota-axi's default TOON.

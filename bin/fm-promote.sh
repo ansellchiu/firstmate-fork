@@ -11,7 +11,10 @@
 # bin/fm-dod-lib.sh, the single owner an ordinary ship brief also uses - the
 # mode-specific Definition of done, so a promoted worker receives exactly the same
 # delivery contract as a briefed one, including the no-mistakes mode's ask-user
-# escalation rule and --yes ban. The instructions also carry `# Task` with
+# escalation rule and --yes ban. They also carry the incidental-findings record
+# command (bin/fm-findings-lib.sh owns the channel contract), so a scout turned
+# ship worker gets the same durable out-of-scope observation channel a spawned
+# ship brief carries, and `# Task` with
 # `## Captain's intent` preserved from the scout brief and promotion's ship-time
 # instructions under `## Firstmate spec`; the scout-time spec remains context but
 # is not relabeled as the ship spec. Promotion refuses leftover `{TASK}` /
@@ -174,6 +177,14 @@ fi
 # promoted no-mistakes worker that never received the ask-user escalation rule or
 # the --yes ban is the delivery hole this file used to leave open.
 INSTRUCTIONS="$DATA/$ID/ship-instructions.md"
+# The data and state dirs are bound here, at promotion time, exactly as the
+# spawned ship brief binds them (bin/fm-brief.sh): the crewmate's pane does not
+# inherit this firstmate's FM_HOME, so an unbound command would append the
+# finding into whichever home the ambient environment resolves - and would
+# create that home's state dir for the record's lock - instead of the home this
+# instruction line names.
+FINDINGS_CMD="FM_DATA_OVERRIDE=$(printf '%q' "$DATA") FM_STATE_OVERRIDE=$(printf '%q' "$STATE") $(printf '%q' "$FM_ROOT/bin/fm-findings.sh")"
+FINDINGS_FILE_Q=$(printf '%q' "$DATA/$ID/findings.md")
 PROMOTION_ASK_USER_BLOCK=
 if [ "$MODE" = no-mistakes ]; then
   PROMOTION_ASK_USER_BLOCK=$(fm_ask_user_escalation_block "$DATA" "$ID")
@@ -185,8 +196,9 @@ If these promotion steps were already completed before a relaunch, preserve the 
 3. Return to a clean default-branch base, then create your branch: \`git checkout -b fm/$ID\`.
 4. Carry over only the intended fix changes. Leave scratch commits, debug edits, and experiment files behind.
 5. If you reproduced a bug, turn that reproduction into a regression test.
-6. Treat the scout-time Firstmate spec and any unmarked legacy \`# Task\` text as investigation context, not captain intent or current ship-time instructions.
-7. Everything else in your original instructions carries over unchanged: the status protocol; the instruction inbox and its acknowledgement; the escalation rules, including ask-user; and every safety rule, except where the current delivery contract below explicitly replaces scout-only delivery rules.
+6. Defects you notice OUTSIDE this task's scope are recorded, never fixed here: run \`$FINDINGS_CMD record $ID --title "<short title>" --evidence "<file:line, command, or observation>" --disposition "<the follow-up you suggest>"\` to append them to $FINDINGS_FILE_Q in the firstmate home, where they survive cleanup; that one write outside your worktree is allowed exactly like the status file, and it is the only addition to your carried-over write allowlist. Keep it rare and concrete, and firstmate triages them later.
+7. Treat the scout-time Firstmate spec and any unmarked legacy \`# Task\` text as investigation context, not captain intent or current ship-time instructions.
+8. Everything else in your original instructions carries over unchanged: the status protocol; the instruction inbox and its acknowledgement; the escalation rules, including ask-user; and every safety rule, except where the current delivery contract below explicitly replaces scout-only delivery rules.
 EOF
 promote_delivery_contract() {
   cat <<EOF

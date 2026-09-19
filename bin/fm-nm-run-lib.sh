@@ -369,6 +369,20 @@ fm_nm_runs_status_for_worktree() {  # <worktree> <branch> <runs-list-output> [ex
     esac
     [ "$day_num" -ge 1 ] && [ "$day_num" -le "$max_day" ] || break
     [ "$br" = "$branch" ] || continue
+    if [ -n "$decided" ]; then
+      # Live-over-terminal: the newest row bound to this worktree but is a
+      # terminal record, so the older rows are searched for a live run that
+      # binds to the same worktree by the same head rule. Only such a row
+      # displaces the held terminal word; anything else leaves it standing.
+      [ "$(fm_nm_run_status_class "$st")" = live ] || continue
+      if [ -n "$(fm_nm_resolve_commit "$wt" "$sha")" ]; then
+        fm_nm_head_matches_worktree "$wt" "$sha" || continue
+      else
+        [ -n "$decided_exact" ] || continue
+      fi
+      decided=$st
+      break
+    fi
     if [ -n "$pending_st" ]; then
       # This is the row immediately older than the active unresolvable row:
       # the only admissible anchor, and only exact head equality proves the
