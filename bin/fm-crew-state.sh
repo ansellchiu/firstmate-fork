@@ -118,6 +118,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-busy-lib.sh
 . "$SCRIPT_DIR/fm-busy-lib.sh"
+# shellcheck source=bin/fm-rate-limit-lib.sh
+. "$SCRIPT_DIR/fm-rate-limit-lib.sh"
 # shellcheck source=bin/fm-nm-run-lib.sh
 . "$SCRIPT_DIR/fm-nm-run-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
@@ -163,6 +165,7 @@ meta_value() {  # <key>
 WT=$(meta_value worktree)
 KIND=$(meta_value kind)
 HARNESS=$(meta_value harness)
+MODEL=$(meta_value model)
 REMOTE_HOST=$(meta_value remote_host)
 [ -n "$KIND" ] || KIND=ship
 
@@ -646,6 +649,58 @@ nm_ci_checks_state() {
     *) printf 'unknown' ;;
   esac
 }
+
+nm_pr_forge_state() {  # <url>
+  local url=$1 provider host path number state raw
+  if ! fm_pr_url_parse "$url"; then
+    printf 'unknown'
+    return 0
+  fi
+  provider=$FM_PR_PROVIDER
+  host=$FM_PR_HOST
+  path=$FM_PR_PATH
+  number=$FM_PR_NUMBER
+  case "$provider" in
+    github)
+      if [ -n "$WT" ] && [ -d "$WT" ] && command -v gh >/dev/null 2>&1; then
+        state=$(cd "$WT" && gh pr view "$url" --json state -q .state 2>/dev/null) || state=""
+        case "$state" in
+          MERGED) printf 'merged' ;;
+          CLOSED) printf 'closed' ;;
+          OPEN)   printf 'open' ;;
+          *)      printf 'unknown' ;;
+        esac
+      elif command -v gh >/dev/null 2>&1; then
+        state=$(gh pr view "$url" --json state -q .state 2>/dev/null) || state=""
+        case "$state" in
+          MERGED) printf 'merged' ;;
+          CLOSED) printf 'closed' ;;
+          OPEN)   printf 'open' ;;
+          *)      printf 'unknown' ;;
+        esac
+      else
+        printf 'unknown'
+      fi
+      ;;
+    gitlab)
+      if command -v glab >/dev/null 2>&1; then
+        raw=$(glab mr view "$number" -R "https://$host/$path" 2>/dev/null) || raw=""
+        state=$(printf '%s\n' "$raw" | sed -n 's/^state:[[:space:]]*//p' | head -1) || state=""
+        case "$state" in
+          merged) printf 'merged' ;;
+          closed) printf 'closed' ;;
+          opened) printf 'open' ;;
+          *)      printf 'unknown' ;;
+        esac
+      else
+        printf 'unknown'
+      fi
+      ;;
+    *)
+      printf 'unknown'
+      ;;
+  esac
+}
 # Coarse fallback when the bare `axi status` answer is not this branch's own
 # matching run: either it names another branch (routine once several crews
 # validate the same underlying repo concurrently - a worktree with its own
@@ -862,7 +917,20 @@ if [ "$HAVE_RUN" = 1 ]; then
       case "$status" in
         ci)             RUN_STATE=working; RUN_DETAIL="ci running" ;;
         running|fixing) RUN_STATE=working; RUN_DETAIL="validating ($status)" ;;
-        completed)      RUN_STATE="done"; RUN_DETAIL="run completed" ;;
+        completed)
+          pr_url=$(strip_quotes "$(nm_field pr)")
+          [ -n "$pr_url" ] || pr_url=$(meta_value pr)
+          forge_state=""
+          if [ -n "$pr_url" ]; then
+            forge_state=$(nm_pr_forge_state "$pr_url")
+          fi
+          case "$forge_state" in
+            closed) RUN_STATE=failed; RUN_DETAIL="PR closed unmerged" ;;
+            open)   RUN_STATE=working; RUN_DETAIL="PR open (waiting for merge)" ;;
+            merged) RUN_STATE="done"; RUN_DETAIL="run passed: PR merged" ;;
+            *)      RUN_STATE="done"; RUN_DETAIL="run completed" ;;
+          esac
+          ;;
         failed)
           if nm_reclassify_failed_run_as_held_green; then :; else
             RUN_STATE=failed; RUN_DETAIL="run failed"
@@ -878,7 +946,7 @@ if [ "$HAVE_RUN" = 1 ]; then
             CI_LOG_STATE=$(nm_ci_checks_state)
             if [ "$CI_LOG_STATE" = green ]; then
               RUN_STATE="done"
-              RUN_DETAIL="checks green: PR ready for review (still monitoring for merge/close)"
+              RUN_DETAIL="checks green: PR ready for review (still monitoring for merge)"
             fi
             ;;
           fixing)
@@ -1010,16 +1078,40 @@ fi
 
 # Secondmates idle on their own watcher (idle pane = healthy), so the busy
 # state is not meaningful for them; read their state from the status log only.
-# Only an exact busy verdict reports working here, and only an exact idle
-# verdict permits the status-log fallback below. Missing, malformed, stale, or
-# unverified semantic state remains unknown.
+# An exact busy verdict reports working here, an exact idle verdict permits
+# the full status-log fallback below, and an unknown/unavailable verdict falls
+# back to a recognized nonterminal state (paused, working) from the status log
+# before emitting unknown.
 if [ "$KIND" != secondmate ]; then
   BUSY_VERDICT=$(crew_busy_verdict "$BACKEND_TARGET")
   case "${BUSY_VERDICT%% *}" in
     busy) emit working pane "harness busy (${BUSY_VERDICT#* })" ;;
     idle) ;;
-    *) emit unknown pane "harness state unavailable ($BUSY_VERDICT)" ;;
+    *)
+      if [ -n "$LOG_VERB" ]; then
+        LOG_STATE=$(map_log_state "$LOG_LINE")
+        case "$LOG_STATE" in
+          paused|working)
+            emit "$LOG_STATE" status-log "$(status_line_note "$LOG_LINE")"
+            ;;
+        esac
+      fi
+      emit unknown pane "harness state unavailable ($BUSY_VERDICT)"
+      ;;
   esac
+  # A model rate-limit signal in the pane tail (bin/fm-rate-limit-lib.sh) names
+  # the stall: the API is refusing calls until the window resets, so this idle
+  # pane is a bounded external wait, never a wedge. Reported as `paused` so the
+  # shared absorb classification (crew_absorb_class) and every supervisor treat
+  # it exactly like a declared pause. The signal is strong textual evidence from
+  # the worker's own pane (a 429 or a GLM usage-limit code plus an explicit
+  # rate-limit phrase), so it may upgrade an unknown semantic verdict - it can
+  # never claim busy, and a busy pane never reaches here (the emit above exits).
+  RL_TAIL=$(fm_backend_capture "$TASK_BACKEND" "$BACKEND_TARGET" 40 "$EXPECTED_LABEL" 2>/dev/null) || RL_TAIL=''
+  rl=$(fm_rate_limit_signal "$HARNESS" "$MODEL" "$RL_TAIL")
+  if [ -n "$rl" ]; then
+    emit paused pane "stalled on rate limit ($rl): awaiting reset, not a wedge"
+  fi
 fi
 
 # Fall back to the resolved status declaration, but ONLY when its verb maps to a real

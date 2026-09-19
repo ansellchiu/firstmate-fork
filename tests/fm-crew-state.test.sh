@@ -180,7 +180,8 @@ case "${1:-}" in
     printf '%%1\n' ;;
   capture-pane)
     [ "${FM_FAKE_TMUX_MISSING:-0}" = 1 ] && exit 1
-    if [ "${FM_FAKE_BUSY:-0}" = 1 ]; then printf 'work in progress\n%s\n' "${FM_FAKE_BUSY_TEXT:-esc to interrupt}"
+    if [ -n "${FM_FAKE_TMUX_CAPTURE:-}" ] && [ -f "$FM_FAKE_TMUX_CAPTURE" ]; then cat "$FM_FAKE_TMUX_CAPTURE"
+    elif [ "${FM_FAKE_BUSY:-0}" = 1 ]; then printf 'work in progress\n%s\n' "${FM_FAKE_BUSY_TEXT:-esc to interrupt}"
     else printf 'all quiet\n> \n'; fi ;;
 esac
 exit 0
@@ -297,6 +298,8 @@ reset_fakes() {
   FM_FAKE_HERDR_PROCESS=agent
   FM_FAKE_HERDR_SHELL_PID=$$
   FM_FAKE_CI_LOGS=""
+  FM_FAKE_GH_STATE=""
+  FM_FAKE_GLAB_STATE=""
   FM_FAKE_DAEMON_DOWN=0
   FM_FAKE_PR_STATE=MERGED
   FM_FAKE_PR_MERGED=true
@@ -1969,6 +1972,32 @@ test_no_run_idle_pane_uses_log() {
   pass "no run + idle pane uses the status-log verb"
 }
 
+# (g") no run + idle pane whose tail carries a model rate-limit signal ->
+# state: paused with the signal named (fm-rate-limit-lib.sh), so supervisors
+# read a bounded external wait, never a wedge-suspect idle.
+test_no_run_rate_limited_pane_reports_paused_with_signal() {
+  reset_fakes
+  local d; d=$(new_case rate-limited-idle)
+  make_repo_on_branch "$d/wt" fm/feat-rl
+  make_fakebin "$d" >/dev/null
+  printf '429 rate limit reached, backing off\n' > "$d/pane.txt"
+  fm_write_meta "$d/state/feat-rl.meta" "window=fm:fm-feat-rl" "worktree=$d/wt" "kind=ship" \
+    "harness=pi" "model=deepseek-v4-flash"
+  printf 'working: implementing\n' > "$d/state/feat-rl.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_BUSY=0
+  local gen
+  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$d/state" feat-rl)
+  "$ROOT/bin/fm-busy-event.sh" apply "$d/state" feat-rl idle --gen "$gen" \
+    --source pi-ext --event agent-settled
+  local out; out=$(FM_FAKE_TMUX_CAPTURE="$d/pane.txt" run_crew_state "$d" feat-rl)
+  assert_contains "$out" "state: paused" "rate-limited idle pane -> paused"
+  assert_contains "$out" "source: pane" "rate-limited paused read -> pane source"
+  assert_contains "$out" "stalled on rate limit (deepseek-429)" "rate-limited paused read lost the signal"
+  assert_contains "$out" "not a wedge" "rate-limited paused read lost the not-a-wedge wording"
+  pass "no run + rate-limited idle pane reports paused with the signal named"
+}
+
 test_no_run_idle_pane_uses_keyed_log() {
   reset_fakes
   local d; d=$(new_case keyed-idle)
@@ -2172,6 +2201,47 @@ test_no_run_idle_pane_custom_paused_verb() {
   out=$(FM_CLASSIFY_PAUSED_VERB=awaiting run_crew_state "$d" feat-custom-pause)
   assert_contains "$out" "state: unknown" "custom paused verb replaces the default"
   pass "no run + idle pane honors the configured paused verb"
+}
+
+# Regression for paused absorb on missing pane busy state: when the agent has
+# exited or its busy verdict is unavailable/unknown (no semantic busy record),
+# a paused status line must fall through to the status log rather than aborting
+# as unknown pane, and crew_absorb_class must classify it as paused (not none).
+test_no_run_unknown_pane_paused_falls_through_to_status_log() {
+  reset_fakes
+  local d; d=$(new_case unknown-pane-paused)
+  make_repo_on_branch "$d/wt" fm/feat-unk-pause
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-unk-pause.meta" "window=fm:fm-feat-unk-pause" "worktree=$d/wt" "kind=ship" "harness=claude"
+  printf 'paused: holding for upstream release\n' > "$d/state/feat-unk-pause.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_BUSY=0
+  # Note: do NOT arm any busy/idle record, so crew_busy_verdict returns "unknown missing"
+  local out; out=$(run_crew_state "$d" feat-unk-pause)
+  assert_contains "$out" "state: paused" "unknown pane busy verdict falls through to paused status log"
+  assert_contains "$out" "source: status-log" "unknown pane with paused log -> status-log source"
+  assert_contains "$out" "holding for upstream release" "paused detail preserved"
+  # End-to-end classify check
+  local absorb; absorb=$(PATH="$d/fakebin:$PATH" FM_STATE_OVERRIDE="$d/state" crew_absorb_class feat-unk-pause)
+  [ "$absorb" = paused ] || fail "crew_absorb_class expected paused, got '$absorb'"
+  pass "no run + unavailable pane busy verdict with paused status falls through to status-log"
+}
+
+test_no_run_unknown_pane_working_falls_through_to_status_log() {
+  reset_fakes
+  local d; d=$(new_case unknown-pane-working)
+  make_repo_on_branch "$d/wt" fm/feat-unk-working
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-unk-working.meta" "window=fm:fm-feat-unk-working" "worktree=$d/wt" "kind=ship" "harness=claude"
+  printf 'working: running local task\n' > "$d/state/feat-unk-working.status"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_BUSY=0
+  # No semantic busy record
+  local out; out=$(run_crew_state "$d" feat-unk-working)
+  assert_contains "$out" "state: working" "unknown pane busy verdict falls through to working status log"
+  assert_contains "$out" "source: status-log" "unknown pane with working log -> status-log source"
+  assert_contains "$out" "running local task" "working detail preserved"
+  pass "no run + unavailable pane busy verdict with working status falls through to status-log"
 }
 
 # A trailing keyed resolved: event is a decision-CLOSING event, not a run-state
@@ -3596,9 +3666,12 @@ test_no_run_herdr_husk_dead_still_reads_gone
 test_no_run_herdr_idle_agent_status_outranked_by_record
 test_no_run_herdr_idle_agent_status_and_idle_record_stays_idle
 test_no_run_idle_pane_uses_log
+test_no_run_rate_limited_pane_reports_paused_with_signal
 test_no_run_idle_pane_uses_keyed_log
 test_no_run_idle_pane_paused
 test_no_run_idle_pane_custom_paused_verb
+test_no_run_unknown_pane_paused_falls_through_to_status_log
+test_no_run_unknown_pane_working_falls_through_to_status_log
 test_no_run_idle_secondmate_resolved_event_not_state
 test_dead_window_ignores_stale_status_log
 test_no_run_tmux_unreadable_reads_unreachable_not_gone
