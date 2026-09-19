@@ -102,6 +102,10 @@ Switching harness is therefore one ordinary relaunch rather than a separate mech
 - An ambiguous or unreadable endpoint state refuses.
   Only a positively classified state acts.
 - `exit`'s composer-empty check, above, is itself a fail-closed boundary that `relaunch` inherits by stopping the old agent through `exit`.
+- An agent that exited without clearing its Herdr registration is an exception in the other direction, and only because it is proven.
+  Herdr keeps a pane's agent registration until something clears it, so a harness that dies without releasing its lifecycle authority used to read as a running agent forever and strand the task: `exit` waited for a stop that had already happened, and `relaunch` then aborted with the old agent reported still running.
+  Herdr's recovery-grade classifier now reads such a pane as stopped, but only from positive evidence that the registered agent's process is gone, so `exit` reports it already stopped and `relaunch` proceeds.
+  Any pane whose evidence is unreadable, incomplete, or merely quiet still reads as running and still refuses.
 - `fm-spawn --relaunch` independently refuses unless the recorded endpoint is positively agent-free, so a replacement can never join a live agent.
   It also requires the shell to be in the recorded worktree: tmux refuses immediately when it is not, while Herdr sends one `cd` to the recorded path and refuses unless a subsequent path read confirms the move.
 
@@ -125,3 +129,4 @@ The empirical basis for each adapter's value is the `harness-adapters` skill's v
 - `tests/fm-control.test.sh` - the adapter contract for its verified-harness lane (adapters outside the lane pin their control mechanics in their own harness suites), the backend capability matrix, exact-id scoping, the closed verb list, the busy, idle, dead, and idempotent lifecycle cases, and marker non-regression, all against a stubbed session provider.
 - `tests/fm-control-relaunch.test.sh` - the relaunch transaction: identity preservation, harness switching, the progress note, checkpoint refusals, and rollback after a failed launch.
 - `tests/fm-control-herdr-smoke.test.sh` - the second state-verified backend against the real herdr binary, on an isolated throwaway lab session.
+- `tests/fm-backend-herdr-exited-agent-e2e.test.sh` - the exited-but-still-registered agent against the real herdr binary, in both directions: a registered agent whose process is running still reads alive, and only its exit flips the verdict.

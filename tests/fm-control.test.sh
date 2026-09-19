@@ -35,7 +35,7 @@ mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd)
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp"
+VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp agy"
 
 # The expectation table, written out independently of the implementation so a
 # silent change to either side shows up here. The fourth field is the composer
@@ -53,6 +53,7 @@ verified_adapter_contract() {  # <harness> -> exit command, interrupt key, repea
     kimi) printf '/exit\tEscape\t1\t\n' ;;
     cursor) printf '/exit\tEscape\t1\t\n' ;;
     muse) printf '/exit\tEscape\t1\tC-u\n' ;;
+    agy) printf '/exit\tEscape\t1\t\n' ;;
     *) return 1 ;;
   esac
 }
@@ -205,6 +206,17 @@ alive_as() {  # <case-dir> <command-name>
   printf '%s' "$2" > "$1/fake/command"
 }
 
+# The portable control test isolates adapter mechanics from backend liveness.
+# agy's tmux process identity is not verified, so use an already-recognized
+# stand-in there; the real agy control guard exercises the Herdr registry path.
+alive_as_harness() {  # <case-dir> <harness>
+  case "$2" in
+    cursor) alive_as "$1" cursor-agent ;;
+    agy) alive_as "$1" claude ;;
+    *) alive_as "$1" "$2" ;;
+  esac
+}
+
 literals() {  # <case-dir>
   cat "$1/fake/literal"
 }
@@ -222,11 +234,7 @@ test_exit_types_each_harness_verified_command() {
   for harness in $VERIFIED_HARNESSES; do
     dir=$(new_case "exit-$harness")
     add_task "$dir" t1 "$harness"
-    if [ "$harness" = cursor ]; then
-      alive_as "$dir" cursor-agent
-    else
-      alive_as "$dir" "$harness"
-    fi
+    alive_as_harness "$dir" "$harness"
     out=$(run_control "$dir" t1 exit); rc=$?
     expect_code 0 "$rc" "exit on $harness should succeed"$'\n'"$out"
     IFS=$'\t' read -r expected key repeat clear <<< "$(verified_adapter_contract "$harness")"
@@ -242,11 +250,7 @@ test_interrupt_sends_each_harness_verified_key() {
   for harness in $VERIFIED_HARNESSES; do
     dir=$(new_case "int-$harness")
     add_task "$dir" t1 "$harness"
-    if [ "$harness" = cursor ]; then
-      alive_as "$dir" cursor-agent
-    else
-      alive_as "$dir" "$harness"
-    fi
+    alive_as_harness "$dir" "$harness"
     out=$(run_control "$dir" t1 interrupt); rc=$?
     expect_code 0 "$rc" "interrupt on $harness should succeed"$'\n'"$out"
     IFS=$'\t' read -r expected key repeat clear <<< "$(verified_adapter_contract "$harness")"
@@ -267,7 +271,7 @@ test_harness_family_resolution() {
   local pair recorded want got
   for pair in claude:claude claude-latest:claude codex:codex codex-cli:codex \
       opencode:opencode grok:grok grok-2:grok kimi:kimi cursor:cursor \
-      cursor-agent:cursor muse:muse muse-bin-0.1.0:muse pi:pi \
+      cursor-agent:cursor muse:muse muse-bin-0.1.0:muse agy:agy pi:pi \
       pi-signed:pi-signed omp:omp; do
     recorded=${pair%%:*}
     want=${pair#*:}
@@ -379,8 +383,10 @@ test_harness_kind_capability() {
     fm_control_harness_supports_kind "$harness" scout \
       || fail "$harness should be able to run a scout task"
   done
-  fm_control_harness_supports_kind muse secondmate \
-    && fail "muse has no primary supervision protocol and must not claim a secondmate"
+  for harness in muse agy; do
+    fm_control_harness_supports_kind "$harness" secondmate \
+      && fail "$harness has no primary supervision protocol and must not claim a secondmate"
+  done
   for harness in claude codex opencode pi pi-signed grok kimi omp; do
     fm_control_harness_supports_kind "$harness" secondmate \
       || fail "$harness should be able to run a secondmate"
@@ -669,6 +675,22 @@ test_ambiguous_endpoint_refuses() {
   pass "fm-control exit: an endpoint whose process cannot be attributed refuses"
 }
 
+test_agy_on_tmux_refuses_both_stop_verbs() {
+  local dir out rc verb
+  for verb in interrupt exit; do
+    dir=$(new_case "agy-tmux-$verb")
+    add_task "$dir" t1 agy
+    alive_as "$dir" agy
+    out=$(run_control "$dir" t1 "$verb"); rc=$?
+    expect_code 1 "$rc" "$verb on an agy tmux pane should refuse"$'\n'"$out"
+    assert_contains "$out" "positively classified" \
+      "the refusal should name the missing tmux attribution"
+    [ -z "$(literals "$dir")" ] || fail "an agy tmux pane must receive no bytes on $verb"
+    [ -z "$(keys_sent "$dir")" ] || fail "an agy tmux pane must receive no key on $verb"
+  done
+  pass "fm-control: agy on tmux refuses interrupt and exit without touching the pane"
+}
+
 test_busy_agent_is_interrupted_before_the_exit_command() {
   local dir out rc
   dir=$(new_case busy)
@@ -903,6 +925,7 @@ test_already_stopped_exit_is_idempotent
 test_missing_endpoint_refuses
 test_interrupt_refuses_when_no_agent_runs
 test_ambiguous_endpoint_refuses
+test_agy_on_tmux_refuses_both_stop_verbs
 test_busy_agent_is_interrupted_before_the_exit_command
 test_idle_agent_is_not_interrupted
 test_interrupt_without_acknowledgement_preserves_busy_state
