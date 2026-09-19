@@ -629,6 +629,10 @@ test_kimi_readiness_gate_precedes_pointer() {
 
 test_kimi_fresh_worktree_trust_is_answered_and_verified() {
   local id rec out rc
+  # Every Kimi spawn installs the global turn-end hook, which fm-kimi-turnend-hook.sh
+  # validates with python3 tomllib, so these spawn cases need the same host guard
+  # the hook cases above use.
+  kimi_tomllib_available "a fresh Kimi worktree answers its trust dialog" || return 0
   id=kimi-trust-z9
   rec=$(make_spawn_case trust "$id")
   read_spawn_record "$rec"
@@ -647,6 +651,10 @@ test_kimi_fresh_worktree_trust_is_answered_and_verified() {
 
 test_kimi_swallowed_trust_enter_is_retried_until_the_dialog_clears() {
   local id rec out rc
+  # Every Kimi spawn installs the global turn-end hook, which fm-kimi-turnend-hook.sh
+  # validates with python3 tomllib, so these spawn cases need the same host guard
+  # the hook cases above use.
+  kimi_tomllib_available "a swallowed trust Enter is retried" || return 0
   id=kimi-trust-swallow-y3
   rec=$(make_spawn_case trust-swallow "$id")
   read_spawn_record "$rec"
@@ -665,6 +673,7 @@ test_kimi_swallowed_trust_enter_is_retried_until_the_dialog_clears() {
 
 test_kimi_banner_before_the_dialog_paints_does_not_pass_readiness() {
   local id rec out rc
+  kimi_tomllib_available "kimi banner before the dialog paints does not pass readiness" || return 0
   id=kimi-trust-late-y5
   rec=$(make_spawn_case trust-late "$id")
   read_spawn_record "$rec"
@@ -685,6 +694,7 @@ test_kimi_banner_before_the_dialog_paints_does_not_pass_readiness() {
 
 test_kimi_answered_dialog_left_in_history_does_not_restart_the_answer() {
   local id rec out rc
+  kimi_tomllib_available "kimi answered dialog left in history does not restart the answer" || return 0
   id=kimi-trust-history-y6
   rec=$(make_spawn_case trust-history "$id")
   read_spawn_record "$rec"
@@ -706,6 +716,7 @@ test_kimi_answered_dialog_left_in_history_does_not_restart_the_answer() {
 
 test_kimi_blank_viewport_frame_costs_only_its_poll() {
   local id rec out rc
+  kimi_tomllib_available "kimi blank viewport frame costs only its poll" || return 0
   id=kimi-trust-blank-y7
   rec=$(make_spawn_case trust-blank "$id")
   read_spawn_record "$rec"
@@ -749,6 +760,7 @@ test_kimi_refuses_a_backend_without_a_viewport_capture() {
 
 test_kimi_answers_a_trust_dialog_with_a_wrapped_hint() {
   local id rec out rc
+  kimi_tomllib_available "kimi answers a trust dialog with a wrapped hint" || return 0
   id=kimi-trust-wrapped-y9
   rec=$(make_spawn_case trust-wrapped "$id")
   read_spawn_record "$rec"
@@ -767,6 +779,7 @@ test_kimi_answers_a_trust_dialog_with_a_wrapped_hint() {
 
 test_kimi_blank_frame_between_banners_restarts_the_ready_count() {
   local id rec out rc
+  kimi_tomllib_available "kimi blank frame between banners restarts the ready count" || return 0
   id=kimi-trust-blink-z4
   rec=$(make_spawn_case trust-blink "$id")
   read_spawn_record "$rec"
@@ -785,6 +798,7 @@ test_kimi_blank_frame_between_banners_restarts_the_ready_count() {
 
 test_kimi_failed_viewport_read_fails_readiness_at_once() {
   local id rec out rc
+  kimi_tomllib_available "kimi failed viewport read fails readiness at once" || return 0
   id=kimi-viewport-fail-z5
   rec=$(make_spawn_case viewport-fail "$id")
   read_spawn_record "$rec"
@@ -802,6 +816,7 @@ test_kimi_failed_viewport_read_fails_readiness_at_once() {
 
 test_kimi_partial_trust_dialog_blocks_the_ready_verdict() {
   local id rec out rc
+  kimi_tomllib_available "kimi partial trust dialog blocks the ready verdict" || return 0
   id=kimi-trust-partial-y4
   rec=$(make_spawn_case trust-partial "$id")
   read_spawn_record "$rec"
@@ -820,6 +835,7 @@ test_kimi_partial_trust_dialog_blocks_the_ready_verdict() {
 
 test_kimi_stuck_trust_dialog_fails_before_delivery() {
   local id rec out rc
+  kimi_tomllib_available "kimi stuck trust dialog fails before delivery" || return 0
   id=kimi-trust-stuck-y1
   rec=$(make_spawn_case trust-stuck "$id")
   read_spawn_record "$rec"
@@ -841,6 +857,7 @@ test_kimi_stuck_trust_dialog_fails_before_delivery() {
 
 test_kimi_trust_detection_requires_the_complete_dialog() {
   local id rec out rc
+  kimi_tomllib_available "kimi trust detection requires the complete dialog" || return 0
   id=kimi-trust-decoy-y2
   rec=$(make_spawn_case trust-decoy "$id")
   read_spawn_record "$rec"
