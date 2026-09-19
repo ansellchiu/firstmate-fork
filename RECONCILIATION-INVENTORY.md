@@ -547,8 +547,10 @@ the end of the series and not under the easy ones.
 - **Invariant it protects:** Every agy launch is gated on an authentication preflight, because agy has no interrupt or exit control path on tmux to recover a launch that started unauthenticated.
 - **Carries:** 10 paths; 30 conflict hunks resolved at intake
 - **Paths it owns:** `.agents/skills/harness-adapters/SKILL.md`, `.agents/skills/harness-adapters/references/harness/agy.md`, `bin/fm-agy-lib.sh`, `bin/fm-busy-lib.sh`, `bin/fm-composer-lib.sh`, `bin/fm-spawn.sh`, `bin/fm-test-run.sh`, `docs/documentation-audiences.json`, `tests/fm-agy-preflight.test.sh`, `tests/fm-spawn-dispatch-profile.test.sh`
-- **Disposition:** retained
-- **Resolution:** Both sides wired agy independently. The private authentication preflight, its `bin/fm-agy-lib.sh` resolver and the `/exit` canonical exit verb are retained over upstream's `/quit`, because this home's 2026-09-17 record verified `/exit` live on Antigravity CLI 1.2.5 through Herdr 0.8.0 and Google's own reference names `/quit` only as an alias; upstream's independent 2026-09-10 verification is cross-linked from the adapter reference rather than discarded.
+- **Disposition:** retained (the preflight only), otherwise superseded
+- **Resolution:** Both homes wired agy independently and the two adapters disagreed on every axis, so this is the one entry where the whole surface had to be chosen rather than merged. Upstream's adapter wins, because its verification is newer and wider (agy 1.2.0 on Linux, 2026-09-10) and its own suite is the executable contract this seed inherits: `/quit` as the exit verb, the anchored `agy` process name that lets the tmux adapter attribute the pane so `fm-control` no longer refuses there, the rendered-tail busy fallback in place of this home's permanently closed `fm_busy_agy_verified` gate, and `--effort low|medium|high` both at launch and in dispatch-profile validation.
+  Retained on top: `bin/fm-agy-lib.sh`'s authentication preflight. agy picks its credential store per process and firstmate's workers are always SSH-detected, so an unauthenticated lane parks a worker on an interactive OAuth prompt forever instead of failing - a concrete failure this home hit and upstream has no answer for. The preflight refuses where upstream launches unvalidated, because an unreachable listing and a signed-out lane are indistinguishable from an exit status and parking a worker is the worse outcome; upstream's three listing cases are re-pointed at that contract in the same commit.
+  Consequences recorded rather than hidden: this home's `/exit` verb, its `resolve_agy_binary` PATH-plus-`~/.local/bin` fallback, its Herdr-only control claim in `AGENTS.md`, its tmux-refusal case, and its closed busy gate are all dropped. Two of this home's agy fixtures no longer drive a full launch, because upstream's launch path waits on folder trust and a working indicator that those fixtures do not render; each now asserts the preflight property it actually owns.
 
 ## What this series deliberately does NOT carry
 
@@ -577,7 +579,8 @@ Every drop below is a supersession, recorded so a later reader can re-open it ra
 
 ## The integration commits
 
-Two commits are not any one entry's own work. They fix seams no single reconciliation could see:
+Five commits are not any one entry's own work. They fix seams no single reconciliation could see,
+each one found by running the suites rather than by reading the diff:
 
 - `fm_merge_outcome_report` now takes upstream's `[authority]` **and** this home's four receipt anchors,
   and both call sites (`bin/fm-pr-merge.sh`, `bin/fm-watch.sh`) pass them. Upstream's signature and this
@@ -593,6 +596,15 @@ Two commits are not any one entry's own work. They fix seams no single reconcili
   merging rather than only after; the case now passes `--merge` alone and its fake answers that read.
   The invariant the case exists for - a schema that rejects the `mergeCommit` selection must not lose
   the queue-aware outcome - is one upstream implements explicitly in `github_read_merge_commit`.
+- Fixtures the reconciled contracts now bind, in `tests/fm-captain-hold-lifecycle.test.sh` and
+  `tests/fm-afk-return.test.sh`: `--claims-checked` where an origin has a filed report, the shared
+  fold read with the row's kind, a landing receipt seeded in the three fixtures that stamp a merged
+  ship task by hand, and a project registry plus a separate stderr capture for the Bearings read.
+- The whole agy surface (entry 46), and with it the calm mod's operational-input port, which had
+  fallen a kind behind its shell owner.
+- `tests/fm-kimi-harness.test.sh`'s spawn cases, guarded on the same python3 `tomllib` host
+  requirement its hook cases already use. Upstream's own tree fails this suite on a host with
+  python3 below 3.11; the guard is the suite's own existing pattern, applied where it was missing.
 
 ## Local `main`
 
