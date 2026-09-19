@@ -132,6 +132,16 @@ make_case() {
 printf 'guard\n' >> "$FM_TEST_GUARD_LOG"
 SH
   chmod +x "$fake_root/bin/fm-guard.sh"
+  # Registration also writes the task's landing receipt through
+  # bin/fm-receipt.sh. This suite is about the PR poll and the captain
+  # assignment, not receipts, and this stand-in root deliberately carries only
+  # the scripts a case drives, so the writer is stubbed rather than wired:
+  # tests/fm-receipt.test.sh owns the real one.
+  cat > "$fake_root/bin/fm-receipt.sh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$fake_root/bin/fm-receipt.sh"
   cat > "$fakebin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_TEST_GH_LOG"

@@ -171,7 +171,7 @@ test_merge_outcome_upgrades_to_verified() {
   run_receipt "$home" write-landing --task task-a \
     --pr-url https://github.com/o/r/pull/9 >/dev/null
   FM_MERGE_OUTCOME_ALREADY_RECORDED=
-  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self \
+  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self '' \
     42cd40735933f2b5cdc47ecb9c1aad193e248c96 "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1 \
     || fail "merge-upgrade: fm_merge_outcome_report failed"
@@ -185,7 +185,7 @@ test_merge_outcome_upgrades_to_verified() {
   printf '%s' "$out" | jq -e 'any(.tier1[]; .kind == "commit_sha" and .value == "42cd40735933f2b5cdc47ecb9c1aad193e248c96")' >/dev/null \
     || fail "merge-upgrade: the commit anchor is missing"
   # Idempotent: a retried report merges the same anchors without duplicating.
-  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self \
+  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self '' \
     42cd40735933f2b5cdc47ecb9c1aad193e248c96 "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1 || fail "merge-upgrade: the retry failed"
   out=$(run_receipt "$home" get task-a)
@@ -199,7 +199,7 @@ test_merge_outcome_creates_receipt_when_absent() {
   home=$(make_home merge-absent)
   write_fixture_task "$home" task-b
   FM_MERGE_OUTCOME_ALREADY_RECORDED=
-  fm_merge_outcome_report "$home" "$home/state" task-b https://github.com/o/r/pull/3 poll \
+  fm_merge_outcome_report "$home" "$home/state" task-b https://github.com/o/r/pull/3 poll '' \
     >/dev/null 2>&1 \
     || fail "merge-absent: fm_merge_outcome_report failed without a prior receipt"
   out=$(run_receipt "$home" get task-b)
@@ -389,7 +389,7 @@ test_pr_head_and_landed_commit_are_distinct_kinds() {
     --head-sha 1111111111111111111111111111111111111111 \
     --head-sha-source 'gh pr view --json headRefOid -q .headRefOid' >/dev/null \
     || fail "anchor-kinds: write-landing failed"
-  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self \
+  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self '' \
     2222222222222222222222222222222222222222 "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1 || fail "anchor-kinds: the proved-merge upgrade failed"
   out=$(run_receipt "$home" get task-a)
@@ -416,7 +416,7 @@ test_gitlab_verified_head_is_a_pr_head_anchor() {
     --pr-url https://gitlab.com/o/r/-/merge_requests/4 >/dev/null \
     || fail "gitlab-head-anchor: write-landing failed"
   fm_merge_outcome_report "$home" "$home/state" task-g \
-    https://gitlab.com/o/r/-/merge_requests/4 self '' '' \
+    https://gitlab.com/o/r/-/merge_requests/4 self '' '' '' \
     3333333333333333333333333333333333333333 \
     "glab mr merge --sha 3333333333333333333333333333333333333333" \
     >/dev/null 2>&1 || fail "gitlab-head-anchor: the proved-merge upgrade failed"
@@ -440,7 +440,7 @@ test_anchor_sources_name_a_command_or_api_field() {
   run_receipt "$home" write-landing --task task-a \
     --pr-url https://github.com/o/r/pull/9 >/dev/null \
     || fail "anchor-sources: write-landing failed"
-  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self \
+  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self '' \
     >/dev/null 2>&1 || fail "anchor-sources: the upgrade failed"
   out=$(run_receipt "$home" get task-a)
   printf '%s' "$out" | jq -e '
@@ -535,7 +535,7 @@ test_archive_supersedes_an_unverified_row_once_verified() {
   [ "$(run_receipt "$home" archive --task task-a)" = "1" ] \
     || fail "archive-supersede: the unverified archive failed"
   # The proved merge upgrades the kept per-task record in place.
-  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self \
+  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/9 self '' \
     42cd40735933f2b5cdc47ecb9c1aad193e248c96 "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1 || fail "archive-supersede: the proved-merge upgrade failed"
   [ "$(run_receipt "$home" archive --task task-a)" = "2" ] \
@@ -589,7 +589,7 @@ test_reregistration_never_downgrades_a_proved_landing() {
     --head-sha 1111111111111111111111111111111111111111 \
     --head-sha-source 'gh pr view --json headRefOid -q .headRefOid' >/dev/null \
     || fail "reregistration-repair: the registration write failed"
-  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/7 self \
+  fm_merge_outcome_report "$home" "$home/state" task-a https://github.com/o/r/pull/7 self '' \
     bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1 || fail "reregistration-repair: the proved-merge upgrade failed"
   # The proved landing no longer reads as merely ready.
@@ -684,7 +684,7 @@ test_merge_delivery_survives_an_unavailable_receipt() {
   command -v jq >/dev/null 2>&1 && { PATH=$saved_path; fail "merge-delivery-no-jq: the fixture path still resolves jq"; }
   FM_MERGE_OUTCOME_ALREADY_RECORDED=
   err=$(fm_merge_outcome_report "$home" "$home/state" task-a \
-    https://github.com/o/r/pull/4 self \
+    https://github.com/o/r/pull/4 self '' \
     cccccccccccccccccccccccccccccccccccccccc "gh api graphql pullRequest{mergeCommit{oid}}" \
     2>&1 >/dev/null)
   rc=$?
@@ -745,7 +745,7 @@ test_transient_receipt_failure_retries_before_it_degrades() {
     FM_MERGE_OUTCOME_ALREADY_RECORDED=
     set +e
     err=$(fm_merge_outcome_report "$home" "$home/state" task-a \
-      https://github.com/o/r/pull/8 poll \
+      https://github.com/o/r/pull/8 poll '' \
       dddddddddddddddddddddddddddddddddddddddd "gh api graphql pullRequest{mergeCommit{oid}}" \
       2>&1 >/dev/null)
     rc=$?
@@ -763,7 +763,7 @@ test_transient_receipt_failure_retries_before_it_degrades() {
   FM_MERGE_OUTCOME_ALREADY_RECORDED=
   set +e
   err=$(fm_merge_outcome_report "$home" "$home/state" task-a \
-    https://github.com/o/r/pull/8 poll \
+    https://github.com/o/r/pull/8 poll '' \
     dddddddddddddddddddddddddddddddddddddddd "gh api graphql pullRequest{mergeCommit{oid}}" \
     2>&1 >/dev/null)
   rc=$?
@@ -796,7 +796,7 @@ test_retried_receipt_recovers_without_a_manual_repair() {
     || fail "receipt-retry-recovers: the fixture report receipt failed"
   set +e
   fm_merge_outcome_report "$home" "$home/state" task-b \
-    https://github.com/o/r/pull/6 poll \
+    https://github.com/o/r/pull/6 poll '' \
     eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1
   rc=$?
@@ -807,7 +807,7 @@ test_retried_receipt_recovers_without_a_manual_repair() {
   rm -f "$home/state/task-b.receipt"
   FM_MERGE_OUTCOME_ALREADY_RECORDED=
   fm_merge_outcome_report "$home" "$home/state" task-b \
-    https://github.com/o/r/pull/6 poll \
+    https://github.com/o/r/pull/6 poll '' \
     eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee "gh api graphql pullRequest{mergeCommit{oid}}" \
     >/dev/null 2>&1 \
     || fail "receipt-retry-recovers: the retry did not deliver the merge"
@@ -903,7 +903,7 @@ test_poll_detected_merge_records_the_landed_commit() {
     || fail "poll-landed-commit: the registration write failed"
   FM_MERGE_OUTCOME_ALREADY_RECORDED=
   fm_merge_outcome_report "$home" "$home/state" task-p \
-    https://github.com/o/r/pull/12 poll \
+    https://github.com/o/r/pull/12 poll '' \
     42cd40735933f2b5cdc47ecb9c1aad193e248c96 "$FM_PR_MERGE_COMMIT_SOURCE" \
     >/dev/null 2>&1 \
     || fail "poll-landed-commit: the poll-detected outcome failed"

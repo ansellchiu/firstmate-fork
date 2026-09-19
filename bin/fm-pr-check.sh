@@ -154,9 +154,14 @@ PR_RECEIPT_ARGS=(write-landing --task "$ID" --pr-url "$URL"
 # A record that predates project= still gets an honest project name: the forge
 # repo path parsed from the canonical URL.
 [ -z "$PROJECT_PATH" ] || PR_RECEIPT_ARGS+=(--project-fallback "$(basename "$PROJECT_PATH")")
-if ! FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
-    "$FM_ROOT/bin/fm-receipt.sh" "${PR_RECEIPT_ARGS[@]+"${PR_RECEIPT_ARGS[@]}"}" >/dev/null; then
-  printf 'actionable: task %s is registered but its landing receipt could not be written; teardown will refuse cleanup until fm-pr-check.sh is re-run successfully\n' "$ID" >&2
+# The writer's own stderr is folded into the one actionable line rather than
+# leaked beside it: a caller reading this output needs one line naming the
+# task, the consequence and the cause, not a shell error from a nested script.
+PR_RECEIPT_ERR=
+if ! PR_RECEIPT_ERR=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+    "$FM_ROOT/bin/fm-receipt.sh" "${PR_RECEIPT_ARGS[@]+"${PR_RECEIPT_ARGS[@]}"}" 2>&1 >/dev/null); then
+  printf 'actionable: task %s is registered but its landing receipt could not be written (%s); teardown will refuse cleanup until fm-pr-check.sh is re-run successfully\n' \
+    "$ID" "$(printf '%s' "${PR_RECEIPT_ERR:-no diagnostic}" | tr '\n' ' ' | cut -c1-200)" >&2
 fi
 
 PR_POLL_PUBLISH_LOCK="$STATE/.pr-poll-publish-$ID.lock"
