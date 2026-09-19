@@ -196,9 +196,10 @@ CHANGED_DEFAULT_TIMEOUT_SECS=900
 # One owner: CI lane names carry this count and are refused when they disagree.
 PORTABLE_SERIAL_SHARDS=9
 
-# Balance hint for a portable-serial script with no measured duration, close to
-# the measured per-script mean so a newly added test neither starves nor
-# overloads the shard it lands in.
+# Balance hint for a portable-serial script with no measured duration. It now
+# sits below the measured per-script mean, so an unhinted script is more likely
+# to be underweighted than overweighted; the unhinted share cap below bounds how
+# far that can skew a shard.
 PORTABLE_SERIAL_DEFAULT_WEIGHT_MS=27000
 
 # Largest share of the serial lane allowed to run on the default weight above.
@@ -311,6 +312,7 @@ family_for_basename() {
     fm-afk-inject-herdr-e2e.test.sh|fm-afk-launch.test.sh|fm-backend-autodetect-smoke.test.sh|\
     fm-backend-herdr-eventwait-smoke.test.sh|fm-backend-herdr-presentation-e2e.test.sh|\
     fm-backend-herdr-launcher-workspace-e2e.test.sh|\
+    fm-backend-herdr-exited-agent-e2e.test.sh|\
     fm-backend-herdr-prune-safety-e2e.test.sh|fm-backend-herdr-respawn-idem-e2e.test.sh|\
     fm-backend-herdr-focus-flash-e2e.test.sh|\
     fm-backend-herdr-stale-active-tab-e2e.test.sh|\
@@ -336,7 +338,8 @@ family_for_basename() {
     fm-backlog-atomicity.test.sh|\
     fm-bootstrap.test.sh|fm-bootstrap-network-parallel.test.sh|fm-fleet-sync.test.sh|fm-gate-refuse.test.sh|fm-gotmp.test.sh|\
     fm-session-start.test.sh|fm-sessionstart-nudge.test.sh|fm-startup-network.test.sh|\
-    fm-tangle-guard.test.sh|fm-update.test.sh)
+    fm-tangle-guard.test.sh|fm-update.test.sh|fm-upstream.test.sh|\
+    fm-private-divergence.test.sh)
       printf '%s\n' session-bootstrap
       ;;
     fm-afk-pi-herdr-return-e2e.test.sh|\
@@ -364,6 +367,7 @@ family_for_basename() {
     fm-herdr-submit-confirm-live-e2e.test.sh)
       printf '%s\n' live-harness-optin
       ;;
+    fm-agy-preflight.test.sh|fm-attention.test.sh|\
     fm-backend-herdr.test.sh|fm-backend-tmux-smoke.test.sh|fm-backend.test.sh|\
     fm-tmux-agent-liveness.test.sh|\
     fm-control.test.sh|fm-control-relaunch.test.sh|\
@@ -404,6 +408,7 @@ family_for_basename() {
     fm-extension-binding.test.sh|fm-gitignore-config.test.sh|\
     fm-no-mistakes-required.test.sh|fm-peek-remote.test.sh|\
     fm-pending-reply.test.sh|fm-pi-branch-extension.test.sh|\
+    fm-procevent-fleet-health.test.sh|\
     fm-procevent-quota.test.sh|fm-procevent-when.test.sh|fm-procevent.test.sh|\
     fm-live-gate.test.sh|\
     fm-project-origin.test.sh|fm-public-followup.test.sh|fm-quota-choose.test.sh|\
@@ -1343,7 +1348,7 @@ families_for_unmapped_bin() {
 # Conservative path → family map. Over-selects rather than under-selects.
 # Never expands to the complete suite.
 families_for_changed_path() {
-  local path=$1 fixture_ref
+  local path=$1 fixture_ref asset_ref
   case "$path" in
     tests/fm-backend-herdr-eventwait.test.py)
       printf '%s\n' real-herdr-gated
@@ -1402,6 +1407,9 @@ families_for_changed_path() {
       printf '%s\n' backend-dispatch
       printf '%s\n' real-herdr-gated
       printf '%s\n' pure-contract-unit
+    ;;
+    bin/fm-agy-lib.sh)
+      printf '%s\n' backend-dispatch
       ;;
     bin/fm-watch*|bin/fm-wake*|bin/fm-inactive-reconcile.sh|\
     bin/fm-classify-lib.sh|bin/fm-daemon*|bin/fm-turnend-guard*|bin/fm-guard.sh)
@@ -1442,8 +1450,14 @@ families_for_changed_path() {
       printf '%s\n' "__script__:fm-quota-choose.test.sh"
       printf '%s\n' "__script__:fm-dispatch-resolve.test.sh"
       ;;
+    bin/fm-discord-post.sh|bin/fm-discord-lib.sh|bin/fm-procevent-discord.sh)
+      printf '%s\n' "__script__:fm-discord.test.sh"
+      ;;
     bin/fm-procevent-quota.sh)
       printf '%s\n' "__script__:fm-procevent-quota.test.sh"
+      ;;
+    bin/fm-procevent-fleet-health.sh)
+      printf '%s\n' "__script__:fm-procevent-fleet-health.test.sh"
       ;;
     bin/fm-quota-choose.sh)
       printf '%s\n' "__script__:fm-quota-choose.test.sh"
@@ -1456,6 +1470,25 @@ families_for_changed_path() {
       # bin/fm-dispatch-resolve.sh (TYPESAFE_API_KEY).
       printf '%s\n' pr-forge
       printf '%s\n' "__script__:fm-dispatch-resolve.test.sh"
+    ;;
+    .pi/extensions/fm-primary-growth.ts|.pi/extensions/lib/fm-primary-growth.ts)
+      # The policy and the boundary machine are pinned portably; that a real
+      # Pi still delivers the settled boundary these breakers hang off is a
+      # harness fact, so the opt-in live guard loads them too.
+      printf '%s\n' "__script__:fm-primary-growth.test.sh"
+      printf '%s\n' "__script__:fm-pi-primary-types.test.sh"
+      printf '%s\n' "__script__:fm-pi-watch-extension.test.sh"
+      printf '%s\n' live-harness-optin
+      ;;
+    .pi/extensions/lib/fm-primary-session-lock.ts)
+      # Every suite that executes this file, either directly or by copying it
+      # into a fixture the watcher extension imports from.
+      printf '%s\n' "__script__:fm-primary-growth.test.sh"
+      printf '%s\n' "__script__:fm-pi-primary-types.test.sh"
+      printf '%s\n' "__script__:fm-pi-watch-extension.test.sh"
+      printf '%s\n' "__script__:fm-calm-pi-extension.test.sh"
+      printf '%s\n' "__script__:fm-watch-recovery-loop.test.sh"
+      printf '%s\n' live-harness-optin
       ;;
     .pi/extensions/fm-branch-supervision.ts|.pi/extensions/lib/fm-async-exec.ts|\
     .pi/extensions/lib/fm-branch-dispatch.ts|.pi/extensions/lib/fm-native-contract.ts)
@@ -1525,7 +1558,7 @@ families_for_changed_path() {
       printf '%s\n' watcher-wake-lock
       printf '%s\n' "__script__:fm-procevent-quota.test.sh"
       ;;
-    bin/fm-pr-*|bin/fm-merge-local.sh|bin/fm-teardown.sh|bin/fm-review-diff.sh|\
+    bin/fm-pr-*|bin/fm-receipt.sh|bin/fm-merge-local.sh|bin/fm-teardown.sh|bin/fm-review-diff.sh|\
     bin/fm-x-*|bin/fm-check*)
       printf '%s\n' pr-forge
       ;;
@@ -1539,6 +1572,7 @@ families_for_changed_path() {
     bin/fm-control-lib.sh)
       printf '%s\n' backend-dispatch
       printf '%s\n' session-bootstrap
+      printf '%s\n' live-harness-optin
       printf '%s\n' "__script__:fm-quota-choose.test.sh"
       ;;
     bin/fm-composer-lib.sh)
@@ -1562,9 +1596,28 @@ families_for_changed_path() {
       printf '%s\n' watcher-wake-lock
       printf '%s\n' live-harness-optin
       ;;
-    bin/fm-bearings-snapshot.sh|bin/fm-fleet-snapshot.sh|bin/fm-fleet-view.sh|bin/fm-contributions.sh|bin/fm-contributions.jq|\
+    bin/fm-project-mode.sh)
+      # The registry parser the portfolio classification reads through its
+      # --list surface: a change to that contract must re-run the attention
+      # suite and every surface that renders the classification.
+      printf '%s\n' pure-contract-unit
+      printf '%s\n' backend-dispatch
+      printf '%s\n' snapshot-bearings
+      ;;
+    bin/fm-attention.sh|bin/fm-attention-lib.sh)
+      # The portfolio attention owner: intake enforcement rides fm-spawn
+      # (backend-dispatch), and every presentation surface renders the same
+      # classification out of the snapshot (snapshot-bearings).
+      printf '%s\n' backend-dispatch
+      printf '%s\n' snapshot-bearings
+      ;;
+    bin/fm-bearings-snapshot.sh|bin/fm-fleet-snapshot.sh|bin/fm-fleet-view.sh|\
+    bin/fm-contributions.sh|bin/fm-contributions.jq|\
     bin/fm-home-summary-refresh.sh)
       printf '%s\n' snapshot-bearings
+      # The portfolio block and the fleet view's Portfolio table are pinned by
+      # tests/fm-attention.test.sh, which lives in backend-dispatch.
+      printf '%s\n' backend-dispatch
       ;;
     bin/fm-install-herdr.sh|bin/fm-install-treehouse.sh|bin/fm-herdr-ci-cleanup.sh)
       printf '%s\n' pure-contract-unit
@@ -1572,13 +1625,14 @@ families_for_changed_path() {
       # lane's contract coverage re-runs.
       printf '%s\n' real-herdr-gated
       ;;
-    bin/fm-lint.sh|bin/fm-lint-workflows.sh|bin/fm-install-shellcheck.sh|\
-    bin/fm-install-actionlint.sh|\
-    bin/fm-brief.sh|bin/fm-ensure-agents-md.sh|bin/fm-crew-state.sh|\
+    bin/fm-lint.sh|bin/fm-lint-workflows.sh|\
+    bin/fm-install-shellcheck.sh|bin/fm-install-actionlint.sh|\
+    bin/fm-brief.sh|bin/fm-ensure-agents-md.sh|\
+    bin/fm-crew-state.sh|bin/fm-ext.sh|\
     bin/fm-captain-hold.sh|bin/fm-decision-hold.sh|bin/fm-supervision*|bin/fm-transition-lib.sh|\
     bin/fm-tmux-lib.sh|bin/fm-marker-lib.sh|bin/fm-operational-input.sh|bin/fm-tasks-axi-lib.sh|\
     bin/fm-vendor-auth-probe.sh|\
-    bin/fm-primary-scope-lib.sh|bin/fm-project-mode.sh|bin/fm-promote.sh|\
+    bin/fm-primary-scope-lib.sh|bin/fm-promote.sh|\
     bin/fm-ff-lib.sh|bin/fm-gotmp*|bin/*pretool*)
       printf '%s\n' pure-contract-unit
       ;;
@@ -1631,6 +1685,29 @@ families_for_changed_path() {
       # instead of the fixture directory its readers actually name.
       families_for_test_reference "$(basename "$path")" \
         || printf '%s\n' "__unmapped__:$path"
+    ;;
+    tests/assets/*)
+      # A test asset belongs to whichever suite reads it, found by the same
+      # reference scan the shared helpers and fixtures use. A DIRECTORY of
+      # assets is keyed on that directory so adding one capture selects the
+      # same suites as the rest; a flat asset is keyed on its own name. A
+      # removed asset has no consuming suite left to select.
+      asset_ref=${path#tests/assets/}
+      case "$asset_ref" in
+        */*)
+          asset_ref=${asset_ref%%/*}
+          if [ -d "tests/assets/$asset_ref" ]; then
+            families_for_test_reference "$asset_ref" \
+              || printf '%s\n' "__unmapped__:$path"
+          fi
+          ;;
+        *)
+          if [ -e "$path" ]; then
+            families_for_test_reference "$asset_ref" \
+              || printf '%s\n' "__unmapped__:$path"
+          fi
+          ;;
+      esac
       ;;
     bin/*)
       # A deleted script has no consuming suite left to select, the same rule
@@ -1671,6 +1748,12 @@ select_changed() {
 
   while IFS= read -r path; do
     [ -n "$path" ] || continue
+    # A deleted path has no behavior left to select tests for, and the diff lists
+    # it exactly like a live one. Skipping it keeps the unmapped-path refusal
+    # below meaning what it says - a source file nothing tests - instead of
+    # firing on a file that is gone, which is what happens when a removal drops
+    # a path rule and the files it covered in the same commit.
+    [ -e "$ROOT/$path" ] || continue
     while IFS= read -r entry; do
       [ -n "$entry" ] || continue
       case "$entry" in

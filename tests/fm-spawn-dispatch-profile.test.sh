@@ -47,7 +47,11 @@ if [ "${1:-}" = --list-models ]; then
 fi
 exit 0
 SH
-  chmod +x "$fakebin/timeout" "$fakebin/cursor-agent"
+  cat > "$fakebin/agy" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$fakebin/timeout" "$fakebin/cursor-agent" "$fakebin/agy"
   make_spawn_pi_probe "$fakebin" pi
   make_spawn_pi_probe "$fakebin" pi-signed
   printf '%s\n' "$fakebin"
@@ -620,6 +624,44 @@ test_cursor_failed_catalog_probe_does_not_block_spawn() {
     "failed catalog lookup incorrectly removed the requested model"
   assert_meta_profile "$HOME_DIR/state/$id.meta" cursor cursor-catalog-unreachable default
   pass "cursor preserves the requested model when its live catalog is unreachable"
+}
+
+test_agy_threads_model_and_omits_effort_axis() {
+  local rec id out status launch
+  id=profile-agy-z6f
+  rec=$(make_spawn_case profile-agy agy "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" \
+    --model gemini-3.7-flash-medium --effort medium)
+  status=$?
+  expect_code 0 "$status" "agy spawn with a model-baked reasoning class should succeed"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" agy gemini-3.7-flash-medium medium
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "--dangerously-skip-permissions --model 'gemini-3.7-flash-medium' -i " \
+    "agy launch did not carry autonomy, model, and the -i prompt-interactive flag"
+  assert_contains "$launch" "encode launch-brief" "agy launch did not deliver the brief via -i"
+  # A bare positional prompt is silently dropped by agy 1.1.15; -i is mandatory.
+  assert_not_contains "$launch" "--print" "agy launch must never use --print, which is broken combined with --model"
+  assert_not_contains "$launch" "--effort" "agy launch must not invent a separate effort flag; it is baked into the model id"
+  assert_grep 'harness=agy' "$HOME_DIR/state/$id.meta" "agy harness was not recorded in meta"
+  assert_grep 'model=gemini-3.7-flash-medium' "$HOME_DIR/state/$id.meta" "agy model was not recorded in meta"
+  pass "agy receives its model-baked reasoning class via -i and omits a separate effort flag"
+}
+
+test_agy_refuses_as_secondmate() {
+  local rec id sm out status
+  id=profile-agy-secondmate-z6g
+  rec=$(make_spawn_case profile-agy-secondmate agy "$id")
+  read_case_record "$rec"
+  sm="$CASE_DIR/secondmate-home"
+  make_seeded_secondmate_home "$sm" "$id"
+
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" agy --secondmate)
+  status=$?
+  [ "$status" -ne 0 ] || fail "agy was accepted as a secondmate harness"
+  assert_contains "$out" "crewmate/scout adapter only" "agy secondmate refusal did not explain the boundary"
+  pass "agy is refused as a secondmate harness, matching muse's boundary"
 }
 
 test_opencode_threads_model_and_ignores_effort_axis() {
@@ -1441,6 +1483,8 @@ test_grok_omits_invalid_xhigh_reasoning_effort
 test_cursor_threads_model_workspace_and_omits_effort_axis
 test_cursor_refuses_model_absent_from_live_catalog
 test_cursor_failed_catalog_probe_does_not_block_spawn
+test_agy_threads_model_and_omits_effort_axis
+test_agy_refuses_as_secondmate
 test_opencode_threads_model_and_ignores_effort_axis
 test_native_effort_validator_keeps_axes_separate
 test_native_pi_ultra_is_explicit_and_model_scoped

@@ -74,6 +74,20 @@
 #                region between two transcript rules is otherwise exactly the
 #                strict rule's unidentifiable blank row.
 #
+# agy (Gemini CLI, ~/.local/bin/agy; dispatchable through fm-spawn but with no
+# verified composer identity probe) draws a separated-FAMILY composer - full-width
+# top and bottom `─` rules, no side border, no idle placeholder or ghost text
+# observed - but its content row carries a bare `>` (a SHELL glyph, already in
+# FM_COMPOSER_SHELL_PROMPT_GLYPHS below), unlike pi's glyph-free separated
+# rows. No agy identity probe exists (no hook or plugin surface was found on
+# live verification), so this shape reaches
+# `_fm_composer_classify_bare_pi_overlap` with has_identity=0 and falls
+# through to `_fm_composer_classify_bare_row`, which correctly applies THE
+# SAFETY RULE below and reports `unknown` for agy's bare shell glyph rather
+# than a false `empty`. This is deliberately NOT changed here: promoting it
+# would need the same live-identity proof mechanism Pi's separated shape
+# required, which agy does not have yet.
+#
 # THE SAFETY RULE for glyphs: a bare shell prompt glyph (`>` `$` `%` `#`) -
 # what a pane shows once its agent has exited to a plain login shell - is a
 # genuine empty agent composer ONLY inside a bordered container. On a bare row
@@ -321,6 +335,74 @@ fm_composer_strip_ghost() {
 # busy signals on their own.
 # The full moon-phase set remains locale- and emoji-font-sensitive because Kimi
 # exposes no stable ASCII busy token.
+# Pi's busy signal is a SHAPE, not a token. Pi <=0.84 rendered a `Working...`
+# transcript row, but pi >=0.85 dropped the ellipsis AND moved the indicator
+# into the composer's own top border, so the old token matched nothing and a
+# genuinely generating pi 0.85.1 read `idle` in both presentations - the read
+# that leaves a landed steer unconfirmed
+# (docs/verification/pi-composer-shapes.md). Two independent shapes carry the
+# signal, either one sufficient:
+#   - pi's own titled composer border, the vendor composition
+#     _fm_composer_pi_titled_open_row below matches for the composer scan. The
+#     message is never matched, so `Working`, the narrow spinner-only
+#     fallback, and a retry countdown all read busy, while a WORD-titled rule
+#     from another harness does not.
+#     ONE vendor shape, encoded twice - here as a regex for the line matcher
+#     below, there as a shell predicate for the row scan - so both must agree
+#     on the opener. Both anchor the literal `── ` two-rule opener and the
+#     literal 8-column ` ────────` closing run, and both require the status to
+#     begin with a character that is neither alphanumeric nor whitespace.
+#     Keep them in step when pi moves this rendering again.
+#     Both the opener and the closing run are matched LITERALLY, and the
+#     MESSAGE between them is `.*` rather than a negated class, because a
+#     multibyte glyph cannot mean the same thing byte-wise: under LC_ALL=C
+#     `─+` quantifies only a rule glyph's trailing byte, and `[^…─]` excludes
+#     bytes E2/94/80 - which are also continuation bytes of the spinner cell
+#     and of any non-ASCII character in the message, so `Working…`,
+#     `Thinking → tool`, and `retry in 3s • attempt 2` all failed to match in
+#     the C locale, the locale daemons run in (issue #1988). Widening the
+#     message cannot widen what matches in practice: the literal titled
+#     opener still gates every match, and pi only draws that opener while a
+#     status indicator is set.
+#     One lead still diverges between locales:
+#     `[^[:alnum:][:space:]]` rejects a multibyte LETTER under UTF-8 and
+#     accepts it under LC_ALL=C, where the accept would be a FALSE BUSY. No
+#     harness renders a non-ASCII-word-titled rule, so it is unreachable
+#     today. _fm_composer_pi_titled_open_row carries the same divergence.
+#   - Calm's working ship, which REPLACES that indicator while Calm is on
+#     (docs/calm.md). Its water-and-hull row is Firstmate's own rendering
+#     (.pi/extensions/lib/fm-calm-working-ship.ts), matched as a whole run of
+#     water carrying the hull, so neither a typed `\__/` nor the same glyphs
+#     inside a sentence reads busy.
+#     Water on EITHER side satisfies it, because that renderer's `trackSpan`
+#     is `width - HULL_WIDTH`: at the right-edge frame the hull ends at the
+#     last column with no water after it. Requiring water only after the hull
+#     read that one frame of every traverse as idle. Requiring it on at least
+#     one side keeps every refusal above, which need water on neither.
+# Both shapes are anchored to the start of a row, so they are read from the
+# PLAIN captures every caller of fm_busy_lines_match already supplies (tmux's
+# `capture-pane -p`, herdr's `pane read`); a styled capture would simply not
+# match, which is a missed busy rather than a false one.
+# A terminal too narrow for the hull, or for an 8-column closing rule run,
+# carries no shape here and stays `idle`: an unconfirmed submit, never a
+# falsely confirmed one.
+# ACTIVATION IS OPT-IN, per reader: a reader asks for these shapes by passing
+# `+pi-shapes` to fm_busy_lines_match below, and only the herdr delivery read
+# does. The reason is what a busy reading can be PAIRED with there - herdr's
+# submit core has one branch, the NATIVE idle-to-busy transition proof, that
+# also takes a pre-Enter composer read proving the composer owned the
+# keyboard, so on that branch a busy reading cannot on its own turn an Enter
+# eaten by a prompt into a confirmed delivery. The scoping is to that
+# adapter's reads, not a claim that every branch carries the narrowing: the
+# footer-transition branch and the queued-Enter read consume the same
+# shape-aware busy state with no composer pairing, each gated instead on a
+# pre-Enter footer baseline these shapes make accurate for pi, and pi is
+# separately excluded from the queued-Enter conversion. They are deliberately
+# absent from every default regex, so the tmux submit cores read a pi pane
+# exactly as they did before these captures existed. Activating them for tmux
+# needs the equivalent narrowing there, plus tmux busy captures to authorize
+# it, and is follow-up work (docs/verification/pi-composer-shapes.md).
+FM_DELIVERY_PI_BUSY_SHAPES='^── [^[:alnum:][:space:]].* ────────|^([-~]+\\__/|[-~]*\\__/[-~])'
 # The harness-less default is the UNION of the per-harness tokens below, used
 # when a caller has no recorded harness for the pane (the submit cores read the
 # baseline and the post-Enter transition this way). cursor's `ctrl+c to stop` is
@@ -372,8 +454,14 @@ FM_DELIVERY_CURSOR_BUSY_REGEX_DEFAULT='ctrl\+c to stop'
 FM_DELIVERY_AGY_BUSY_REGEX_DEFAULT='esc[[:space:]]+to[[:space:]]+cancel'
 FM_DELIVERY_KIMI_BUSY_REGEX_DEFAULT='^[[:space:]]*(🌑|🌒|🌓|🌔|🌕|🌖|🌗|🌘)[[:space:]]+·[[:space:]]+'
 
-fm_busy_lines_match() {  # [harness]
-  local harness=${1:-} lines regex
+# <shape-scope> is the opt-in seam for shapes that are captured but not yet
+# authorized fleet-wide: `+pi-shapes` adds FM_DELIVERY_PI_BUSY_SHAPES to
+# whichever regex the harness selects. It is honoured for the pi harnesses and
+# for the harness-less union only, because that is the scope the pi captures
+# cover; an explicit FM_BUSY_REGEX override still wins outright, and every
+# pattern stays owned by this file.
+fm_busy_lines_match() {  # [harness] [shape-scope]
+  local harness=${1:-} shape_scope=${2:-} lines regex
   IFS= read -r -d '' lines || true
   if [ -n "${FM_BUSY_REGEX:-}" ]; then
     regex=$FM_BUSY_REGEX
@@ -395,6 +483,17 @@ fm_busy_lines_match() {  # [harness]
         regex=
         ;;
     esac
+    if [ "$shape_scope" = +pi-shapes ]; then
+      case "$harness" in
+        pi|pi-signed|'')
+          if [ -n "$regex" ]; then
+            regex="$regex|$FM_DELIVERY_PI_BUSY_SHAPES"
+          else
+            regex=$FM_DELIVERY_PI_BUSY_SHAPES
+          fi
+          ;;
+      esac
+    fi
   fi
   [ -n "$regex" ] && printf '%s' "$lines" | grep -qiE "$regex"
 }
@@ -695,6 +794,52 @@ _fm_composer_pi_separator_row() {  # <trimmed-row>
   return 1
 }
 
+# _fm_composer_pi_titled_open_row: pi's composer TOP border while a status
+# indicator is set, which only ever OPENS a composer pair.
+# Pi >=0.85 no longer draws its working indicator as a transcript row inside
+# the separator pair; it embeds the indicator in the editor's own top border
+# (`CustomEditor.renderTopBorder` delegating to
+# `WorkingStatusIndicator.renderInBorder`), so a generating pi's opening rule
+# stops being a solid rule and `_fm_composer_pi_separator_row` above stops
+# finding the pair at all. That is what left a working pi 0.85.1 unreadable,
+# and a landed steer therefore unconfirmed
+# (docs/verification/pi-composer-shapes.md).
+# The recognized shape is the vendor's own composition, not a rendered token:
+# the literal `── ` opener, the status indicator, a space, then the closing
+# rule run at the same 8-column floor. FM_DELIVERY_PI_BUSY_SHAPES above encodes
+# this same vendor shape as a regex for the busy line matcher and agrees with
+# this predicate on that opener and that closing run; keep the two in step. The status must begin with the
+# indicator's spinner cell - a glyph that is neither alphanumeric, whitespace,
+# nor more rule - so a WORD-titled rule from another harness (muse's
+# `── Voice input (⌥ + v to start) ─────`) is not mistaken for pi's composer.
+# The message inside is never matched, so pi's `Working`, its narrow
+# spinner-only fallback, a retry countdown, and any extension-supplied working
+# message are all recognized by the same rule.
+_fm_composer_pi_titled_open_row() {  # <trimmed-row>
+  local row=$1 rest
+  case "$row" in
+    '── '*) rest=${row#'── '} ;;
+    *) return 1 ;;
+  esac
+  # `─*` and the character class are both evaluated on the first character.
+  # For the spinner-cell lead the vendor actually emits, a multibyte GLYPH,
+  # the leading byte is neither alphanumeric nor space, so the three tests
+  # agree under a UTF-8 locale and under LC_ALL=C. One lead diverges: a
+  # multibyte LETTER (`── Écoute ────────`) is alphanumeric under UTF-8 and a
+  # non-alnum byte under LC_ALL=C, so it is rejected in one locale and
+  # accepted in the other. No harness renders a non-ASCII-word-titled rule, so
+  # that case is unreachable today; it is the one to revisit if one appears.
+  # FM_DELIVERY_PI_BUSY_SHAPES carries the identical divergence in its own
+  # `[^[:alnum:][:space:]]`, where the C-locale accept would be a false busy.
+  case "$rest" in
+    ''|─*|[[:alnum:][:space:]]*) return 1 ;;
+  esac
+  case "$row" in
+    *' ────────'*) return 0 ;;
+  esac
+  return 1
+}
+
 # Row-scan results are returned through FM_COMPOSER_SCAN_* globals (bash 3.2
 # has no nameref); they are internal to this owner.
 _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
@@ -719,8 +864,9 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
   FM_COMPOSER_SCAN_PI_PAIR_VALID=0
   FM_COMPOSER_SCAN_PI_OPEN=-1
   FM_COMPOSER_SCAN_PI_CLOSE=-1
+  FM_COMPOSER_SCAN_PI_OPEN_TITLED=0
   FM_COMPOSER_SCAN_PI_LAST_SEPARATOR=-1
-  local leftbar_start=-1 pi_open=-1 pi_lines=0 pi_max
+  local leftbar_start=-1 pi_open=-1 pi_open_titled=0 pi_lines=0 pi_max
   pi_max=$FM_COMPOSER_PI_MAX_LINES
   case "$pi_max" in ''|*[!0-9]*|0) pi_max=8 ;; esac
   while IFS= read -r line; do
@@ -750,6 +896,7 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
         FM_COMPOSER_SCAN_PI_PAIR_FOUND=1
         FM_COMPOSER_SCAN_PI_OPEN=$pi_open
         FM_COMPOSER_SCAN_PI_CLOSE=$row
+        FM_COMPOSER_SCAN_PI_OPEN_TITLED=$pi_open_titled
         if [ "$pi_lines" -le "$pi_max" ]; then
           FM_COMPOSER_SCAN_PI_PAIR_VALID=1
         else
@@ -757,6 +904,22 @@ _fm_composer_scan_screen() {  # <plain-screen> <cursor-or-empty> [extract-wrap]
         fi
       fi
       pi_open=$row
+      pi_open_titled=0
+      pi_lines=0
+    elif [ "$pi_open" -lt 0 ] && _fm_composer_pi_titled_open_row "$trimmed"; then
+      # A titled rule is pi's composer TOP border, so it opens the live pair
+      # and can never close one. It deliberately does not advance
+      # FM_COMPOSER_SCAN_PI_LAST_SEPARATOR: that marker selects a BARE
+      # composer under a trailing rule, and a top border with nothing below it
+      # is not one.
+      # Only accepted while NO pair is open: pi draws this border on the
+      # composer it is opening, never inside one, so a matching row that
+      # arrives between an open rule and its close is pasted CONTENT and falls
+      # through to the content count below. Re-opening the pair there would
+      # leave the classifier scanning the blank remainder and reporting the
+      # injectable `empty` for a composer that still holds the operator's text.
+      pi_open=$row
+      pi_open_titled=1
       pi_lines=0
     elif [ "$pi_open" -ge 0 ]; then
       pi_lines=$((pi_lines + 1))
@@ -1507,9 +1670,23 @@ fm_composer_submit_retry_core() {  # <send-key-fn> <state-fn> <target> <retries>
 # Adapters supply their own busy primitive (tmux: fm_pane_is_busy; herdr:
 # native agent_status=working, or a rendered busy footer on an idle native
 # baseline). This function does not read a pane.
-fm_composer_queued_enter_verdict() {  # <composer-state> <busy|idle|unknown>
-  local state=$1 busy=${2:-}
+# <harness> is the exclusion seam, so the policy stays owned here rather than
+# re-decided per adapter. pi is excluded: the conversion's premise is that the
+# harness ACCEPTS and QUEUES a mid-turn Enter while keeping the typed text
+# visible (opencode 1.18.4), and no capture establishes that for pi. What was
+# captured instead is that pi 0.85.1 renders a `Steering:` row and CLEARS its
+# composer on an accepted mid-turn submit, which is not the retain-and-queue
+# shape at all - so a pi composer that still holds text after the retry budget
+# is evidence AGAINST delivery. Converting it would report an undelivered
+# message as delivered; leaving it `pending` keeps the durable steering inbox
+# re-ringing, which is the recoverable direction. A capture of pi's mid-turn
+# Enter behavior is what would lift this.
+fm_composer_queued_enter_verdict() {  # <composer-state> <busy|idle|unknown> [harness]
+  local state=$1 busy=${2:-} harness=${3:-}
   [ "$state" = pending ] || { printf '%s' "$state"; return 0; }
+  case "$harness" in
+    pi|pi-signed) printf 'pending'; return 0 ;;
+  esac
   if [ "$busy" = busy ]; then
     printf 'empty'
   else
@@ -1587,6 +1764,20 @@ _fm_composer_pi_verdict() {  # <screen> <styled> <has_identity> <identity>
   state=$(_fm_composer_classify_pi_rows "$screen" "$styled")
   if [ "$state" = pending ]; then
     printf 'pending'
+    return 0
+  fi
+  # A TITLED opener is itself proof the pane is generating: pi draws that
+  # border titled only while a status indicator is set
+  # (CustomEditor.renderTopBorder delegating to
+  # WorkingStatusIndicator.renderInBorder), so a pair opened by one cannot
+  # belong to a settled pane. The verdict is therefore taken from the captured
+  # STRUCTURE rather than from the agent_status handed in, which the caller
+  # may have derived from a busy read that does not carry pi's 0.85 shapes -
+  # the tmux plane reads a generating pi as `idle` for exactly that reason.
+  # Refusing `empty` here keeps the away-mode injector off a mid-turn pane on
+  # every backend without activating those shapes anywhere.
+  if [ "$FM_COMPOSER_SCAN_PI_OPEN_TITLED" = 1 ]; then
+    printf 'unknown'
     return 0
   fi
   case "$agent_status" in

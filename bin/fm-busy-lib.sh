@@ -37,6 +37,7 @@
 #   codex-hook, codex-appserver  reserved: Codex, gated by
 #                    fm_busy_codex_semantic_source
 #   kimi-wire, kimi-hook  reserved: standalone Kimi, gated by fm_busy_kimi_verified
+#   agy-hook          reserved: agy, gated by fm_busy_agy_verified (never opened; see there)
 # Firstmate-owned sources accepted for every converted adapter:
 #   fm-spawn         the launch-brief turn seeded at spawn
 #   fm-interrupt     the legacy Claude fm-send --key Escape idle event
@@ -44,12 +45,13 @@
 # Classifier-only sources (never written into a record):
 #   endpoint-gone, herdr-native, grok-regex, rovo-regex, agy-regex, muse-session-log,
 #   cursor-transcript, missing, malformed, gen-mismatch, source-mismatch,
-#   kimi-unverified, codex-unverified, capture-failed, no-target
+#   kimi-unverified, codex-unverified, agy-unverified, capture-failed, no-target
 #
 # Classification (fm_busy_classify): busy | idle | unknown | dead, always
 # with the producing source as the second token. Precedence:
 #   1. dead endpoint (fm_busy_classify_live only) -> dead endpoint-gone
 #   2. standalone Kimi before verification       -> unknown kimi-unverified
+#   2a. agy, wired into fm-spawn's dispatch set but with no verified busy-state source -> unknown agy-unverified
 #   3. a valid, gen-matching, source-trusted record -> its state and source
 #   4. no record at all: herdr's native busy verdict is trusted as busy
 #      (generation state is sufficient for busy, not for idle), then the
@@ -116,6 +118,38 @@ FM_BUSY_KIMI_VERIFIED_VERSIONS=""
 
 fm_busy_kimi_verified() {
   [ -n "$FM_BUSY_KIMI_VERIFIED_VERSIONS" ]
+}
+
+# Standalone-agy verification gate, same shape as Kimi's above. agy (Gemini
+# CLI, ~/.local/bin/agy) is wired into fm-spawn's verified dispatch set, but no
+# verified busy-state semantic source exists for it, so this gate stays closed
+# until one lands. Empty means no installed agy version has passed live
+# busy-state verification, so every agy task classifies unknown agy-unverified.
+#
+# Live-verified 2026-08-19 on Antigravity CLI 1.1.15: agy installs no hook or
+# plugin surface (no `hooks` subcommand, only `plugin`/`plugins`, and its
+# plugin engine was not probed for a lifecycle event equivalent to Pi's
+# agent_start/agent_settled or OpenCode's session.status). The only observed
+# live signal is a rendered footer-left token that toggles between
+# `? for shortcuts` (idle) and `esc to cancel` (a turn is running OR the `/`
+# slash-command popup is merely open, which is NOT a turn - the same token
+# fires for both, so it is not a clean busy/idle split even before considering
+# rendered-text fragility). Per the approved semantic-busy-state redesign,
+# Grok's rendered tail is the ONLY rendered-text classification that survives
+# it, so this ambiguous footer token is deliberately NOT promoted to a new
+# rendered-fallback source here.
+#
+# To open the gate: find or build a real semantic source (a hook surface, a
+# session/transcript log like muse/cursor, or a structured lifecycle protocol
+# like Pi's extension), live-verify it brackets a real turn on a
+# firstmate-launched worker including the interrupt path, record the version,
+# exact commands, and observed output in docs/verification/supervision.md, add
+# the verified version string(s) here, and land the wiring in fm-spawn behind
+# this same gate in the same change.
+FM_BUSY_AGY_VERIFIED_VERSIONS=""
+
+fm_busy_agy_verified() {
+  [ -n "$FM_BUSY_AGY_VERIFIED_VERSIONS" ]
 }
 
 # fm_busy_codex_appserver_observable: capability/version negotiation for the
@@ -880,6 +914,12 @@ fm_busy_classify() {  # <backend> <target> <harness> <id> <state-dir> [tail40]
     kimi*)
       if ! fm_busy_kimi_verified; then
         printf 'unknown kimi-unverified'
+        return 0
+      fi
+      ;;
+    agy*)
+      if ! fm_busy_agy_verified; then
+        printf 'unknown agy-unverified'
         return 0
       fi
       ;;

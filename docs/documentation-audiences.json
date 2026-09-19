@@ -325,6 +325,10 @@
       "audience": "maintainer-architecture"
     },
     {
+      "path": "docs/discord-spike.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/documentation-audiences.md",
       "audience": "maintainer-architecture"
     },
@@ -373,7 +377,15 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/pi-primary-growth.md",
+      "audience": "maintainer-architecture"
+    },
+    {
       "path": "docs/pi-supervision-branch.md",
+      "audience": "maintainer-architecture"
+    },
+    {
+      "path": "docs/private-divergence.md",
       "audience": "maintainer-architecture"
     },
     {
@@ -461,11 +473,19 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "docs/verification/pi-composer-shapes.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/verification/process-event-sources.md",
       "audience": "maintainer-verification"
     },
     {
       "path": "docs/verification/public-followup.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/verification/pi-primary-growth-baseline.md",
       "audience": "maintainer-verification"
     },
     {
