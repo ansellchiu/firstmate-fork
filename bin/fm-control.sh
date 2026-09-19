@@ -325,25 +325,14 @@ busy_verdict() {
   fm_busy_classify_meta "$META" "$ID" "$STATE"
 }
 
-# wait_agent_state <wanted...> <timeout>: poll until agent_state prints one of
+# wait_agent_state <timeout> <wanted...>: poll until the agent state is one of
 # the wanted values. Prints the final observed state; returns 0 on a match.
+# The loop itself is owned by fm_control_wait_agent_state (bin/fm-control-lib.sh)
+# so this plane and bin/fm-spawn.sh's launch postcondition share one waiter.
 wait_agent_state() {  # <timeout> <wanted>...
-  local timeout=$1 state want elapsed=0
+  local timeout=$1
   shift
-  while :; do
-    state=$(agent_state)
-    for want in "$@"; do
-      if [ "$state" = "$want" ]; then
-        printf '%s' "$state"
-        return 0
-      fi
-    done
-    awk -v e="$elapsed" -v t="$timeout" 'BEGIN{exit !(e < t)}' || break
-    sleep "$POLL"
-    elapsed=$(awk -v e="$elapsed" -v p="$POLL" 'BEGIN{printf "%.3f", e + p}')
-  done
-  printf '%s' "$state"
-  return 1
+  fm_control_wait_agent_state "$BACKEND" "$T" "$timeout" "$POLL" "$@"
 }
 
 require_state_verified_backend() {  # <verb>

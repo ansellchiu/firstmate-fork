@@ -47,6 +47,15 @@ umask 022
 # strips this to verify real refusal.
 export FM_GATE_REFUSE_BYPASS=1
 
+# Collapse bin/fm-spawn.sh's launch postcondition to a single immediate read for
+# the whole suite. That postcondition waits for a real harness process to take
+# the pane foreground, which no fake tmux can ever produce, so leaving the
+# production default in place would make every spawning test pay the full
+# ceiling and time out. One read still exercises the code path, and its verdict
+# on a stubbed inventory is never the confident `dead` that refuses, so fakes
+# behave exactly as before. tests/fm-spawn-launch-postcondition.test.sh sets its
+# own real wait to drive the states deliberately.
+export FM_SPAWN_LAUNCH_WAIT=0
 # Clear the task-worker marker bin/fm-spawn.sh exports into ship and scout
 # panes. This suite builds git-init fixture repositories whose primary checkout
 # it runs a copied bin/fm-test-run.sh in, and that runner refuses the primary

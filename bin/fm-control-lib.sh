@@ -58,7 +58,7 @@ fm_control_verb_allowed() {  # <verb>
   return 1
 }
 
-# The harnesses whose control mechanics are verified. Mirrors AGENTS.md
+# The harnesses whose control mechanics are verified. A subset of AGENTS.md
 # section 4's verified-adapter list; an unverified adapter is refused rather
 # than guessed at, exactly as a spawn on it would be.
 fm_control_harnesses() {
@@ -79,8 +79,9 @@ fm_control_harness_supported() {  # <harness>
 # harness= that way), which is why the spawn adapters match `claude*`, `muse*`,
 # and friends. This is the one place that prefix rule is stated. `pi` and
 # `pi-signed` are exact because a `pi*` prefix would swallow the signed adapter,
-# `omp` is exact because an `omp*` prefix would claim unrelated commands, `agy`
-# is exact for the same reason on an even shorter name, and an
+# `omp` is exact because an `omp*` prefix would claim unrelated commands, `agy` is
+# exact because bin/fm-agy-lib.sh's resolver always yields a binary named
+# exactly `agy` and an `agy*` prefix would claim unrelated commands, and an
 # unrecognized value returns nonzero rather than being guessed into a family.
 fm_control_harness_family() {  # <recorded-harness>
   case "${1-}" in
@@ -97,6 +98,7 @@ fm_control_harness_family() {  # <recorded-harness>
     gemini*) printf 'gemini' ;;
     muse*) printf 'muse' ;;
     rovo*) printf 'rovo' ;;
+    agy) printf 'agy' ;;
     *) return 1 ;;
   esac
 }
@@ -183,8 +185,8 @@ fm_control_interrupt_ack_source() {  # <harness>
 # The command that exits the agent from its own composer.
 fm_control_exit_command() {  # <harness>
   case "${1-}" in
-    claude|opencode|grok|kimi|cursor|muse|rovo) printf '/exit' ;;
-    codex|pi|pi-signed|omp|gemini|agy) printf '/quit' ;;
+    claude|opencode|grok|kimi|cursor|muse|rovo|agy) printf '/exit' ;;
+    codex|pi|pi-signed|omp|gemini) printf '/quit' ;;
     *) return 1 ;;
   esac
 }
@@ -203,6 +205,36 @@ fm_control_backend_supports_key() {  # <backend> <key>
       case "$key" in Enter|C-c) return 0 ;; esac
       ;;
   esac
+  return 1
+}
+
+# Poll fm_backend_agent_state until it prints one of <wanted>..., bounded by
+# <timeout> seconds at <poll>-second intervals. Prints the final observed state
+# and returns 0 on a match, or the last state and 1 when the bound expires.
+#
+# This is the single owner of the "wait for a launch or a stop to settle" loop.
+# The control plane's relaunch and exit verbs and bin/fm-spawn.sh's launch
+# postcondition all read liveness through it, so there is exactly one notion of
+# whether an agent is up and the spawn-side and recovery-side answers can never
+# disagree. Waiting rather than trusting one read is required: immediately after
+# a launch line is submitted, the pane's foreground is still the shell, so a
+# single early read reports `dead` for every healthy spawn.
+fm_control_wait_agent_state() {  # <backend> <target> <timeout> <poll> <wanted>...
+  local backend=$1 target=$2 timeout=$3 poll=$4 state want elapsed=0
+  shift 4
+  while :; do
+    state=$(fm_backend_agent_state "$backend" "$target")
+    for want in "$@"; do
+      if [ "$state" = "$want" ]; then
+        printf '%s' "$state"
+        return 0
+      fi
+    done
+    awk -v e="$elapsed" -v t="$timeout" 'BEGIN{exit !(e < t)}' || break
+    sleep "$poll"
+    elapsed=$(awk -v e="$elapsed" -v p="$poll" 'BEGIN{printf "%.3f", e + p}')
+  done
+  printf '%s' "$state"
   return 1
 }
 
