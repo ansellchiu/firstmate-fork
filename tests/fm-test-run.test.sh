@@ -305,6 +305,30 @@ test_shell_line_ending_policy_selects_runner_contract() {
   pass "shell line-ending policy selects runner coverage"
 }
 
+# A shared setup file named `<name>-fixture.sh` is the same shape as
+# `<name>-helpers.sh`: no curated family of its own, sourced by the suites that
+# need it. It must resolve through the same reference scan, or a suite that
+# adopts that naming makes changed selection refuse on the helper itself.
+test_shared_fixture_helper_selects_its_consumers() {
+  local tmp repo listed
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-fixture-helper.XXXXXX")
+  repo="$tmp/repo"
+  init_changed_fixture_repo "$repo"
+  : >"$repo/tests/shared-pair-fixture.sh"
+  printf '# shared-pair-fixture.sh\n' >>"$repo/tests/fm-pr-merge.test.sh"
+  git -C "$repo" add -A
+  git -C "$repo" -c user.name=test -c user.email=test@example.invalid commit -qm add-fixture-helper
+
+  printf '\n' >>"$repo/tests/shared-pair-fixture.sh"
+  listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) \
+    || fail "a shared -fixture.sh helper refused instead of selecting its consumers"
+  assert_contains "$listed" "tests/fm-pr-merge.test.sh" \
+    "a shared -fixture.sh helper did not select the suite that sources it"
+
+  rm -rf "$tmp"
+  pass "a shared -fixture.sh helper selects its consuming suites through the reference scan"
+}
+
 test_changed_dependency_selection_and_unmapped_failure() {
   local tmp repo listed rc
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-run-changed.XXXXXX")
@@ -421,11 +445,26 @@ test_changed_dependency_selection_and_unmapped_failure() {
   grep -Fq 'no changed-test mapping for source path: src/unmapped.ts' "$tmp/err" \
     || fail "unmapped changed source failure is not actionable: $(cat "$tmp/err")"
 
+  # Deleting that same unmapped source must NOT refuse: a path that is gone has
+  # no behavior left to select tests for, and the diff lists a deletion exactly
+  # like an edit. Without this, removing a source and the path rule covering it
+  # in one commit makes changed selection refuse on the removal itself.
+  git -C "$repo" checkout -q -- src/unmapped.ts
+  git -C "$repo" rm -q src/unmapped.ts
+  set +e
+  (cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD) >"$tmp/out" 2>"$tmp/err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "deleting an unmapped source must not refuse, got $rc: $(cat "$tmp/err")"
+  assert_not_contains "$(cat "$tmp/err")" 'no changed-test mapping' \
+    "a deleted path must not be reported as unmapped"
+
   rm -f "$repo/src/unmapped.ts"
   listed=$(cd "$repo" && bin/fm-test-run.sh --list --changed --base HEAD)
   [ -z "$listed" ] || fail "a retired unmapped source without consumers selected tests: $listed"
+
   rm -rf "$tmp"
-  pass "changed selection covers dependents, fails closed for live unmapped source, and accepts retired unconsumed source"
+  pass "changed selection covers dependents, fails closed for a live unmapped source, ignores deletions, and accepts a retired unconsumed source"
 }
 
 # A direct test reference is per-script evidence. Widening it to the referencing
@@ -1743,6 +1782,7 @@ test_changed_file_selection_is_conservative
 test_task_marker_refuses_the_primary_checkout
 test_changed_runner_surfaces_select_their_family
 test_shell_line_ending_policy_selects_runner_contract
+test_shared_fixture_helper_selects_its_consumers
 test_changed_dependency_selection_and_unmapped_failure
 test_changed_bin_reference_selects_per_script_not_per_family
 test_changed_uses_bounded_automatic_concurrency
