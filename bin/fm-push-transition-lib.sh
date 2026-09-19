@@ -84,13 +84,67 @@ triage_log() {
   fi
 }
 
-# Exit after reporting one actionable wake. Tests override this callback.
+# Carry any pending routine batch out with an immediate wake, so a burst that
+# ended in a real event is presented WITH that event instead of staying local
+# telemetry the captain never sees alongside it. Prints the bounded summary
+# and its changed-record rehydration line ahead of the actionable reason, then
+# clears the batch. Silent when nothing is pending, which is the common case.
+# See fm-classify-lib.sh's "routine-wake coalescing" section for why this is a
+# presentation change and never a second queue.
+wake_flush_pending_batch() {
+  wake_batch_presentation "$STATE" 2>/dev/null || return 0
+}
+
+# Fold an event the triage ALREADY absorbed into the bounded telemetry batch.
+# When the window elapses, retain one bounded summary in the local triage log
+# and start a fresh window without delivering a notification. This never
+# escalates to an immediate wake on its own: the caller has already established
+# the event is benign, so elapsed time cannot change its admission decision. An
+# event the classifier does not certify as routine is never folded in here -
+# callers hand such an event straight to wake(). With batching disabled
+# (FM_WAKE_BATCH_WINDOW=0) the event stays absorbed and only the caller's
+# ordinary debug line records it.
+wake_batch_absorbed() {  # <kind> <key> <detail>
+  local kind=$1 key=$2 detail=$3 summary
+  [ "$(wake_batch_window)" != 0 ] || return 0
+  wake_event_is_routine "$kind" nonterminal || return 0
+  wake_batch_record "$STATE" "$kind" "$key" "$detail"
+  if wake_batch_due "$STATE"; then
+    summary=$(wake_batch_summary "$STATE") || return 0
+    triage_log "closed quiet batch without notification:
+$summary"
+    wake_batch_clear "$STATE"
+  fi
+  return 0
+}
+
+# The one choke point every actionable wake passes through: it settles the
+# heartbeat streak, folds any pending routine batch in ahead of the reason, then
+# hands the final text to wake_deliver, which owns output and exit. Splitting
+# the two keeps the batch fold in production while a test can still replace only
+# the delivery half.
 wake() {
-  local output_status=0
+  local pending
   case "$1" in
     heartbeat*) echo $(( $(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0) + 1 )) > "$STATE/.heartbeat-streak" ;;
     *) echo 0 > "$STATE/.heartbeat-streak" ;;
   esac
+  # A batched presentation is already a complete summary; only an ordinary
+  # actionable reason needs the pending burst folded in ahead of it.
+  case "$1" in
+    "heartbeat: batched routine activity:"*) ;;
+    *)
+      pending=$(wake_flush_pending_batch)
+      [ -z "$pending" ] || set -- "$pending
+$1"
+      ;;
+  esac
+  wake_deliver "$1"
+}
+
+# Exit after reporting one actionable wake. Tests override this callback.
+wake_deliver() {
+  local output_status=0
   trap '' HUP INT TERM
   [ -z "$FM_WAKE_POST_OUTPUT_ACTION" ] || trap '' PIPE
   if echo "$1"; then

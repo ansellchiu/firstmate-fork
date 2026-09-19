@@ -11,7 +11,10 @@
 # what it needs as arguments and touches no globals beyond the optional
 # FM_CAPTAIN_RE override. Consumers layer their own dedup/marker state on top (the
 # daemon keeps its escalation-digest seen-markers; the watcher keeps its .seen-*
-# signatures).
+# signatures). The one place those stores must agree is the catch-all fleet scan
+# both layers run: status_catchall_seen_offset and status_catchall_reported_seen
+# below let each scan read the other layer's catch-all marker without giving up
+# its own.
 # Status-span classification captures one file endpoint and reports every
 # actionable event through that endpoint before the endpoint may be committed.
 # An absent status file is a successful empty span, while an existing status
@@ -1197,6 +1200,43 @@ status_daemon_seen_marker_path() {  # <state> <task-id>
   printf '%s/.subsuper-seen-status-%s' "$1" "$(printf '%s' "$2" | tr ':/.' '___')"
 }
 
+# --- cross-layer catch-all dedupe ------------------------------------------
+# The always-on watcher and the away-mode daemon each run a catch-all fleet scan
+# over the same status logs, and each records its progress in its OWN marker
+# family (.hb-surfaced-<task> and .subsuper-seen-status-<task>). Both layers stay
+# alive across an afk transition - `afk stop` re-arms the watcher while the
+# daemon is still up - so a catch-all digest one layer presented and marked is
+# otherwise re-presented by the other on every scan, forever, because the marker
+# stores ARE the persistence and survive a restart.
+#
+# These two helpers are the cross-check, used ONLY by the two catch-all scans.
+# Each layer still writes its own marker and keeps its own absorb semantics; it
+# just starts its scan from the furthest position EITHER catch-all layer has
+# proven classified, and treats an unreadable log as already reported when
+# either layer reported that same observed state. Both reads are the existing
+# cheap, crash-safe marker reads: an absent, malformed, or identity-mismatched
+# marker contributes 0, so uncertainty still prefers a bounded duplicate over a
+# lost event. The per-wake paths are deliberately untouched.
+status_catchall_seen_offset() {  # <state> <task-id>
+  local state=$1 task=$2 f own peer
+  f="$state/$task.status"
+  own=$(status_presentation_marker_offset \
+    "$(status_heartbeat_seen_marker_path "$state" "$task")" "$f")
+  peer=$(status_presentation_marker_offset \
+    "$(status_daemon_seen_marker_path "$state" "$task")" "$f")
+  case "$own" in ''|*[!0-9]*) own=0 ;; esac
+  case "$peer" in ''|*[!0-9]*) peer=0 ;; esac
+  if [ "$own" -ge "$peer" ]; then printf '%s' "$own"; else printf '%s' "$peer"; fi
+}
+
+status_catchall_reported_seen() {  # <state> <task-id> <observed-signature>
+  local state=$1 task=$2 sig=$3
+  status_presentation_marker_reported_matches \
+    "$(status_heartbeat_seen_marker_path "$state" "$task")" "$sig" && return 0
+  status_presentation_marker_reported_matches \
+    "$(status_daemon_seen_marker_path "$state" "$task")" "$sig"
+}
+
 _status_presentation_signature_valid() {
   local value=$1 size ident encoded
   [ "$value" = unverifiable ] && return 0
@@ -1383,7 +1423,7 @@ EOF
     fi
   fi
   if [ "$rc" -eq 0 ]; then
-    rm -f -- "$state/$task.status" "$state/.$task.open-decisions-cursor" \
+    rm -f -- "$state/.$task.open-decisions-cursor" \
       "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
   fi
   fm_lock_release "$lock" || rc=1
@@ -2105,4 +2145,485 @@ stale_is_terminal() {  # <window> <state>
   local win=$1 state=$2 last
   last=$(last_status_line "$state/$(window_to_task "$win" "$state").status")
   [ -n "$last" ] && status_is_captain_relevant "$last"
+}
+
+# Print "<file>\t<task>\t<last-line>" for every state/*.status whose last line is
+# captain-relevant. This is the cheap fleet-scan both supervisors run as a
+# catch-all backstop for a captain-relevant status the per-wake path might miss.
+# No dedup is applied here: each consumer dedupes against its own seen-state (the
+# daemon against .subsuper-seen-status-*, the watcher against .seen-* signatures).
+scan_captain_relevant_statuses() {  # <state>
+  local state=$1 f last task
+  for f in "$state"/*.status; do
+    [ -e "$f" ] || continue
+    last=$(last_status_line "$f")
+    status_is_captain_relevant "$last" || continue
+    task=$(basename "$f"); task="${task%.status}"
+    printf '%s\t%s\t%s\n' "$f" "$task" "$last"
+  done
+  return 0
+}
+
+_fm_classify_status_mtime() {  # <file>
+  if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+    LC_ALL=C stat -f '%m' "$1" 2>/dev/null
+  else
+    LC_ALL=C stat -c '%Y' "$1" 2>/dev/null
+  fi
+}
+
+# Composite signature of a task's underlying pane and status state.
+# Used by the watcher to detect whether state has changed between consecutive
+# stale escalations.
+stale_underlying_state_sig() {  # <task> <state> <pane-hash>
+  local task=$1 state=$2 pane_hash=$3 statusf mtime sig
+  statusf="$state/$task.status"
+  if [ -e "$statusf" ]; then
+    mtime=$(_fm_classify_status_mtime "$statusf") || mtime=0
+    sig=$(status_observed_signature "$statusf" 2>/dev/null) || sig="sig-error"
+  else
+    mtime="absent"
+    sig="absent"
+  fi
+  printf '%s\t%s\t%s' "$pane_hash" "$mtime" "$sig"
+}
+
+# 0 if crew <task> never genuinely started (no working: status line, no status
+# history beyond launch, no committed branch or changes, no active pipeline, not a secondmate).
+# 1 if the task shows positive evidence of real work, suppressing auto-standdown.
+crew_is_never_started() {  # <task> <state>
+  local task=$1 state=$2 meta statusf kind wt proj dirty unpushed unmerged default_ref
+  [ -n "$task" ] || return 1
+  meta="$state/$task.meta"
+  [ -f "$meta" ] || return 1
+
+  # 1. Not a secondmate (secondmates are persistent homes, not workers)
+  kind=$(grep '^kind=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  [ "$kind" != secondmate ] || return 1
+
+  # 2. No in-flight pipeline
+  [ "$(crew_absorb_class "$task")" != working ] || return 1
+
+  # 3. Status history: never any working: line, and no non-launch progress lines
+  statusf="$state/$task.status"
+  if [ -f "$statusf" ]; then
+    if grep -qE '^[[:space:]]*working:' "$statusf" 2>/dev/null; then
+      return 1
+    fi
+    if grep -qE '^[[:space:]]*(done|needs-decision|blocked|paused):' "$statusf" 2>/dev/null; then
+      return 1
+    fi
+  fi
+
+  # 4. Worktree: no committed branch / commits, no uncommitted changes
+  wt=$(grep '^worktree=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+  if [ -n "$wt" ] && [ -d "$wt" ]; then
+    if git -C "$wt" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      dirty=$(git -C "$wt" status --porcelain 2>/dev/null || true)
+      [ -z "$dirty" ] || return 1
+
+      mode=$(grep '^mode=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+      has_remotes=0
+      if [ -n "$(git -C "$wt" remote 2>/dev/null)" ]; then
+        has_remotes=1
+      fi
+
+      if [ "$has_remotes" -eq 1 ] && [ "$mode" != local-only ]; then
+        unpushed=$(git -C "$wt" log --oneline HEAD --not --remotes -- 2>/dev/null || true)
+        [ -z "$unpushed" ] || return 1
+      else
+        proj=$(grep '^project=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
+        default_ref=$(git -C "$wt" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+        if [ -z "$default_ref" ] && [ -n "$proj" ] && [ -d "$proj" ]; then
+          default_ref=$(git -C "$proj" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+        fi
+        if [ -z "$default_ref" ]; then
+          if git -C "$wt" rev-parse --verify --quiet main >/dev/null 2>&1; then default_ref=main
+          elif git -C "$wt" rev-parse --verify --quiet master >/dev/null 2>&1; then default_ref=master
+          else default_ref=HEAD
+          fi
+        fi
+        unmerged=$(git -C "$wt" log --oneline HEAD --not "$default_ref" -- 2>/dev/null || true)
+        [ -z "$unmerged" ] || return 1
+      fi
+    fi
+  fi
+
+  return 0
+}
+
+# Infer the blocker description from pane text and backend agent liveness.
+detect_stale_blocker() {  # <pane-text> [agent-alive-verdict]
+  local pane=$1 alive=${2:-unknown}
+  if printf '%s\n' "$pane" | grep -qiE '(login|sign in|authenticate|authentication required|auth required|oauth|api_key|token required)'; then
+    printf 'login gating'
+    return 0
+  fi
+  if printf '%s\n' "$pane" | grep -qiE '(permission denied|unauthorized|access denied|forbidden)'; then
+    printf 'permission / auth gating'
+    return 0
+  fi
+  if printf '%s\n' "$pane" | grep -qiE '(command not found|no such file or directory|cannot find binary|executable file not found)'; then
+    printf 'binary missing / command not found'
+    return 0
+  fi
+  if [ "$alive" = dead ]; then
+    printf 'worker process exited at launch'
+    return 0
+  fi
+  printf 'worker never started'
+}
+
+# --- routine-wake coalescing and changed-record rehydration -----------------
+#
+# Ordinary fleet activity - nonterminal progress signals, stales the triage
+# above already absorbed, heartbeats that found nothing new - used to cost one
+# firstmate model turn per event even when the event itself said nothing a
+# supervisor would act on. These helpers add a COALESCING layer over that
+# traffic: a routine event is recorded into a bounded per-home batch and the
+# supervision cycle keeps polling. A batch of events the triage already
+# absorbed rolls into local telemetry when its window elapses; only a pending
+# batch carried by an independently admitted wake becomes a presentation.
+#
+# This is deliberately NOT a second queue. The durable wake queue
+# (bin/fm-wake-lib.sh) stays the one authority for anything that was enqueued:
+# batching never changes whether a durable row exists. Events that were never
+# enqueued at all (an absorbed stale, an absorbed heartbeat) are exactly the
+# traffic the watcher already dropped into the debug log, so retaining their
+# bounded summaries there loses nothing without manufacturing a notification.
+#
+# Two rules keep the batch from hiding anything a supervisor must see:
+#   1. Only two evidence classes are batchable, and the caller states the
+#      evidence rather than this library re-deriving it. Anything uncertain,
+#      unknown, or captain-relevant is immediate, always.
+#   2. Whenever an immediate wake does fire before a quiet batch rolls over, it
+#      carries the pending summary out with it (bin/fm-push-transition-lib.sh's
+#      wake), so the telemetry accompanies the real event without becoming the
+#      reason for a notification by itself.
+#
+# The changed-record diff answers the other half: after an ordinary event, a
+# supervision turn should re-read only the records that actually moved, not the
+# whole fleet. wake_changed_records names them from a persisted fingerprint
+# manifest, so a quiet task costs nothing to skip.
+
+# uname once, locally: this library is sourced standalone by tests and by
+# consumers that do not also source bin/fm-wake-lib.sh, so it cannot borrow that
+# library's copy.
+_FM_CLASSIFY_UNAME=$(uname 2>/dev/null || echo unknown)
+
+# Seconds a routine batch accumulates before presentation or quiet telemetry
+# rollover. 0 disables batching entirely. A malformed override is not a window,
+# so it falls back to the default rather than silently disabling or freezing
+# the batch.
+FM_WAKE_BATCH_WINDOW_DEFAULT=120
+wake_batch_window() {
+  local window=${FM_WAKE_BATCH_WINDOW:-$FM_WAKE_BATCH_WINDOW_DEFAULT}
+  case "$window" in
+    0) printf '0'; return 0 ;;
+    ''|*[!0-9]*) window=$FM_WAKE_BATCH_WINDOW_DEFAULT ;;
+  esac
+  printf '%s' "$window"
+}
+
+# Hard cap on recorded rows, so a pathological burst cannot grow the batch file
+# without bound between presentations. Rows past the cap are still COUNTED in
+# the summary header; only their detail lines are dropped.
+wake_batch_max_rows() {
+  local max=${FM_WAKE_BATCH_MAX_ROWS:-200}
+  case "$max" in ''|*[!0-9]*|0) max=200 ;; esac
+  printf '%s' "$max"
+}
+
+# Distinct sources whose detail lines are printed in one summary before the
+# remainder is folded into an omitted count.
+wake_batch_summary_max() {
+  local max=${FM_WAKE_BATCH_SUMMARY_MAX:-10}
+  case "$max" in ''|*[!0-9]*|0) max=10 ;; esac
+  printf '%s' "$max"
+}
+
+_wake_batch_path() {  # <state>
+  printf '%s/.wake-batch' "$1"
+}
+
+_wake_batch_opened_path() {  # <state>
+  printf '%s/.wake-batch-opened' "$1"
+}
+
+_wake_record_manifest_path() {  # <state>
+  printf '%s/.wake-record-manifest' "$1"
+}
+
+# Print "immediate" or "routine" for one supervision event.
+#
+# <kind> is a durable wake kind (signal|stale|check|heartbeat) or any other
+# token; <evidence> is what the CALLER already established about the event:
+#   actionable  - a captain-relevant span, a real failure, a decision, a
+#                 credential need, review-ready work;
+#   nonterminal - a progress-only signal, or a stale the triage absorbed
+#                 against positive provably-working/declared-wait evidence;
+#   unchanged   - a fleet scan that found nothing new;
+#   unknown     - the caller could not establish any of the above.
+#
+# Uncertainty is immediate on purpose: a supervisor that cannot say an event is
+# routine has not shown it is safe to defer. check-kind events are immediate by
+# construction - a merge result, a Relay mention, a captain inbox note, or a
+# process-event source result is captain-facing the moment it lands.
+wake_event_urgency() {  # <kind> <evidence>
+  local kind=${1:-} evidence=${2:-}
+  case "$kind" in
+    check) printf 'immediate'; return 0 ;;
+    signal|stale|heartbeat) ;;
+    *) printf 'immediate'; return 0 ;;
+  esac
+  case "$evidence" in
+    nonterminal|unchanged) printf 'routine' ;;
+    *) printf 'immediate' ;;
+  esac
+}
+
+# 0 when this event may be batched, 1 when it must ring now. Batching disabled
+# (window 0) makes every event immediate.
+wake_event_is_routine() {  # <kind> <evidence>
+  [ "$(wake_batch_window)" != 0 ] || return 1
+  [ "$(wake_event_urgency "$1" "${2:-}")" = routine ]
+}
+
+# Record one routine event into the batch and open the window if it is not open
+# already. Best effort by design: a batch that cannot be written must never
+# block the supervision cycle, so an unwritable state directory returns 0 and
+# the event simply keeps its pre-batching per-event behavior at the call site.
+wake_batch_record() {  # <state> <kind> <key> [detail]
+  local state=$1 kind=$2 key=$3 detail=${4:-} batch opened rows max now
+  batch=$(_wake_batch_path "$state")
+  opened=$(_wake_batch_opened_path "$state")
+  now=$(date +%s)
+  if [ ! -s "$opened" ]; then
+    printf '%s\n' "$now" > "$opened" 2>/dev/null || return 0
+  fi
+  rows=0
+  if [ -f "$batch" ]; then
+    rows=$(wc -l < "$batch" 2>/dev/null | tr -d '[:space:]')
+    case "$rows" in ''|*[!0-9]*) rows=0 ;; esac
+  fi
+  max=$(wake_batch_max_rows)
+  # Past the cap the row is dropped but the count is not: the overflow counter
+  # keeps the burst's true size visible in the summary header.
+  if [ "$rows" -ge "$max" ]; then
+    printf 'overflow\n' >> "$batch.overflow" 2>/dev/null || true
+    return 0
+  fi
+  kind=$(printf '%s' "$kind" | LC_ALL=C tr '\t\r\n' '   ')
+  key=$(printf '%s' "$key" | LC_ALL=C tr '\t\r\n' '   ')
+  detail=$(printf '%s' "$detail" | LC_ALL=C tr '\t\r\n' '   ' | cut -c1-200)
+  printf '%s\t%s\t%s\t%s\n' "$now" "$kind" "$key" "$detail" >> "$batch" 2>/dev/null || return 0
+  return 0
+}
+
+# Total routine events recorded since the window opened, including any dropped
+# past the row cap.
+wake_batch_pending_count() {  # <state>
+  local batch rows overflow
+  batch=$(_wake_batch_path "$1")
+  rows=0
+  overflow=0
+  if [ -f "$batch" ]; then
+    rows=$(wc -l < "$batch" 2>/dev/null | tr -d '[:space:]')
+    case "$rows" in ''|*[!0-9]*) rows=0 ;; esac
+  fi
+  if [ -f "$batch.overflow" ]; then
+    overflow=$(wc -l < "$batch.overflow" 2>/dev/null | tr -d '[:space:]')
+    case "$overflow" in ''|*[!0-9]*) overflow=0 ;; esac
+  fi
+  printf '%s' "$((rows + overflow))"
+}
+
+wake_batch_opened_at() {  # <state>
+  local opened value
+  opened=$(_wake_batch_opened_path "$1")
+  value=$(head -1 "$opened" 2>/dev/null | tr -d '[:space:]')
+  case "$value" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s' "$value"
+}
+
+# 0 when a pending batch has accumulated for at least its window and should now
+# be consumed by its caller. An empty batch is never due. A batch whose
+# opened-at marker is missing or malformed is due immediately, so corrupted
+# state cannot grow the telemetry batch forever.
+wake_batch_due() {  # <state> [now]
+  local state=$1 now=${2:-} window opened
+  [ "$(wake_batch_pending_count "$state")" -gt 0 ] || return 1
+  window=$(wake_batch_window)
+  [ "$window" != 0 ] || return 0
+  case "$now" in ''|*[!0-9]*) now=$(date +%s) ;; esac
+  opened=$(wake_batch_opened_at "$state") || return 0
+  [ "$((now - opened))" -ge "$window" ]
+}
+
+# One bounded summary for the whole accumulated burst: a header carrying the
+# true event count and elapsed span, then up to wake_batch_summary_max per-source
+# detail lines collapsed by kind and key with their repeat counts, then an
+# omitted count when the summary cap dropped any. Prints nothing and returns 1
+# when no batch is pending.
+wake_batch_summary() {  # <state> [now]
+  local state=$1 now=${2:-} batch total opened elapsed max body counts shown omitted
+  total=$(wake_batch_pending_count "$state")
+  [ "$total" -gt 0 ] || return 1
+  batch=$(_wake_batch_path "$state")
+  case "$now" in ''|*[!0-9]*) now=$(date +%s) ;; esac
+  opened=$(wake_batch_opened_at "$state") || opened=$now
+  elapsed=$((now - opened))
+  [ "$elapsed" -ge 0 ] || elapsed=0
+  max=$(wake_batch_summary_max)
+  counts="$batch.counts"
+
+  body=$(LC_ALL=C awk -F '\t' -v max="$max" -v counts="$counts" '
+    NF >= 3 {
+      k = $2 SUBSEP $3
+      if (!(k in seen)) { order[++count] = k; seen[k] = 1; kind[k] = $2; key[k] = $3 }
+      n[k]++
+      if (length($4)) last[k] = $4
+    }
+    END {
+      shown = 0
+      for (i = 1; i <= count && shown < max; i++) {
+        k = order[i]
+        line = "  batched " kind[k]
+        if (n[k] > 1) line = line " x" n[k]
+        if (length(key[k])) line = line " " key[k]
+        if (length(last[k])) line = line ": " last[k]
+        print line
+        shown++
+      }
+      printf "%d\t%d\n", shown, count - shown > counts
+    }
+  ' "$batch" 2>/dev/null) || return 1
+  shown=$(cut -f1 "$counts" 2>/dev/null | tr -d '[:space:]')
+  omitted=$(cut -f2 "$counts" 2>/dev/null | tr -d '[:space:]')
+  rm -f "$counts" 2>/dev/null || true
+  case "$shown" in ''|*[!0-9]*) shown=0 ;; esac
+  case "$omitted" in ''|*[!0-9]*) omitted=0 ;; esac
+
+  printf 'heartbeat: batched routine activity: %d event(s) over %ds, no captain-relevant event among them\n' \
+    "$total" "$elapsed"
+  [ -z "$body" ] || printf '%s\n' "$body"
+  if [ "$omitted" -gt 0 ]; then
+    printf '  batched: %d more distinct source(s) omitted (summary cap)\n' "$omitted"
+  fi
+  return 0
+}
+
+# Drop the accumulated batch and close its window after presentation, immediate
+# wake carry-out, or quiet telemetry rollover.
+wake_batch_clear() {  # <state>
+  local batch
+  batch=$(_wake_batch_path "$1")
+  rm -f "$batch" "$batch.overflow" "$batch.counts" "$(_wake_batch_opened_path "$1")" 2>/dev/null || true
+  return 0
+}
+
+# --- changed-record diff ----------------------------------------------------
+
+# A record's observable fingerprint: the size and mtime of its status log and of
+# its metadata. Cheap (two stats, no file read) and sufficient - every way a
+# record can move that a supervisor cares about lands as an append to one of
+# them. An unreadable member contributes a distinct marker rather than nothing,
+# so a record that becomes unreadable reads as CHANGED and gets looked at.
+wake_record_fingerprint() {  # <state> <task>
+  local state=$1 task=$2 part out='' one
+  for part in "$state/$task.status" "$state/$task.meta"; do
+    if [ -f "$part" ] && [ ! -L "$part" ]; then
+      if [ "$_FM_CLASSIFY_UNAME" = Darwin ]; then
+        one=$(stat -f '%z:%Fm' "$part" 2>/dev/null) || one=unreadable
+      else
+        one=$(stat -c '%s:%Y' "$part" 2>/dev/null) || one=unreadable
+      fi
+      [ -n "$one" ] || one=unreadable
+      out="$out$one|"
+    else
+      out="${out}absent|"
+    fi
+  done
+  printf '%s' "$out"
+}
+
+# Every active record in this home: one line per task that has metadata.
+wake_active_records() {  # <state>
+  local state=$1 meta task
+  for meta in "$state"/*.meta; do
+    [ -f "$meta" ] && [ ! -L "$meta" ] || continue
+    task=${meta##*/}
+    task=${task%.meta}
+    case "$task" in ''|.*|*[!A-Za-z0-9._-]*) continue ;; esac
+    printf '%s\n' "$task"
+  done
+}
+
+# The names of active records whose fingerprint differs from the stored
+# manifest - what a supervision turn should rehydrate after an ordinary event,
+# instead of re-reading the whole fleet. A record with no manifest entry yet is
+# reported as changed exactly once, on its first observation. Does not commit;
+# wake_commit_record_manifest does that, so a caller that fails to present can
+# retry without losing the diff.
+wake_changed_records() {  # <state>
+  local state=$1 manifest task current previous records
+  manifest=$(_wake_record_manifest_path "$state")
+  records=$(wake_active_records "$state")
+  [ -n "$records" ] || return 0
+  while IFS= read -r task; do
+    [ -n "$task" ] || continue
+    current=$(wake_record_fingerprint "$state" "$task")
+    previous=$(LC_ALL=C awk -F '\t' -v t="$task" '$1 == t { print $2; exit }' "$manifest" 2>/dev/null)
+    [ "$current" = "$previous" ] || printf '%s\n' "$task"
+  done <<RECORDS
+$records
+RECORDS
+}
+
+# Replace the manifest with the current fingerprint of every active record.
+# Retired records drop out by construction, so a torn-down task leaves nothing
+# behind to be diffed against forever.
+wake_commit_record_manifest() {  # <state>
+  local state=$1 manifest tmp task records
+  manifest=$(_wake_record_manifest_path "$state")
+  tmp="$manifest.tmp.$$"
+  : > "$tmp" 2>/dev/null || return 0
+  records=$(wake_active_records "$state")
+  if [ -n "$records" ]; then
+    while IFS= read -r task; do
+      [ -n "$task" ] || continue
+      printf '%s\t%s\n' "$task" "$(wake_record_fingerprint "$state" "$task")" >> "$tmp" 2>/dev/null || true
+    done <<RECORDS
+$records
+RECORDS
+  fi
+  mv -f "$tmp" "$manifest" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+  return 0
+}
+
+# The rehydration instruction that rides with a batched presentation: name only
+# the records that moved, so the turn re-reads those and skips the quiet rest.
+# Commits the manifest, so the next batch diffs against what this one reported.
+wake_rehydration_line() {  # <state>
+  local state=$1 changed list
+  changed=$(wake_changed_records "$state")
+  wake_commit_record_manifest "$state"
+  if [ -z "$changed" ]; then
+    printf 'changed records: none - rehydrate nothing; the fleet is unchanged since the last presentation\n'
+    return 0
+  fi
+  list=$(printf '%s\n' "$changed" | LC_ALL=C tr '\n' ' ' | sed 's/ *$//; s/ /, /g')
+  printf 'changed records: %s - rehydrate only these; every other active record is unchanged\n' "$list"
+}
+
+# The complete batched presentation: one bounded summary plus its changed-record
+# rehydration instruction, then the batch is cleared. Prints nothing and returns
+# 1 when nothing is pending.
+wake_batch_presentation() {  # <state> [now]
+  local state=$1 now=${2:-} summary
+  summary=$(wake_batch_summary "$state" "$now") || return 1
+  printf '%s\n' "$summary"
+  wake_rehydration_line "$state"
+  wake_batch_clear "$state"
+  return 0
 }
