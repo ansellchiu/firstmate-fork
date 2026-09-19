@@ -689,12 +689,17 @@ test_busy_state_never_reports_a_shell_only_pane_busy() {
   [ "$out" = busy ] || fail "a working record with a live Pi foreground must read busy, got '$out'"
 
   # An idle record needs no process read: idle is never trusted as busy anyway.
+  # It reads UNKNOWN rather than idle in this home (inventory entry
+  # herdr-native-idle-unknown): `agent get` reports idle while a harness waits
+  # on its own long foreground tool call, so native idle is not positive idle
+  # evidence and the caller defers to the task's semantic lifecycle record.
   dir="$TMP_ROOT/busy-idle"; mkdir -p "$dir/responses"; resp="$dir/responses"; log="$dir/log"; : > "$log"
   printf '{"result":{"agent":{"agent":"pi","agent_status":"idle"}}}\n' > "$resp/1.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_busy_state fmtest:w1:p2' "$ROOT")
-  [ "$out" = idle ] || fail "an idle record should read idle without a process read, got '$out'"
+  [ "$out" = unknown ] \
+    || fail "an idle record should read unknown without a process read, got '$out'"
   assert_not_contains "$(cat "$log")" $'pane\x1fprocess-info' "busy_state ran a process read for an idle record"
   pass "herdr stale registration: busy_state proves a working record at process level before reporting busy"
 }
