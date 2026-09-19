@@ -11,7 +11,9 @@
 #   id <origin> <key>                      -> prints the legacy <origin>-decision-<key> identity
 #   hold <origin> <key> --title --reason [--repo]
 #                                          -> hold <origin>-decision-<key> --origin <origin> ...
-#   complete <origin> (--none | <key>...)  -> complete <origin> (--none | <origin>-decision-<key>...)
+#   complete <origin> (--none | <key>...) [--claims-checked N]
+#                                          -> complete <origin> (--none | <origin>-decision-<key>...)
+#                                             [--claims-checked N] (see fm-captain-hold.sh's claims audit)
 #   verify <origin>                        -> verify <origin>
 #   resolve <origin> <key> --decision-file <f> --routed-to <id>...
 #                                          -> answer <origin>-decision-<key> with the routed ids
@@ -177,17 +179,34 @@ command_resolve() {
 }
 
 command_complete() {
-  local origin=${1:-} mapped=''
+  local origin=${1:-} mapped='' claims_checked='' claims_checked_supplied=0 rest=''
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   validate_slug origin-id "$origin"
   shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --claims-checked) shift; claims_checked=${1:-}; claims_checked_supplied=1 ;;
+      *) rest="${rest}${rest:+ }$1" ;;
+    esac
+    shift
+  done
+  # shellcheck disable=SC2086  # rest is a validated space-separated token list.
+  set -- $rest
+  [ "$#" -ge 1 ] || { usage >&2; exit 2; }
   if [ "$#" -eq 1 ] && [ "$1" = --none ]; then
+    if [ "$claims_checked_supplied" = 1 ]; then
+      exec "$CAPTAIN_HOLD" complete "$origin" --claims-checked "$claims_checked" --none
+    fi
     exec "$CAPTAIN_HOLD" complete "$origin" --none
   fi
   for key in "$@"; do
     [ "$key" != --none ] || fail "--none cannot be combined with decision keys"
     mapped="${mapped}${mapped:+ }$(compose "$origin" "$key")"
   done
+  if [ "$claims_checked_supplied" = 1 ]; then
+    # shellcheck disable=SC2086  # mapped is a validated space-separated slug list.
+    exec "$CAPTAIN_HOLD" complete "$origin" --claims-checked "$claims_checked" $mapped
+  fi
   # shellcheck disable=SC2086  # mapped is a validated space-separated slug list.
   exec "$CAPTAIN_HOLD" complete "$origin" $mapped
 }
