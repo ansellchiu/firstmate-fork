@@ -732,10 +732,20 @@ assert_present "$PARENT/state/procevent/remote-reply-ios.source" "remote spawn d
 publish_healthy_watcher_identity "$PARENT/state" "$PARENT" "$ROOT/bin/fm-watch.sh"
 [ "$(remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh state ios)" = alive ] \
   || fail "remote endpoint was not projected alive from its own host"
-# Herdr reports a native agent state, so the delivery observation resolves
-# without the rendered-output fallback a tmux endpoint needs.
-[ "$(remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh observe ios)" = idle ] \
-  || fail "remote endpoint delivery observation did not execute on its own host"
+# The observation must run on the endpoint's own host and return a verdict the
+# delivery layer can act on. This home deliberately classifies herdr's native
+# "idle" agent state as inconclusive rather than idle, because herdr reads idle
+# while a harness waits on its own long foreground tool call and trusting it
+# would report a busy worker as idle; bin/backends/herdr.sh's
+# fm_backend_herdr_classify_agent_status owns that mapping. The observation
+# therefore resolves through the same rendered-output fallback a tmux endpoint
+# uses, and fm_pending_reply_busy_state_from_observation turns that
+# "fallback-idle" into idle once the pending-reply record is eligible. Public
+# upstream maps native idle straight to idle, so this expectation tracks that
+# divergence rather than relaxing the check.
+observed=$(remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh observe ios)
+[ "$observed" = fallback-idle ] \
+  || fail "remote endpoint delivery observation did not execute on its own host: got '$observed'"
 pass "remote spawn launches on the remote-local backend and records a host-qualified route"
 
 remote_route_meta="$REMOTE_HOME/state/parent-route/ios.meta"
