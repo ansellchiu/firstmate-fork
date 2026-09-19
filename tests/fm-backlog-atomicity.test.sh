@@ -25,6 +25,8 @@ set -u
 
 # shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$ROOT/bin/fm-timeout-lib.sh"
 
 # An exported TASKS_AXI_BACKEND would outrank each case's .tasks.toml fixture
 # in fm_tasks_axi_backend, so the backend cases must start from a clean slate.
@@ -1468,6 +1470,14 @@ test_deferred_signal_never_claims_unverified_preservation() {
 
 test_deferred_signal_verification_outlives_an_unresponsive_tasks_axi() {
   local case_dir id out rc=0
+  # The outer backstop below is GNU `timeout` with its kill-after, which stops
+  # the surviving `start` this case installs from holding the capture open. A
+  # host without that binary cannot run the case as written, and the same
+  # skip guards test_fm_tasks_axi_gnu_timeout_forces_termination... above.
+  if ! command -v timeout >/dev/null 2>&1; then
+    pass "a signal-deferred spawn bounds its verification (skipped: no timeout binary on this host)"
+    return 0
+  fi
   id=atomic-dispatch-signal-hang-b5
   case_dir=$(make_home dispatch-signal-hang "$id")
   add_item "$case_dir" "$id"
@@ -1581,9 +1591,11 @@ test_completion_closes_a_scout_with_its_report() {
   # captain-call completion gate; satisfy both the way a real scout does.
   mkdir -p "$(home_of "$case_dir")/data/$id"
   printf 'findings\n' > "$(home_of "$case_dir")/data/$id/report.md"
+  # A filed report also trips this home's REC-4 claims audit, so the completion
+  # attests the spot-verified claim count the way a real scout does.
   FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$(home_of "$case_dir")" \
     PATH="$case_dir/fakebin:$PATH" \
-    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --none >/dev/null \
+    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --claims-checked 1 --none >/dev/null \
     || fail "could not record the scout's completed captain-call inventory"
 
   out=$(run_teardown "$case_dir" "$id") || fail "teardown failed: $out"
@@ -1653,7 +1665,7 @@ test_completion_records_a_relative_report_for_relocated_data() {
   printf 'findings\n' > "$relocated/$id/report.md"
   FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$(home_of "$case_dir")" \
     FM_DATA_OVERRIDE="$relocated////" PATH="$case_dir/fakebin:$PATH" \
-    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --none >/dev/null \
+    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --claims-checked 1 --none >/dev/null \
     || fail "could not record the relocated scout's captain-call inventory"
 
   out=$(FM_DATA_OVERRIDE="$relocated////" run_teardown "$case_dir" "$id") \
@@ -1663,6 +1675,47 @@ test_completion_records_a_relative_report_for_relocated_data() {
   assert_grep "data/$id/report.md" "$backlog" \
     "relocated scout close did not record a relative report path"
   pass "completion records relocated scout reports relative to the backlog root"
+}
+
+# tasks-axi 0.2.5 accepts a row report link only at the literal
+# `data/<id>/report.md`, so a home whose data directory carries another name
+# has no supported way to put its scout report on the row (the bounded gap
+# docs/captain-hold-lifecycle.md records). The captain-held retention must
+# treat that as an unsupported artifact and still return the row to Queued
+# with its hold intact - never fail the transition and owe a replay.
+test_captain_held_retention_survives_an_unsupported_renamed_data_report() {
+  local case_dir id relocated backlog out show
+  id=atomic-retain-renamed-data-b7
+  case_dir=$(make_home retain-renamed-data)
+  relocated="$case_dir/relocated/records"
+  mkdir -p "$case_dir/relocated"
+  pin_markdown_backend "$case_dir/relocated"
+  mv "$(home_of "$case_dir")/data" "$relocated"
+  backlog="$relocated/backlog.md"
+  tasks-axi add "$id" "item for $id" --kind scout --file "$backlog" >/dev/null
+  tasks-axi start "$id" --file "$backlog" >/dev/null
+  tasks-axi hold "$id" --reason "captain decision pending" --kind captain \
+    --file "$backlog" >/dev/null
+  write_task_meta "$case_dir" "$id" scout '' "spawn_gen=spawn-retain-renamed"
+  mkdir -p "$relocated/$id"
+  printf 'findings\n' > "$relocated/$id/report.md"
+  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$(home_of "$case_dir")" \
+    FM_DATA_OVERRIDE="$relocated" PATH="$case_dir/fakebin:$PATH" \
+    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --claims-checked 1 --none >/dev/null \
+    || fail "could not record the renamed-data scout's captain-call inventory"
+
+  out=$(FM_DATA_OVERRIDE="$relocated" run_teardown "$case_dir" "$id") \
+    || fail "renamed-data captain-held teardown failed: $out"
+  show=$(tasks-axi show "$id" --file "$backlog" 2>/dev/null)
+  [ "$(printf '%s\n' "$show" | sed -n 's/^  state: *//p' | head -1)" = "queued" ] \
+    || fail "captain-held retention did not return the renamed-data row to Queued"
+  assert_contains "$show" "held: yes" \
+    "captain-held retention released the hold on the renamed-data row"
+  assert_grep "Deliverable of the finished work: report records/$id/report.md" \
+    "$backlog" "captain-held retention lost the renamed-data deliverable line"
+  assert_absent "$(home_of "$case_dir")/state/$id.backlog-close" \
+    "captain-held retention still owed a replay after the unsupported report"
+  pass "captain-held retention survives an unsupported renamed-data report"
 }
 
 test_space_containing_scout_report_marker_replays() {
@@ -1681,7 +1734,7 @@ test_space_containing_scout_report_marker_replays() {
   printf 'findings\n' > "$data/$id/report.md"
   FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$(home_of "$case_dir")" \
     FM_DATA_OVERRIDE="$data" PATH="$case_dir/fakebin:$PATH" \
-    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --none >/dev/null \
+    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --claims-checked 1 --none >/dev/null \
     || fail "could not record the space-path scout's captain-call inventory"
   break_verb "$case_dir" "done"
   marker="$(home_of "$case_dir")/state/$id.backlog-close"
@@ -3038,6 +3091,7 @@ test_completion_closes_a_scout_with_its_report
 test_completion_refuses_a_legacy_record_without_an_incarnation
 test_completion_refuses_ambiguous_incarnation_metadata
 test_completion_records_a_relative_report_for_relocated_data
+test_captain_held_retention_survives_an_unsupported_renamed_data_report
 test_space_containing_scout_report_marker_replays
 test_trailing_newline_data_path_fails_closed
 test_control_character_data_path_is_refused_before_cleanup

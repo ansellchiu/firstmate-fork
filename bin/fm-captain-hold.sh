@@ -22,13 +22,14 @@
 # Usage:
 #   fm-captain-hold.sh hold <task-id> --reason <reason> \
 #     [--title <title>] [--repo <repo>] [--origin <origin-id>] [--until YYYY-MM-DD]
-#   fm-captain-hold.sh answer <task-id> --decision-file <path> [--release]
+#   fm-captain-hold.sh answer <task-id> --decision-file <path> [--release] \
+#     [--item <item>] [--item-decision <text>]
 #   fm-captain-hold.sh answers [<legacy-origin> | --any-origin] --source <provenance>   (keyed answers on stdin)
 #   fm-captain-hold.sh reconcile-requests --source-id <source-id> --source <provenance>   (task ids on stdin)
 #   fm-captain-hold.sh bind <source-id> [<legacy-origin> | --any-origin]
 #   fm-captain-hold.sh unbind <source-id>
 #   fm-captain-hold.sh binding <source-id>
-#   fm-captain-hold.sh complete <origin-id> (--none | <task-id>...)
+#   fm-captain-hold.sh complete <origin-id> (--none | <task-id>...) [--claims-checked N]
 #   fm-captain-hold.sh verify <origin-id>
 #   fm-captain-hold.sh open <task-id> [--identity] [--distinguish-absent]
 #   fm-captain-hold.sh diverged
@@ -60,9 +61,13 @@
 # tasks-axi --archive-body). It closes a question with `tasks-axi done` - or,
 # with `--release`, lifts the hold with `tasks-axi unhold` so a captain-gated
 # WORK item resumes without closing - and restores resolution-first body
-# ordering. An exact retry also completes unfinished ordering normalization and
-# is idempotent only when its requested close mode
-# matches the newest record; a changed decision or a mode mismatch is rejected.
+# ordering. When recording a batched answer, `--item <item>` records which item
+# or position this task received, and `--item-decision <text>` (or `--item-words <text>`)
+# records the captain's words for that item, leaving the full decision file as
+# the preserved batch text. An exact retry also completes unfinished ordering
+# normalization and is idempotent only when its requested close mode and any
+# recorded item fields match the newest record; a changed decision or a mode
+# mismatch is rejected.
 # A re-held task may record a new answer on top. On a task already closed outside this script,
 # `answer` records the missing resolution block (the old `repair` path) only
 # when the task still carries the captain-hold provenance tasks-axi preserves
@@ -74,19 +79,21 @@
 # ONE KEYED-ANSWER INTAKE, FED BY EVERY CHANNEL.
 # "A keyed answer resolves its matching captain-held task" is a single
 # capability, owned here and nowhere else. `answers` reads
-# `<task-id>\t<answer>\t<label>[\t<mode>]` lines on stdin and resolves each named
-# task through the very same `answer` path above, so every guard applies
-# identically no matter which channel the answer arrived on. The key IS the
-# task id - no identity arithmetic. The optional fourth field selects the close:
-# empty or `done` completes the task, `release` lifts the hold so held work
-# resumes; anything else is skipped. A key that names no task, a task that is
-# not held for the captain, or a task already closed is reported as `skipped:`
-# and feeds nothing. A replayed delivery whose answer digest and requested
-# close mode both match the newest record is reported `closed:` and is a no-op;
-# a mode mismatch is skipped. The command exits nonzero when any key was
-# skipped. `--source` is provenance text recorded in the
-# durable decision, never a behavior switch: this command has no per-channel
-# branch and no knowledge of chat, review decks, or any transport.
+# `<task-id>\t<answer>\t<label>[\t<mode>[\t<item>[\t<item-decision>]]]` lines on
+# stdin and resolves each named task through the very same `answer` path above, so
+# every guard applies identically no matter which channel the answer arrived on.
+# The key IS the task id - no identity arithmetic. The optional fourth field
+# selects the close: empty or `done` completes the task, `release` lifts the
+# hold so held work resumes; anything else is skipped. Optional fifth and sixth
+# fields record the batch item identifier/position and the captain's words for
+# that item. A key that names no task, a task that is not held for the captain,
+# or a task already closed is reported as `skipped:` and feeds nothing. A
+# replayed delivery whose answer digest, item fields, and requested close mode
+# all match the newest record is reported `closed:` and is a no-op; a mismatch
+# is skipped. The command exits nonzero when any key was skipped. `--source` is
+# provenance text recorded in the durable decision, never a behavior switch:
+# this command has no per-channel branch and no knowledge of chat, review
+# decks, or any transport.
 # Legacy input: an optional positional origin (or a stored concrete-origin
 # binding) makes a key that names no task fall back to the old
 # `<origin>-decision-<key>` identity, so an in-flight pre-collapse channel
@@ -140,6 +147,18 @@
 # `captain-held [key=...]` status close naming the inventory. Later review
 # passes may add ids. A post-teardown visual review can complete against the
 # surviving report and tasks without recreating task state.
+# CLAIMS AUDIT (postmortem REC-4). When the origin has a filed report
+# (data/<origin>/report.md), `complete` also requires `--claims-checked N`,
+# an attestation of how many load-bearing claims the invoking agent spot-
+# verified before declaring the report complete. N must be >=2 when the
+# report trips the negative-claim classifier below (reusing REC-1's phrase
+# set: "does not exist", "no support", "not available", "unsupported", "no
+# longer") and >=1 otherwise. This is a forcing function, not a truth oracle:
+# the gate never re-verifies a claim itself, it only refuses to complete
+# without the attestation, and a false attestation is not caught here. A
+# detected negative claim with an insufficient or omitted count fails with
+# the offending report line quoted. An origin with no filed report is
+# unaffected; there is nothing here to audit.
 # `verify` is read-only and is called by scout teardown, so teardown cannot
 # erase a source before this gate has succeeded: every recorded inventory
 # entry must still be durable and no keyed status decision may be open.
@@ -187,9 +206,10 @@
 #
 # Resolution records: the block written into the body names this script, the
 # decision digest, and a `Resolution mode:` of answered, released, repaired, or
-# reconciled. Records written by the retired fm-decision-hold.sh (routed,
-# declined, answered, repaired) are recognized everywhere a record is read, so
-# nothing already closed needs rewriting.
+# reconciled (with optional `Batch item:` and `Item decision:` lines when
+# recorded from a batch). Records written by the retired fm-decision-hold.sh
+# (routed, declined, answered, repaired) are recognized everywhere a record is
+# read, so nothing already closed needs rewriting.
 #
 # Parent channel: inside a secondmate home a task held for the captain, and its
 # answer, are captain-facing facts the moment they are recorded, so `hold`
@@ -493,6 +513,30 @@ recorded_resolution_mode() {  # <task-body>
   printf '%s' "$rest"
 }
 
+# The newest record's `Batch item:` value; empty when not a batched answer.
+recorded_batch_item() {  # <task-body>
+  local rest=$1
+  case "$rest" in
+    *"Batch item: "*) rest=${rest#*"Batch item: "} ;;
+    *) return 1 ;;
+  esac
+  rest=${rest%%\\n*}
+  rest=${rest%%$'\n'*}
+  printf '%s' "$rest"
+}
+
+# The newest record's `Item decision:` value; empty when not recorded.
+recorded_item_decision() {  # <task-body>
+  local rest=$1
+  case "$rest" in
+    *"Item decision: "*) rest=${rest#*"Item decision: "} ;;
+    *) return 1 ;;
+  esac
+  rest=${rest%%\\n*}
+  rest=${rest%%$'\n'*}
+  printf '%s' "$rest"
+}
+
 closed_answer_replay_mode_compatible() {  # <mode> <task-body>
   case "$1" in
     answered|repaired|routed) return 0 ;;
@@ -503,11 +547,18 @@ closed_answer_replay_mode_compatible() {  # <mode> <task-body>
 # The record's label is what keeps an evidence-backed reconciliation from
 # reading as the captain's own words. `reconciled` closes a call that went moot
 # and carries verified evidence; every other mode carries what the captain said.
-resolution_block() {  # <mode>
-  local label='Captain decision:'
-  [ "$1" != reconciled ] || label='Reconciliation evidence:'
-  printf 'Resolution recorded by fm-captain-hold.\nDecision digest: %s\nResolution mode: %s\n\n%s\n%s\n' \
-    "$DECISION_DIGEST" "$1" "$label" "$DECISION_TEXT"
+resolution_block() {  # <mode> [<item> <item_decision>]
+  local mode=$1 item=${2:-} item_dec=${3:-} hdr label='Captain decision:'
+  [ "$mode" != reconciled ] || label='Reconciliation evidence:'
+  hdr=$(printf 'Resolution recorded by fm-captain-hold.\nDecision digest: %s\nResolution mode: %s' \
+    "$DECISION_DIGEST" "$mode")
+  if [ -n "$item" ]; then
+    hdr=$(printf '%s\nBatch item: %s' "$hdr" "$item")
+  fi
+  if [ -n "$item_dec" ]; then
+    hdr=$(printf '%s\nItem decision: %s' "$hdr" "$item_dec")
+  fi
+  printf '%s\n\n%s\n%s\n' "$hdr" "$label" "$DECISION_TEXT"
 }
 
 # Durable state of one captain call: an active captain hold (annotations
@@ -910,9 +961,9 @@ command_hold() {
 # Record a resolution block beneath any leading active hold-set stamp,
 # preserving the previous body below it and archiving the pristine original.
 # Successful closure removes the stamp to restore resolution-first ordering.
-write_resolution_record() {  # <task-id> <mode> <shown-body>
-  local id=$1 mode=$2 body=$3 new_body tmp hold_set
-  new_body=$(resolution_block "$mode")
+write_resolution_record() {  # <task-id> <mode> <shown-body> [<item> <item_decision>]
+  local id=$1 mode=$2 body=$3 item=${4:-} item_decision=${5:-} new_body tmp hold_set
+  new_body=$(resolution_block "$mode" "$item" "$item_decision")
   body=$(decode_shown_value "$body") \
     || fail "could not decode the existing body for $id"
   hold_set=$(body_hold_set_timestamp "$body")
@@ -995,18 +1046,27 @@ remove_interrupted_answer_stamp() {  # <task-id>
 }
 
 command_answer() {
-  local id=${1:-} decision_file='' release=0 show state hold_kind body outcome recorded_mode occurrence
+  local id=${1:-} decision_file='' release=0 item='' item_decision='' show state hold_kind body outcome recorded_mode occurrence
+  local rec_item rec_dec
   [ "$#" -ge 1 ] || { usage >&2; exit 2; }
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --decision-file) shift; decision_file=${1:-} ;;
       --release) release=1 ;;
+      --item) shift; item=${1:-} ;;
+      --item-decision|--item-words) shift; item_decision=${1:-} ;;
       *) usage >&2; exit 2 ;;
     esac
     shift
   done
   validate_slug task-id "$id"
+  if [ -n "$item" ]; then
+    validate_one_line "batch item" "$item"
+  fi
+  if [ -n "$item_decision" ]; then
+    validate_one_line "item decision" "$item_decision"
+  fi
   load_decision "$decision_file"
   acquire_task_control_lock "$id"
   require_tasks_axi
@@ -1030,6 +1090,16 @@ command_answer() {
         || fail "task $id records this resolution with mode ${recorded_mode:-unknown}; it is not a captain-answer replay"
       [ "$release" = 0 ] \
         || fail "task $id records this answer with mode ${recorded_mode:-unknown}; --release cannot reopen a closed task"
+      if [ -n "$item" ]; then
+        rec_item=$(recorded_batch_item "$body" || true)
+        [ "$rec_item" = "$item" ] \
+          || fail "captain-held task $id records a different batch item"
+      fi
+      if [ -n "$item_decision" ]; then
+        rec_dec=$(recorded_item_decision "$body" || true)
+        [ "$rec_dec" = "$item_decision" ] \
+          || fail "captain-held task $id records a different item decision"
+      fi
       remove_interrupted_answer_stamp "$id"
       if [ "$recorded_mode" = repaired ]; then
         publish_parent_resolution_then_retire "$id" $((occurrence - 1)) "answered (repaired)"
@@ -1045,7 +1115,7 @@ command_answer() {
     # this really was the captain's item rather than ordinary finished work.
     [ "$hold_kind" = captain ] \
       || fail "task $id was never held for the captain; nothing to record an answer on"
-    write_resolution_record "$id" repaired "$body"
+    write_resolution_record "$id" repaired "$body" "$item" "$item_decision"
     remove_interrupted_answer_stamp "$id"
     task_show "$id" || fail "task $id disappeared while recording the answer"
     show=$TASK_SHOW_OUTPUT
@@ -1072,6 +1142,16 @@ command_answer() {
         answered|routed) [ "$release" = 0 ] || fail "task $id records this answer as a close; retry without --release" ;;
         *) fail "task $id records this resolution with mode ${recorded_mode:-unknown}; it is not a captain-answer replay" ;;
       esac
+      if [ -n "$item" ]; then
+        rec_item=$(recorded_batch_item "$body" || true)
+        [ "$rec_item" = "$item" ] \
+          || fail "task $id records a different batch item"
+      fi
+      if [ -n "$item_decision" ]; then
+        rec_dec=$(recorded_item_decision "$body" || true)
+        [ "$rec_dec" = "$item_decision" ] \
+          || fail "task $id records a different item decision"
+      fi
       if ! close_answered "$id" "$release"; then
         fail "could not close answered captain-held task $id"
       fi
@@ -1080,7 +1160,7 @@ command_answer() {
       printf '%s: %s\n' "$outcome" "$id"
       return 0
     fi
-    write_resolution_record "$id" "$outcome" "$body"
+    write_resolution_record "$id" "$outcome" "$body" "$item" "$item_decision"
     if ! close_answered "$id" "$release"; then
       fail "could not close answered captain-held task $id"
     fi
@@ -1101,6 +1181,16 @@ command_answer() {
       || fail "task $id records a different captain decision with mode ${recorded_mode:-unknown}"
     [ "$recorded_mode" = released ] && [ "$release" = 1 ] \
       || fail "task $id records this answer with mode ${recorded_mode:-unknown}; replay requires matching --release"
+    if [ -n "$item" ]; then
+      rec_item=$(recorded_batch_item "$body" || true)
+      [ "$rec_item" = "$item" ] \
+        || fail "task $id records a different batch item"
+    fi
+    if [ -n "$item_decision" ]; then
+      rec_dec=$(recorded_item_decision "$body" || true)
+      [ "$rec_dec" = "$item_decision" ] \
+        || fail "task $id records a different item decision"
+    fi
     remove_interrupted_answer_stamp "$id"
     publish_parent_resolution_then_retire "$id" $((occurrence - 1)) released
     printf 'released: %s\n' "$id"
@@ -1205,9 +1295,9 @@ sanitize_reconcile_provenance() {
 }
 
 command_answers() {
-  local origin='' source='' row rest key answer label mode id show state hold_kind body digest legacy_digest legacy_key
+  local origin='' source='' row rest key answer label mode item item_decision id show state hold_kind body digest legacy_digest legacy_key
   local recorded_digest recorded_mode occurrence tmp err closed=0 skipped=0 reason release_flag tab=$'\t'
-  local resolve_rc
+  local resolve_rc rec_item rec_dec
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --source) shift; source=${1:-} ;;
@@ -1236,7 +1326,11 @@ command_answers() {
     answer=${rest%%"$tab"*}
     case "$rest" in *"$tab"*) rest=${rest#*"$tab"} ;; *) rest='' ;; esac
     label=${rest%%"$tab"*}
-    case "$rest" in *"$tab"*) mode=${rest#*"$tab"} ;; *) mode='' ;; esac
+    case "$rest" in *"$tab"*) rest=${rest#*"$tab"} ;; *) rest='' ;; esac
+    mode=${rest%%"$tab"*}
+    case "$rest" in *"$tab"*) rest=${rest#*"$tab"} ;; *) rest='' ;; esac
+    item=${rest%%"$tab"*}
+    case "$rest" in *"$tab"*) item_decision=${rest#*"$tab"} ;; *) item_decision='' ;; esac
     [ -n "${key:-}" ] || continue
     case "$key" in *[!A-Za-z0-9._-]*) continue ;; esac
     [ "${#key}" -le 128 ] || continue
@@ -1248,6 +1342,8 @@ command_answers() {
       skipped=$((skipped + 1))
       continue
     fi
+    item=$(sanitize_field "${item:-}")
+    item_decision=$(sanitize_field "${item_decision:-}")
     release_flag=''
     case "${mode:-}" in
       ''|done) : ;;
@@ -1308,6 +1404,22 @@ command_answers() {
           && closed_answer_replay_mode_compatible "$recorded_mode" "$body"; } \
         || { [ "$release_flag" = --release ] && [ "$state" != "done" ] \
           && [ "$hold_kind" != captain ] && [ "$recorded_mode" = released ]; }; then
+        if [ -n "$item" ]; then
+          rec_item=$(recorded_batch_item "$body" || true)
+          [ "$rec_item" = "$item" ] || {
+            printf 'skipped: %s (item mismatch)\n' "$id"
+            skipped=$((skipped + 1))
+            continue
+          }
+        fi
+        if [ -n "$item_decision" ]; then
+          rec_dec=$(recorded_item_decision "$body" || true)
+          [ "$rec_dec" = "$item_decision" ] || {
+            printf 'skipped: %s (item decision mismatch)\n' "$id"
+            skipped=$((skipped + 1))
+            continue
+          }
+        fi
         occurrence=$(resolution_record_count "$body")
         case "$recorded_mode" in
           repaired) publish_parent_resolution_then_retire "$id" "$occurrence" "answered (repaired)" ;;
@@ -1329,8 +1441,17 @@ command_answers() {
       skipped=$((skipped + 1))
       continue
     fi
-    # shellcheck disable=SC2086  # release_flag is empty or a single literal flag.
-    if "$0" answer "$id" --decision-file "$tmp" $release_flag </dev/null >/dev/null 2>"$err"; then
+    set -- "$0" answer "$id" --decision-file "$tmp"
+    if [ -n "$release_flag" ]; then
+      set -- "$@" "$release_flag"
+    fi
+    if [ -n "$item" ]; then
+      set -- "$@" --item "$item"
+    fi
+    if [ -n "$item_decision" ]; then
+      set -- "$@" --item-decision "$item_decision"
+    fi
+    if "$@" </dev/null >/dev/null 2>"$err"; then
       # A parent-channel delivery problem is reported on stderr by the answer
       # path even when the close succeeded; keep it visible.
       [ ! -s "$err" ] || cat "$err" >&2
@@ -1345,6 +1466,34 @@ command_answers() {
   rm -f -- "$tmp" "$err"
   printf 'answers: closed=%s skipped=%s\n' "$closed" "$skipped"
   [ "$skipped" -eq 0 ]
+}
+
+# REC-1's negative-claim phrase set, reused verbatim (not re-implemented) so
+# REC-4's claims-audit gate below classifies a report the same way REC-1's own
+# citation gate would. A cheap grep classifier: it detects the phrase, it does
+# not judge whether the claim is true.
+NEGATIVE_CLAIM_PATTERN='does not exist|no support|not available|unsupported|no longer'
+
+# The first report line matching a negative-claim phrase, trimmed and quoted
+# verbatim for a completion-gate refusal; empty when the report has none.
+report_negative_claim() {  # <report-file>
+  grep -iEm1 "$NEGATIVE_CLAIM_PATTERN" "$1" 2>/dev/null \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | cut -c1-300
+}
+
+# The claims-audit requirement (REC-4) for one origin's filed report: empty
+# when the origin has no report to audit, otherwise the minimum --claims-
+# checked count and (when the negative-claim classifier fired) the quoted
+# claim, on two lines.
+claims_audit_requirement() {  # <origin>
+  local report_file="$DATA/$1/report.md" claim
+  [ -f "$report_file" ] || return 0
+  claim=$(report_negative_claim "$report_file")
+  if [ -n "$claim" ]; then
+    printf '2\n%s\n' "$claim"
+  else
+    printf '1\n\n'
+  fi
 }
 
 # --- reconcile: verify latest state, then close with evidence or annotate ----
@@ -1623,9 +1772,25 @@ reconcile_note() {
 command_complete() {
   local origin=${1:-} meta previous='' supplied='' keys='' entry key status_file open has_meta=0 transfer_rc resolved
   local resolved_how attested_by_prefix=''
+  local claims_checked='' claims_checked_supplied=0 rest='' requirement min_claims claim
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
   validate_slug origin-id "$origin"
   shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --claims-checked) shift; claims_checked=${1:-}; claims_checked_supplied=1 ;;
+      *) rest="${rest}${rest:+ }$1" ;;
+    esac
+    shift
+  done
+  if [ "$claims_checked_supplied" = 1 ]; then
+    case "$claims_checked" in
+      ''|*[!0-9]*) fail "--claims-checked must be a non-negative whole number: $claims_checked" ;;
+    esac
+  fi
+  # shellcheck disable=SC2086  # rest is a validated space-separated token list.
+  set -- $rest
+  [ "$#" -ge 1 ] || { usage >&2; exit 2; }
   meta="$STATE/$origin.meta"
   [ -f "$meta" ] && has_meta=1
   if [ "$has_meta" = 1 ]; then
@@ -1636,6 +1801,23 @@ command_complete() {
   fi
   require_tasks_axi
   origin_exists_here "$origin" || fail "origin $origin is not owned by the active home $FM_HOME"
+  requirement=$(claims_audit_requirement "$origin")
+  if [ -n "$requirement" ]; then
+    min_claims=$(printf '%s\n' "$requirement" | sed -n 1p)
+    claim=$(printf '%s\n' "$requirement" | sed -n 2p)
+    if [ "$claims_checked_supplied" != 1 ]; then
+      if [ -n "$claim" ]; then
+        fail "origin $origin report has a negative claim and needs --claims-checked N (N>=2) before completing; quoted claim: \"$claim\""
+      fi
+      fail "origin $origin has a filed report; pass --claims-checked N (N>=1) attesting how many load-bearing claims were spot-verified"
+    fi
+    if [ "$claims_checked" -lt "$min_claims" ]; then
+      if [ -n "$claim" ]; then
+        fail "origin $origin report has a negative claim needing --claims-checked N (N>=2), got $claims_checked; quoted claim: \"$claim\""
+      fi
+      fail "origin $origin report needs --claims-checked N (N>=1), got $claims_checked"
+    fi
+  fi
   if [ "$#" -eq 1 ] && [ "$1" = --none ]; then
     supplied=''
   else

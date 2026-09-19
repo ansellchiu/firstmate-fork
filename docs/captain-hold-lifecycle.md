@@ -15,10 +15,10 @@ Publishing the stamp first ensures a snapshot cannot observe a newly captain-hel
 Retries of an active hold preserve its hold-set timestamp, while re-holding released work starts a new timestamped lifecycle; a closed task is refused rather than reopened, and `--until` stores the captain's own deferral date through tasks-axi's date gate.
 
 The `answer` subcommand records the captain's exact words and resolves the call in the same act: it closes a question-shaped call, while `answer --release` frees a captain-gated work item to proceed without completing it.
-It requires a non-empty captain decision file of at most 8192 bytes, durably writes a resolution block carrying the decision digest and a `Resolution mode:` while retaining the leading hold-set stamp until the selected `tasks-axi done` or `tasks-axi unhold` transition succeeds, then restores the successful record's resolution-first body ordering (the previous body remains preserved below the block and archived through tasks-axi `--archive-body`).
+It requires a non-empty captain decision file of at most 8192 bytes, durably writes a resolution block carrying the decision digest, a `Resolution mode:`, and optional `Batch item:` / `Item decision:` lines when answering a batch, while retaining the leading hold-set stamp until the selected `tasks-axi done` or `tasks-axi unhold` transition succeeds, then restores the successful record's resolution-first body ordering (the previous body remains preserved below the block and archived through tasks-axi `--archive-body`).
 If the close is interrupted, the still-held task therefore keeps its original age basis.
 A matching retry also completes any resolution-first normalization left unfinished after the close itself succeeded.
-An exact retry is idempotent only when the requested close mode matches the newest record; a drifted answer or mode mismatch is rejected, while a re-held task accepts a new answer as a new record on top.
+An exact retry is idempotent only when the requested close mode and any recorded item fields match the newest record; a drifted answer or mode mismatch is rejected, while a re-held task accepts a new answer as a new record on top.
 On a task closed outside the script, `answer` records the missing block only when the captain-hold annotations tasks-axi preserves through a close prove the captain owned it, and it verifies the task stays closed.
 A hold whose `--until` date has passed keeps those annotations while tasks-axi reports it no longer held, so an expired deferral remains answerable.
 
@@ -26,6 +26,11 @@ The `complete` subcommand unions the reviewed captain-held task ids into `decisi
 A post-teardown visual review can complete against the surviving report and durable tasks without recreating volatile task metadata.
 It accepts `--none` as an explicit semantic inventory result, refused while the origin still has a lifecycle-open keyed status decision, and verifies every listed task against tasks-axi before recording completion.
 With a non-empty inventory it appends a `captain-held [key=<key>]: tracked by <inventory>` transfer event for every still-open keyed status decision, which `bin/fm-classify-lib.sh` recognizes as closing the live status copy without claiming that the captain has answered it.
+
+**Claims audit (postmortem REC-4).** When the origin has a filed report (`data/<origin>/report.md`), `complete` also requires `--claims-checked N`, an attestation of how many load-bearing claims were spot-verified before completion.
+A grep classifier reused from REC-1 scans the report for its negative-claim phrase set (`bin/fm-captain-hold.sh --help` owns the exact phrases); N must be at least 2 when it fires and at least 1 otherwise.
+This is an idempotent-attestation forcing function in the same style as the completion inventory itself - the gate never re-verifies a claim, it only refuses to complete without the count - and a detected negative claim with an omitted or insufficient count is refused with the offending report line quoted.
+An origin with no filed report is unaffected.
 
 Scout teardown calls the read-only `verify` subcommand after checking for the report and before removing any source state.
 `verify` requires the recorded attestation, requires every recorded inventory entry to still be durable (actively captain-held, or carrying a recorded answer), and fails on any keyed status decision that opened after the last `complete`, which makes re-running `complete` the repair.
@@ -48,8 +53,9 @@ A pending-close record that fails validation outright is a different case and st
 ## Answer-time resolution
 
 "A keyed answer resolves its matching captain-held task" is one capability with one owner.
-`answers` is its channel-agnostic entry point: it reads `<task-id>\t<answer>\t<label>[\t<mode>]` lines and resolves each named task through the same `answer` path, so every guard applies identically no matter which channel the answer arrived on.
+`answers` is its channel-agnostic entry point: it reads `<task-id>\t<answer>\t<label>[\t<mode>[\t<item>[\t<item-decision>]]]` lines and resolves each named task through the same `answer` path, so every guard applies identically no matter which channel the answer arrived on.
 The optional mode column carries a card-declared close: `done` (default) completes the task and `release` lifts the hold so held work resumes; any other value is skipped.
+Optional fifth and sixth columns record the batch item position and captain's words for that item.
 A key that names no task, names a task that is not captain-held, or names a task already closed is reported as `skipped:` and feeds nothing; a replay whose answer and requested close mode match the newest record is an idempotent `closed:`, while a mode mismatch is skipped; and the command exits nonzero when any key was skipped.
 `--source` is provenance text recorded in the durable decision, never a behavior switch, and the command carries no per-channel branch.
 
@@ -210,6 +216,7 @@ The captured-source coverage proves Lavish deduplicates each card before separat
 The board's half is pinned in `tests/fm-bearings-board.test.sh`: every published decision card carries exactly one reconcile option, authored options reserve that value across every card type, recommendations name authored options, a decision card whose structured subject appears in the payload's landed rows is dropped while a genuinely open one is kept even when an unrelated landed id contains its key after a newline, a build requires a fresh authoritative listed-open result before binding or arming, a reopen retires the pre-reopen source generation and waits for a fresh live listener, and a rebuild of an already-armed board with no live listener starts one.
 That suite drives its Lavish session through a protocol-shaped stub, and `tests/fm-bearings-board-lavish-live-e2e.test.sh` is the default-on capability guard for the installed provider; [`verification/process-event-sources.md`](verification/process-event-sources.md) owns the version-scoped evidence.
 [`verification/process-event-sources.md`](verification/process-event-sources.md) owns the process-event ownership and reclamation evidence exercised by `tests/fm-procevent.test.sh`.
+
 
 `tests/fm-classify-decision-key.test.sh` pins `status_key_closing_verb` itself: it separates a resolution from the durable-transfer close and from a still-open key, reports the last real transition across re-openings and both key positions, and treats a prose mention as no transition.
 

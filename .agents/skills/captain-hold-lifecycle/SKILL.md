@@ -22,6 +22,10 @@ Put the question and its options in the hold reason, and keep one held task per 
 Register or re-hold through `bin/fm-captain-hold.sh hold`, which is idempotent per task id.
 After inventorying the whole report and review surface, run `bin/fm-captain-hold.sh complete` with every captain-held task id, or with `--none` only when the reviewed surface leaves nothing waiting on the captain.
 A completed investigation and an ended visual review use this same owner and completion command; a visual tool, including Lavish, never owns a parallel completion policy.
+When the origin has a filed report (`data/<origin>/report.md`), `complete` also requires `--claims-checked N`: an attestation of how many load-bearing claims you spot-verified before declaring the report done.
+Spot-check the claims yourself first, then pass the count; N must be at least 2 when the report trips the negative-claim classifier (`bin/fm-captain-hold.sh --help` owns the exact phrase set) and at least 1 otherwise.
+This is a forcing function, not a re-verification the gate performs for you: an attested count that turns out wrong is not caught here, but omitting the attestation, or attesting too few against a detected negative claim, is refused with the offending report line quoted.
+A negative existence claim is the highest-risk claim class - a false "X does not exist" verdict relayed as fact is exactly the failure this attestation exists to force a spot-check against.
 Run the command in the originating work's authoritative `FM_HOME`; secondmate-owned work registers in that secondmate home's backlog, and a question already held anywhere is never re-registered as a second row.
 Do not close a captain-held task merely because the originating investigation completed, its report was archived, its visual review ended, or its task was torn down.
 Holding the work item the question gates is safe for exactly that reason: cleanup keeps such a row open with the finished work's deliverable recorded and returns it to the queue, so it still reads as the captain's own call.
@@ -59,7 +63,7 @@ The absence of a routed work item is not a divergence and the guard never requir
 1. Read the complete investigation result and complete the visual review before declaring either complete.
 2. Inventory only genuine unresolved choices that require the captain, and find the task each one gates.
 3. Hold that task - or create one captain-held task for the review's open questions - with a concise reason carrying the question and options.
-4. Run `complete` with the full captain-held inventory for that review pass.
+4. Spot-check the report's load-bearing claims, then run `complete` with the full captain-held inventory and `--claims-checked N` for that review pass.
 5. Relay the choices to the captain as decisions from Bearings' Captain's Call section under `AGENTS.md` section 9; do not use the word hold in captain chat.
 6. Close each call only through `answer` (or a channel that feeds `answers`), close a board-requested moot call through evidence-backed `reconcile close`, record a still-active reconciliation through `reconcile note`, use `--until` when the captain defers it, or confirm a channel already closed it.
 7. Confirm Bearings reflects the outcome: answered or reconciled-moot calls leave Captain's Call, released work resumes, active reconciliations remain held, and deferred calls sit in Charted Next with their date.
