@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Static watcher program for a validated PR/MR poll sidecar.
-# It emits exactly one merged line for a merged PR or MR and stays silent
-# otherwise, including on every error, so a failed lookup can never be read as
-# a merge. The provider-tagged identity is data in the sidecar and is never
-# interpolated into this source: these bytes are identical for every task.
+# It emits exactly one merged line for a merged PR or MR, or closed for a
+# closed-unmerged PR or MR, and stays silent otherwise, including on every
+# error, so a failed lookup can never be read as a merge. The provider-tagged
+# identity is data in the sidecar and is never interpolated into this source:
+# these bytes are identical for every task.
 # Each provider is read through its own standard CLI, gh for GitHub and glab
 # for GitLab, so an upstream checkout needs no extra tooling to follow either.
 set -u
@@ -63,7 +64,10 @@ case "$provider" in
     esac
     [ "$url" = "https://github.com/$owner/$repo/pull/$number" ] || exit 0
     state=$(gh pr view "$url" --json state -q .state 2>/dev/null) || exit 0
-    [ "$state" = MERGED ] && printf '%s\n' merged
+    case "$state" in
+      MERGED) printf '%s\n' merged ;;
+      CLOSED) printf '%s\n' closed ;;
+    esac
     ;;
   gitlab)
     [ "${#host}" -ge 1 ] && [ "${#host}" -le 253 ] || exit 0
@@ -103,7 +107,10 @@ case "$provider" in
     # unreadable merge request stays silent instead of reporting a merge.
     raw=$(glab mr view "$number" -R "https://$host/$path" 2>/dev/null) || exit 0
     state=$(printf '%s\n' "$raw" | sed -n 's/^state:[[:space:]]*//p' | head -1) || exit 0
-    [ "$state" = merged ] && printf '%s\n' merged
+    case "$state" in
+      merged) printf '%s\n' merged ;;
+      closed) printf '%s\n' closed ;;
+    esac
     ;;
   *) exit 0 ;;
 esac

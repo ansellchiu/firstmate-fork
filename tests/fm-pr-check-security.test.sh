@@ -194,6 +194,19 @@ case "${1:-} ${2:-}" in
     [ "$#" -eq 5 ] && [ "${4:-}" = --repo ] || exit 2
     printf 'pull_request:\n  number: %s\n  state: %s\n' "$3" "${FM_TEST_GH_MERGE_STATE:-merged}"
     ;;
+  "api user")
+    # gh-axi never prints a bare value: every api result, --jq included, is
+    # wrapped in the structured api_response envelope reproduced here.
+    [ "${FM_TEST_GH_AXI_USER_FAIL:-0}" = 0 ] || exit 1
+    if [ -n "${FM_TEST_GH_AXI_USER_ENVELOPE:-}" ]; then
+      printf '%s\n' "$FM_TEST_GH_AXI_USER_ENVELOPE"
+    else
+      printf 'api_response:\n  body: %s\n  truncated: false\n' "${FM_TEST_GH_AXI_LOGIN:-ansellchiu}"
+    fi
+    ;;
+  "pr edit")
+    [ "${FM_TEST_GH_AXI_EDIT_FAIL:-0}" = 0 ] || exit 1
+    ;;
 esac
 exit "${FM_TEST_GH_AXI_RC:-0}"
 SH
@@ -724,17 +737,19 @@ test_static_poll_contract() {
   dir=$(make_case poll-contract)
   make_poll_fixture "$dir"
 
-  for state in OPEN CLOSED EMPTY MALFORMED; do
+  for state in OPEN EMPTY MALFORMED; do
     case "$state" in
       EMPTY) value= ;;
       MALFORMED) value='not-a-state' ;;
       *) value=$state ;;
     esac
     out=$(FM_TEST_GH_STATE="$value" run_poll "$dir")
-    [ -z "$out" ] || fail "static poll emitted for non-merged state"
+    [ -z "$out" ] || fail "static poll emitted for non-terminal state"
   done
   out=$(FM_TEST_GH_STATE=MERGED run_poll "$dir")
   [ "$out" = merged ] || fail "static poll did not emit exactly one merged line"
+  out=$(FM_TEST_GH_STATE=CLOSED run_poll "$dir")
+  [ "$out" = closed ] || fail "static poll did not emit exactly one closed line"
   out=$(FM_TEST_GH_FAIL=1 run_poll "$dir")
   [ -z "$out" ] || fail "static poll emitted after gh failure"
 
@@ -1339,14 +1354,16 @@ gitlab.example
 group/subgroup/project
 7" ] || fail "published GitLab sidecar bytes were not exact"
 
-  # Only an exact merged state wakes firstmate. Every other reading, including
+  # Exact merged and closed states wake firstmate distinctly. Every other reading, including
   # an unreadable merge request and a changed output format, stays silent.
-  for value in opened closed locked '' not-a-state MERGED merged-but-not; do
+  for value in opened locked '' not-a-state MERGED merged-but-not; do
     out=$(FM_TEST_GLAB_STATE="$value" run_poll "$dir")
-    [ -z "$out" ] || fail "GitLab poll emitted for a non-merged state"
+    [ -z "$out" ] || fail "GitLab poll emitted for a non-terminal state"
   done
   out=$(FM_TEST_GLAB_STATE=merged run_poll "$dir")
   [ "$out" = merged ] || fail "GitLab poll did not emit exactly one merged line"
+  out=$(FM_TEST_GLAB_STATE=closed run_poll "$dir")
+  [ "$out" = closed ] || fail "GitLab poll did not emit exactly one closed line"
   out=$(FM_TEST_GLAB_FAIL=1 run_poll "$dir")
   [ -z "$out" ] || fail "GitLab poll emitted after a glab failure"
 
@@ -1963,15 +1980,12 @@ test_external_merge_transition_retires_only_terminal_poll() {
   add_stop_custom_check "$dir"
   before=$(poll_artifact_snapshot "$state" task-a)
 
-  for label in open-green open-red closed-unmerged forge-error malformed; do
+  for label in open-green open-red forge-error malformed; do
     rm -f "$state/.last-check"
     set +e
     case "$label" in
       open-green|open-red)
         FM_TEST_GH_STATE=OPEN run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/$label.out" 2> "$dir/$label.err"
-        ;;
-      closed-unmerged)
-        FM_TEST_GH_STATE=CLOSED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/$label.out" 2> "$dir/$label.err"
         ;;
       forge-error)
         FM_TEST_GH_FAIL=1 run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/$label.out" 2> "$dir/$label.err"
@@ -1987,6 +2001,15 @@ test_external_merge_transition_retires_only_terminal_poll() {
     [ "$(poll_artifact_snapshot "$state" task-a)" = "$before" ] || fail "$label changed the armed poll"
     ack_watcher_cycle "$state" || fail "$label control wake acknowledgement failed"
   done
+
+  rm -f "$state/.last-check"
+  set +e
+  FM_TEST_GH_STATE=CLOSED run_watcher_bounded "$dir/home" "$dir/fakebin" > "$dir/closed.out" 2> "$dir/closed.err"
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] || fail "closed unmerged cycle failed: $(cat "$dir/closed.err")"
+  case "$(cat "$dir/closed.out")" in check:*task-a.check.sh:*closed) ;; *) fail "closed unmerged PR did not surface its wake: $(cat "$dir/closed.out")" ;; esac
+  ack_watcher_cycle "$state" || fail "closed unmerged wake acknowledgement failed"
 
   rm -f "$state/z-stop.check.sh" "$state/z-stop.check-trust" "$state/.last-check"
   set +e
@@ -2752,6 +2775,127 @@ SH
   pass "device re-record publication waits without rewriting its registration"
 }
 
+# The captain's review inbox depends on the registration actually naming a login
+# GitHub accepts. gh-axi's --jq output is an api_response envelope, so this walks
+# the whole registration entrypoint and asserts the assignment the fix produces,
+# the refusal when the envelope carries no usable login, and that either way the
+# durable poll the assignment deliberately follows survives.
+test_github_registration_assigns_the_captain() {
+  local dir url
+  dir=$(make_case github-captain-assignment)
+  write_task_meta "$dir"
+  url=https://github.com/my-org/repo_name.with-dots/pull/37
+
+  run_check_entry "$dir" task-a "$url" > "$dir/stdout" 2> "$dir/stderr" \
+    || fail "GitHub registration failed: $(cat "$dir/stderr")"
+  grep -qxF 'pr edit 37 --repo my-org/repo_name.with-dots --add-assignee ansellchiu' "$dir/gh-axi.log" \
+    || fail "registration did not assign the authenticated captain login: $(cat "$dir/gh-axi.log")"
+  ! grep -q 'captain assignment' "$dir/stderr" \
+    || fail "a successful assignment still reported an actionable failure: $(cat "$dir/stderr")"
+  fm_pr_poll_artifacts_valid "$dir/home/state" task-a "$POLL" \
+    || fail "assignment path disturbed the durable poll"
+
+  : > "$dir/gh-axi.log"
+  # A login that parses as JSON is printed bare rather than wrapped, which is
+  # gh-axi's other answer shape for the same request.
+  FM_TEST_GH_AXI_USER_ENVELOPE='12345' \
+    run_check_entry "$dir" task-a "$url" >/dev/null 2> "$dir/bare.err" \
+    || fail "a bare login lost the registration"
+  grep -qxF 'pr edit 37 --repo my-org/repo_name.with-dots --add-assignee 12345' "$dir/gh-axi.log" \
+    || fail "a bare login was not assigned: $(cat "$dir/gh-axi.log")"
+  ! grep -q 'captain assignment' "$dir/bare.err" \
+    || fail "a bare login was reported as a failure: $(cat "$dir/bare.err")"
+
+  : > "$dir/gh-axi.log"
+  FM_TEST_GH_AXI_USER_ENVELOPE=$'api_response:\n  body: ansellchiu\n  truncated: true' \
+    run_check_entry "$dir" task-a "$url" > "$dir/truncated.out" 2> "$dir/truncated.err" \
+    || fail "a refused login lost the registration"
+  ! grep -q '^pr edit ' "$dir/gh-axi.log" \
+    || fail "a truncated envelope still reached an assignment: $(cat "$dir/gh-axi.log")"
+  grep -qF 'could not determine the authenticated login' "$dir/truncated.err" \
+    || fail "a refused login was not reported as actionable: $(cat "$dir/truncated.err")"
+  [ "$(wc -l < "$dir/truncated.err")" -eq 1 ] \
+    || fail "the assignment refusal was not one actionable line: $(cat "$dir/truncated.err")"
+  fm_pr_poll_artifacts_valid "$dir/home/state" task-a "$POLL" \
+    || fail "a refused login lost the durable poll"
+  grep -qxF "pr=$url" "$dir/home/state/task-a.meta" \
+    || fail "a refused login lost the canonical PR metadata"
+  pass "GitHub registration assigns the captain and refuses an unusable login durably"
+}
+
+# Every way the assignment can fail leaves the same two guarantees: the captain
+# hears one actionable line naming the real cause, and the PR-ready record the
+# assignment deliberately follows is untouched. Each cause is driven end to end
+# through the registration entrypoint.
+test_failed_captain_assignment_keeps_the_ready_record() {
+  local dir url case_name stderr
+  dir=$(make_case github-assignment-failures)
+  url=https://github.com/my-org/repo_name.with-dots/pull/37
+
+  for case_name in login-lookup-failed edit-failed tool-absent; do
+    rm -rf "$dir/home/state"
+    mkdir -p "$dir/home/state"
+    write_task_meta "$dir"
+    : > "$dir/gh-axi.log"
+    stderr="$dir/$case_name.err"
+    case "$case_name" in
+      login-lookup-failed)
+        FM_TEST_GH_AXI_USER_FAIL=1 run_check_entry "$dir" task-a "$url" >/dev/null 2> "$stderr" \
+          || fail "$case_name lost the registration: $(cat "$stderr")"
+        grep -qF 'could not determine the authenticated login' "$stderr" \
+          || fail "$case_name did not name its cause: $(cat "$stderr")"
+        ! grep -q '^pr edit ' "$dir/gh-axi.log" \
+          || fail "$case_name still attempted an assignment: $(cat "$dir/gh-axi.log")"
+        ;;
+      edit-failed)
+        FM_TEST_GH_AXI_EDIT_FAIL=1 run_check_entry "$dir" task-a "$url" >/dev/null 2> "$stderr" \
+          || fail "$case_name lost the registration: $(cat "$stderr")"
+        grep -qF 'captain assignment failed for ansellchiu' "$stderr" \
+          || fail "$case_name did not name the login it failed for: $(cat "$stderr")"
+        grep -qxF 'pr edit 37 --repo my-org/repo_name.with-dots --add-assignee ansellchiu' "$dir/gh-axi.log" \
+          || fail "$case_name never reached the assignment it reports: $(cat "$dir/gh-axi.log")"
+        ;;
+      tool-absent)
+        # BASE_PATH is deliberately restricted and holds no gh-axi, so removing
+        # the stub leaves the entrypoint on a host without the tool at all. That
+        # is the whole case, and it is also what keeps it hermetic: a reachable
+        # gh-axi here would assign a real account on a fixture slug, so the case
+        # refuses to run rather than issue that write.
+        mv "$dir/fakebin/gh-axi" "$dir/gh-axi.stashed"
+        if PATH="$dir/fakebin:$BASE_PATH" command -v gh-axi >/dev/null 2>&1; then
+          mv "$dir/gh-axi.stashed" "$dir/fakebin/gh-axi"
+          fail "$case_name: gh-axi is still reachable on the test PATH, which would send an assignment to a real repository"
+        fi
+        run_check_entry "$dir" task-a "$url" >/dev/null 2> "$stderr" \
+          || fail "$case_name lost the registration: $(cat "$stderr")"
+        mv "$dir/gh-axi.stashed" "$dir/fakebin/gh-axi"
+        grep -qF 'requires gh-axi on PATH' "$stderr" \
+          || fail "an absent gh-axi was misreported: $(cat "$stderr")"
+        ! grep -qF 'could not determine the authenticated login' "$stderr" \
+          || fail "an absent gh-axi was blamed on the login: $(cat "$stderr")"
+        ;;
+    esac
+    [ "$(wc -l < "$stderr")" -eq 1 ] \
+      || fail "$case_name did not report exactly one actionable line: $(cat "$stderr")"
+    fm_pr_poll_artifacts_valid "$dir/home/state" task-a "$POLL" \
+      || fail "$case_name lost the durable poll"
+    grep -qxF "pr=$url" "$dir/home/state/task-a.meta" \
+      || fail "$case_name lost the canonical PR metadata"
+  done
+  pass "every captain assignment failure names its cause and keeps the PR-ready record"
+}
+
+test_gitlab_registration_stays_off_github() {
+  local dir url
+  dir=$(make_case gitlab-no-assignment)
+  write_task_meta "$dir"
+  url=https://gitlab.example/group/subgroup/project/-/merge_requests/17
+  run_check_entry "$dir" task-a "$url" >/dev/null 2> "$dir/stderr" \
+    || fail "GitLab registration failed: $(cat "$dir/stderr")"
+  [ ! -s "$dir/gh-axi.log" ] || fail "GitLab registration reached gh-axi: $(cat "$dir/gh-axi.log")"
+  pass "GitLab registration performs no GitHub assignment"
+}
+
 test_parser_matrix
 test_gitlab_merge_watch
 test_merged_poll_retires_once
@@ -2789,3 +2933,6 @@ test_bootstrap_leaves_unauthenticated_checks
 test_custom_snapshot_cleanup_on_signal
 test_returned_custom_check_descendants_are_drained
 test_teardown_removes_poll_artifacts
+test_github_registration_assigns_the_captain
+test_failed_captain_assignment_keeps_the_ready_record
+test_gitlab_registration_stays_off_github
