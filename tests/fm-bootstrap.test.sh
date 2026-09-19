@@ -725,6 +725,37 @@ test_treehouse_lease_check_follows_resolved_backend() {
   pass "bootstrap: the treehouse lease check follows the resolved backend's worktree provider"
 }
 
+# The session-start relay only echoes lines carrying a recognized marker, so a
+# posture-read refusal whose detail lines lack the marker reaches the captain as
+# a headline ending in a bare colon. fm-fleet-sync.sh repeats the STUCK marker on
+# every detail line for exactly this reason; this asserts the detail survives.
+test_fleet_sync_refusal_detail_reaches_the_captain() {
+  local case_dir home fakebin fake_root out
+  case_dir="$TMP_ROOT/fleet-refusal-relay"
+  home="$case_dir/home"
+  mkdir -p "$home/config" "$home/projects"
+  printf '%s\n' manual > "$home/config/backlog-backend"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  fake_root="$case_dir/fake-root"
+  mkdir -p "$fake_root/bin"
+  cat > "$fake_root/bin/fm-fleet-sync.sh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'pm-iota: STUCK: cannot read the registered delivery posture from /h/data/projects.md; sync refused until the registry line is fixed:'
+printf '%s\n' 'pm-iota: STUCK:   error: unknown flag "+parkd" on project "pm-iota" in /h/data/projects.md'
+exit 1
+SH
+  chmod +x "$fake_root/bin/fm-fleet-sync.sh"
+
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$home" FM_ROOT_OVERRIDE="$fake_root" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh" 2>/dev/null)
+
+  assert_contains "$out" 'FLEET_SYNC: pm-iota: STUCK: cannot read the registered delivery posture' \
+    "the relay must carry the refusal headline"
+  assert_contains "$out" 'unknown flag "+parkd"' \
+    "the relay must carry the offending annotation, not a headline ending in a bare colon"
+  pass "a fleet-sync posture refusal reaches the captain with the annotation that caused it"
+}
+
 test_fleet_sync_timeout_scales_with_origin_backed_project_count() {
   local case_dir home fakebin fake_root out
   case_dir="$TMP_ROOT/fleet-timeout-scaled"
@@ -1153,6 +1184,8 @@ kimi model profile is accepted^{"rules":[{"when":"kimi work","use":{"harness":"k
 unsupported kimi effort is flagged^{"rules":[{"when":"kimi work","use":{"harness":"kimi","model":"kimi-code/k3","effort":"high"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: kimi:high
 cursor model profile is accepted^{"rules":[{"when":"cursor work","use":{"harness":"cursor","model":"cursor-grok-4.5-high"}}]}^empty^
 unsupported cursor effort is flagged^{"rules":[{"when":"cursor work","use":{"harness":"cursor","model":"cursor-grok-4.5-high","effort":"high"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: cursor:high
+agy model profile is accepted^{"rules":[{"when":"gemini work","use":{"harness":"agy","model":"gemini-3.7-flash-medium"}}]}^empty^
+unsupported agy effort is flagged^{"rules":[{"when":"gemini work","use":{"harness":"agy","model":"gemini-3.7-flash-medium","effort":"medium"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - invalid effort: agy:medium
 array use with quota-balanced is accepted^{"rules":[{"when":"big feature","use":[{"harness":"claude","model":"claude-sonnet-5","effort":"high"},{"harness":"codex","model":"gpt-5.5","effort":"high"}],"select":"quota-balanced"}]}^empty^
 array use without select is accepted^{"rules":[{"when":"big feature","use":[{"harness":"claude"},{"harness":"codex"}]}]}^empty^
 one-element array use is accepted^{"rules":[{"when":"focused feature","use":[{"harness":"claude"}]}]}^empty^
@@ -1248,6 +1281,7 @@ test_cmux_bundled_cli_satisfies_dependency
 test_unknown_backend_reports_invalid_configuration
 test_json_backends_require_jq_not_tmux
 test_treehouse_lease_check_follows_resolved_backend
+test_fleet_sync_refusal_detail_reaches_the_captain
 test_fleet_sync_timeout_scales_with_origin_backed_project_count
 test_fleet_sync_timeout_floor_preserves_small_fleets
 test_fleet_sync_timeout_explicit_override_wins
@@ -1261,3 +1295,63 @@ test_network_phases_record_per_step_elapsed_times
 test_tasks_axi_verdict_handoff_is_consumed_once
 test_crew_dispatch_active_rules_are_verbose_bootstrap_info
 test_crew_dispatch_validation
+
+test_vault_diagnostic() {
+  local case_dir fakebin out
+  case_dir="$TMP_ROOT/vault-healthy"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  cat > "$fakebin/av" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = list ]; then
+  printf 'item1\n'
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$fakebin/av"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  [ -z "$out" ] || fail "bootstrap with healthy av expected silence, got: $out"
+
+  case_dir="$TMP_ROOT/vault-refused"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  cat > "$fakebin/av" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = list ]; then
+  printf 'automic vault: human approval required\n' >&2
+  exit 1
+fi
+exit 1
+SH
+  chmod +x "$fakebin/av"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_contains "$out" "VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)" \
+    "bootstrap with refused av emits VAULT line"
+
+  case_dir="$TMP_ROOT/vault-hung"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  cat > "$fakebin/av" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = list ]; then
+  exec perl -e 'sleep 300'
+fi
+exit 0
+SH
+  chmod +x "$fakebin/av"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_VAULT_PROBE_TIMEOUT=1 FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_contains "$out" "VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)" \
+    "bootstrap with hung av emits VAULT line"
+
+  pass "bootstrap reports degraded vault and stays silent when vault is healthy"
+}
+
+test_vault_diagnostic
+

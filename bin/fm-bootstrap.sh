@@ -17,6 +17,7 @@
 #                 "BACKLOG_RECONCILE: <id>: <what this home could not reconcile>",
 #                 "BACKLOG_RECONCILE: code-root <file> is not this home's <file>; ...",
 #                 "TANGLE: <remediation>",
+#                 "VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)",
 #                 "SECONDMATE_SYNC: secondmate <id>: skipped: <reason>",
 #                 "NUDGE_SECONDMATES: secondmate <id>: send failed: <reason>",
 #                 "BOOTSTRAP_INFO: nudged fm-<id> with '<message>'",
@@ -195,6 +196,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-backend.sh"
 # shellcheck source=bin/fm-remote-readiness-lib.sh disable=SC1091
 . "$SCRIPT_DIR/fm-remote-readiness-lib.sh"
+# shellcheck source=bin/fm-vault-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-vault-lib.sh"
 # fm-timing-lib.sh is inert unless FM_TIMING_LOG names a file, which only the
 # deferred network stage sets, so an ordinary bootstrap run records nothing.
 # shellcheck source=bin/fm-timing-lib.sh disable=SC1091
@@ -1143,7 +1146,10 @@ crew_dispatch_validate() {
       elif $h == "pi" or $h == "pi-signed" or $h == "omp" then (["low","medium","high","xhigh","max"] | index($e))
       elif $h == "muse" then (["low","medium","high","xhigh","max"] | index($e))
       elif $h == "rovo" then (["low","medium","high","max"] | index($e))
-      elif $h == "opencode" or $h == "kimi" or $h == "cursor" then false
+      # agy has no separate effort flag: Gemini reasoning class is baked into
+      # the --model id (gemini-3.7-flash-medium/high), the same reason cursor,
+      # opencode, and kimi reject a configured effort field here.
+      elif $h == "opencode" or $h == "kimi" or $h == "cursor" or $h == "agy" then false
       else true
       end;
     def profiles($value):
@@ -1491,6 +1497,7 @@ detect_local_tools() {
   if command -v tasks-axi >/dev/null 2>&1 && ! fm_tasks_axi_compatible; then
     echo "MISSING: tasks-axi (install: $(install_cmd tasks-axi))"
   fi
+  fm_vault_diagnostic
 }
 
 detect_local_config() {

@@ -50,7 +50,7 @@ Homes on any other primary harness never load this feature and are entirely unaf
 While attended, a captain-facing (verdict `captain`) branch outcome persists as one exact, sequence-keyed visible transcript entry and then opens one sequence-keyed processing turn on main, which stays open until main acknowledges that sequence through its `fm_branch_processed` tool; while away, the entry persists but processing waits until the record is archived.
 The branch prompt's "Verdict: routine or captain" section owns the distinction between captain-facing, unsolicited routine, and unchanged-review outcomes.
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns main's event ownership, acknowledgement duty, and conversational treatment for merged outcomes, while the persisted entry itself owns captain visibility.
-A no-change heartbeat outcome explicitly reported with `task=fleet` and `silent=true` is delivered silently with no rendered note, while every other routine outcome still appends a rendered, sailboat-prefixed note.
+A no-change heartbeat outcome explicitly reported with `task=fleet` and `silent=true` is delivered silently with no rendered note, while every other routine outcome appends a rendered, sailboat-prefixed note unless it repeats a fact the captain has already read: an unchanged routine fact about one task is stored every time but presented once per `FM_BRANCH_OUTCOME_DEDUPE_WINDOW` window, and [docs/pi-supervision-branch.md](pi-supervision-branch.md) "Repeat suppression" owns that boundary.
 
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 
@@ -208,6 +208,34 @@ A Secondmate on a remote route is covered the same way: the primary resolves and
 The presence flag is session-scoped enablement, so it transfers at launch and is left unchanged by live convergence into a running home.
 See [`trace-context.md`](trace-context.md) for carrier semantics, supported routes, the manual fleet-restart requirement, the session boundary, and safety limits; `bin/fm-trace-context-lib.sh`'s header owns the exact mechanics, and [`verification/trace-context.md`](verification/trace-context.md) records repeatable evidence.
 
+## Automic Vault secret injection (config/av-inject / FM_AV_INJECT)
+
+The optional local, gitignored `config/av-inject` toggle lets a worker run one key-dependent tool call as `av inject +KEY... -- <tool>` through `bin/fm-av-run.sh`, so a stored API key reaches that single process and nothing else.
+Automic Vault never wraps a worker launch (unrelated to the extension `launch-wrap` seam below, which never carries a secret's value either), and a worker never holds a key in its own environment.
+It is OFF by default: absent, empty, `off`, `false`, `no`, `0`, or any unrecognized value refuses injection, while `on`, `true`, `yes`, or `1` enables it.
+`FM_AV_INJECT` overrides the file with the same truthiness and exists for tests.
+
+Injection is point-of-use because Automic Vault matches its Direct Access rule against the launcher, meaning the signed process that runs `av`, and never the command `av` is about to run.
+A launch wrapper therefore presents the pane's shell as the launcher and the agent as the target, which no per-agent rule can match, so every wrapped launch fell back to a human approval prompt.
+Calling `av inject` from inside a running agent puts that agent's own signature in the launch chain, which is what a rule can match.
+
+Two operator prerequisites follow from that, and both must hold before the toggle is worth turning on:
+
+- A Direct Access rule is per secret name and per launcher, added in the Automic Vault app under a secret's Direct Secret Access, and a call for several secrets avoids the approval prompt only when that launcher has a rule for every requested name.
+- The launcher must be a Developer ID-signed executable with Hardened Runtime, which agents shipping as a signed native binary satisfy; an agent that runs as an interpreted script does not, so Pi (`#!/usr/bin/env node`) keeps per-request approval unless a different eligible launcher makes the call.
+
+When enabled, a home with no resolvable `av` CLI, an invalid secret name, an approval service that stays down, or an approval nobody answers refuses the call with a clear error rather than running a key-dependent tool without its key.
+
+The waits are bounded, and deliberately not by one number, because only one of them waits on a person:
+
+- `FM_VAULT_PROBE_TIMEOUT` (default 10 seconds, hard-capped at 10) bounds each liveness probe in `bin/fm-vault-lib.sh`, which has no human in the loop and should fail fast.
+- `FM_AV_INJECT_PREFLIGHT_DEADLINE` (default 45 seconds) caps the total wait for the service to come up after `av open`. A poll count alone is not a bound: `FM_AV_INJECT_PREFLIGHT_POLLS` multiplied by a per-probe bound is how a wait that looked bounded still ran for minutes, so the poll stops at whichever limit comes first.
+- `FM_AV_APPROVAL_TIMEOUT` (default 30 seconds) bounds the approval-carrying `av inject`, which the captain may have to answer with an iPhone Approval or Touch ID tap. A liveness-length bound would cut that off mid-tap.
+
+That approval bound is checked before the tool is exec'd rather than wrapped around it, because `av inject` execs the tool once approval lands and the same process then *is* the tool; a timeout around the exec would kill every tool call that outlived the approval window instead of just the unanswered approvals.
+The cost is that when no Direct Access rule matches, the check spends one approval prompt before the real call makes its own, which is the already-misconfigured case the rules above exist to fix.
+`config/av-inject` is primary-authoritative and inherited into secondmate homes like the other local config toggles.
+`bin/fm-av-inject-lib.sh`'s header owns the exact mode parsing, key validation, launcher-matching rationale, and injection mechanics, and `bin/fm-av-run.sh --help` output owns its calling syntax.
 ## Turn-end pane-churn absorb (config/turnend-churn-absorb)
 
 The optional local, gitignored `config/turnend-churn-absorb` presence flag opts this home into a default-off third form of positive work evidence in watcher triage.
@@ -256,6 +284,40 @@ An inherited `data/captain-shared.md` counts in a secondmate's total but remains
 The internal [`/stow` skill](../.agents/skills/stow/SKILL.md) owns curation and its automatic secondmate cascade, which accounts every home against this same per-home allowance separately rather than against a fleet total.
 The helper's header owns exact parsing, publication, and report output mechanics.
 
+## Portfolio attention limit (config/attention-limit)
+
+`config/attention-limit` sets how many projects may consume captain attention at once, the bound `AGENTS.md` section 7 enforces at intake.
+The file is local and gitignored, and it is the only way to change the limit: an ambient environment variable deliberately cannot, because a value nobody can see is the silent, forgotten relaxation the limit exists to prevent.
+Absent, the built-in default of three applies, which is the normal state for a home that has never configured it.
+One positive base-10 integer followed by exactly one newline sets the limit to that many projects.
+The single word `off`, followed by exactly one newline, disables enforcement: the intake check then admits without a limit check, and `bin/fm-attention.sh status`, the fleet view's Portfolio table, and the bearings projection each say the limit is disabled rather than showing a number.
+Any other content is rejected: an empty file, zero, a negative or leading-zero value, several values, extra lines, a missing trailing newline, a symlink, a hardlink, a non-regular file, or a file that cannot be read.
+A rejected file is never treated as the default and never as a silent disable.
+It takes the same unavailable path as an unreadable project registry: the presentation surfaces say the classification is unavailable and name `config/attention-limit` as the cause, and `bin/fm-spawn.sh` warns loudly and dispatches anyway, because this bound protects a human's working memory rather than acting as a safety boundary.
+Disabling the limit is a configuration choice and not an override: `--attention-override` still carries exactly one admission on a current explicit captain instruction, and a parked project stays parked under every setting.
+`bin/fm-attention-lib.sh`'s header owns the parsing and classification contract.
+
+## Extensions (config/ext-required)
+
+A firstmate extension is a self-contained package directory that lives in its own repository and carries an `ext.json` manifest.
+`bin/fm-ext.sh` is the single owner of the manifest schema, the install receipt, the symlink and per-clone exclude mechanics, and every subcommand's exact flags; read its header before first use.
+An extension is never copied into a home: install places one symlink for the package's skill and one per package-owned command, writes the matching entries into the home's own `.git/info/exclude`, and records a receipt under `state/ext/<name>/install.json`.
+That exclude file is per-clone and is not copied by `git clone`, so a re-cloned home stops hiding the symlinks and invites a manual cleanup that would leave a stale receipt behind; `bin/fm-ext.sh status` detects and names that state, along with a missing symlink, a retargeted symlink, and a package that no longer exists.
+Beside that receipt it records `state/ext/<name>/registered-hooks`, one hook kind per line, so which hooks an extension registers stays answerable even when the receipt itself becomes unreadable.
+
+`config/ext-required` is the optional per-home list of extension names this home depends on, one bare name per line, with `#` comments and blank lines ignored.
+It is LOCAL and gitignored.
+A name listed there without a valid installation makes `bin/fm-ext.sh status` refuse by name rather than let the home run on quietly without the extension.
+
+`bin/fm-ext.sh status` also reports each extension's estimated context cost and their aggregate, using the same `ceil(UTF-8 bytes / 3)` estimate as the startup memory budget above.
+Extension output is not part of that budget's governed surface, so the aggregate is reported rather than enforced.
+
+An installed extension can also wrap the launch of every verified worker this home spawns.
+The `launch-wrap` hook kind composes each contributing wrapper in extension-name order immediately in front of the agent binary, after Firstmate's own environment assignments, and a home with no wrapper or an opted-out one renders launch lines byte-identical to the unwrapped templates.
+A registered wrapper that cannot produce its prefix refuses the spawn before any task state is created, because launching a worker without the configured wrapper is the silent failure the seam exists to prevent; a hook's optional preflight is advisory and never blocks.
+`bin/fm-ext.sh`'s header owns the full hook contract, and install refuses a second launch-wrap extension unless `--allow-multiple-launch-wrap` is passed, because wrapper composition requires each wrapper to exec its argument with the environment intact.
+A secret's value never belongs in this seam - a wrapper handles key names at most.
+An extension whose install record cannot be read also refuses the spawn, because core cannot tell whether it registered a wrapper; clear that state with `bin/fm-ext.sh uninstall <name> --home <h> --force`, which does not need a readable receipt, then reinstall from the package.
 ## Stow pass horizon (config/stow-pass-horizon)
 
 `config/stow-pass-horizon` is an optional local, gitignored presence flag that opts this home in to the pass-count decay horizon in the internal [`/stow` skill](../.agents/skills/stow/SKILL.md).
@@ -320,6 +382,8 @@ Cursor typed-submit confirmation is verified on tmux and Herdr only.
 On Zellij, cmux, and Orca a typed-plane Cursor send (a harness-native invocation or an explicit backend target; ordinary text steers ride the durable inbox and exit 0 at enqueue) lands, but `fm-send` reports delivery unconfirmed and exits non-zero because their shared submit core does not consult the busy footer; [runtime backend verification](verification/runtime-backends.md#cursor-agent-cli) owns the evidence and transcript-state boundary.
 muse is verified for crewmate and scout launches ONLY, and `fm-spawn.sh` refuses it for a secondmate, because muse ships no usable hook surface for a primary session's turn-end supervision; [`docs/verification/muse.md`](verification/muse.md) owns that evidence.
 muse also needs a worker-reachable credential before spawning, and the portable fleet path is the `<config>/muse/auth.json` credential stored by `muse login`, because a caller-only `META_API_KEY` does not cross a long-lived backend daemon.
+agy (Antigravity CLI, Google's Gemini CLI) is verified for crewmate and scout launches and lifecycle control ONLY and refused for a secondmate, the same carve-out as muse.
+Its busy-state source remains unverified, so a spawned agy task still classifies `unknown agy-unverified`; interrupt and exit are verified through Herdr's native agy registration, while tmux still refuses because it cannot attribute the agy process and Zellij, Orca, and cmux cannot prove the stop postcondition; [`.agents/skills/harness-adapters/SKILL.md`](../.agents/skills/harness-adapters/SKILL.md) owns that evidence.
 gemini is likewise refused for secondmates because it has no primary supervision protocol; [its adapter reference](../.agents/skills/harness-adapters/references/harness/gemini.md) owns the credential precondition, canonical-launch wiring, and raw-launch limitations.
 rovo is likewise verified for crewmate and scout launches ONLY, refused for a secondmate for the same reason - no turn-end hook and no primary supervision protocol; [`docs/verification/rovo.md`](verification/rovo.md) owns that evidence, including the OAuth token's silent background refresh from a stored refresh token and both tmux and herdr pane liveness (herdr placement is verified live, with a Herdr-side agent-detection gap left open for recovery classification).
 agy is likewise verified for crewmate and scout launches ONLY, refused for a secondmate for the same reason - no hook surface and no primary supervision protocol; [`docs/verification/agy.md`](verification/agy.md) owns that evidence, including the spawn-time worktree trust pre-registration through `bin/fm-agy-trust.sh` and Herdr's native agy pane recognition.
@@ -857,6 +921,14 @@ This start-to-start governor is a no-op after a normally blocking poll but caps 
 Real feedback, ended and missing sessions, any other `SERVER_ERROR`, and that same interruption still standing once the bound is spent are all captured and announced normally; `FM_LAVISH_POLL_RETRY_DELAY` is a bounded 1 to 60 second test override for the interval only, and the runner itself stays adapter-agnostic.
 An already-armed Lavish source keeps its registered listener command until it is retired and armed again, so re-arm a live board once to adopt this retry policy.
 
+The fleet-health adapter (`bin/fm-procevent-fleet-health.sh`) watches the infrastructure the fleet's own work runs on and wakes firstmate only when that infrastructure changes state.
+Arm it with `bin/fm-procevent-fleet-health.sh arm --repo <owner/name> [--repo ...] [--host <ssh-host>] [--interval <secs>] [--confirm <n>]`, where each `--repo` is a repository whose GitHub Actions runner registration must stay online, and `--host` is the SSH host name of the box those runners run on, which is what tells a dead box apart from a dead runner and is what the kernel-log OOM check reads.
+A watch with no `--host` does the runner checks alone.
+`--interval` (default 60) is how long the blocking poll waits between evaluations, and `--confirm` (default 2) is how many consecutive evaluations must agree before a change is announced, so one API blip or dropped connection does not open and close an episode.
+The announced health is recorded in this home's `state/fleet-health.state`, so one outage produces one wake and its recovery produces one more however long the outage lasts, and a restart mid-outage stays quiet rather than re-announcing it.
+The adapter records that health but never acknowledges its own capture, so the transition stays eligible for re-announcement on every reconcile until the handler records it with `bin/fm-procevent.sh handled`, and a wake that is published but never acted on is not lost.
+The script's header owns the exact watched conditions and the rest of its behaviour.
+
 The `when` adapter (`bin/fm-procevent-when.sh`) turns this channel into a condition->action primitive: it registers a deterministic condition and a deterministic action once, its blocking child polls the condition without waking firstmate, and a stable true fires the action at most once before one terminal outcome is durably captured and published as a wake that remains eligible for re-announcement until handled.
 The (condition, action) spec is stored privately under `state/when/` and hash-bound by a trust record the same way `bin/fm-check-register.sh` binds a custom check, while the spec separately binds the resolved action executable's bytes; a mutated or unregistered spec or a changed action executable is refused before the action runs, and that binding is reloaded from disk immediately before each fire rather than trusted from when polling started.
 A repo update that fast-forwards an in-repo action's bytes in place would otherwise desync every already-armed watch's trust binding with no tampering involved; `bin/fm-procevent-when.sh rebind-all` re-hashes and republishes the binding for every registered watch whose action lives under `FM_ROOT`, including one already polling, so it keeps firing across such an update instead of being refused on its next fire.
@@ -998,6 +1070,12 @@ The published `lavish-axi poll` clears feedback destructively before returning i
 Never describe this path as at-least-once, no-loss, or lossless.
 `docs/verification/process-event-sources.md` holds the measurements and `.agents/skills/process-event-sources/SKILL.md` owns the handling procedure.
 
+## Discord spike (config/discord-*)
+
+The two-week Discord spike is off until this home writes its settings, and [`discord-spike.md`](discord-spike.md) owns them, the setup, the content boundary, and the exit.
+`config/discord-webhook` is what the outbound half needs; `config/discord-bot-token`, `config/discord-channel`, and `config/discord-captain` are what the inbound half needs.
+The two secrets are bearer-equivalent, are read only from this home's gitignored `config/` or the matching environment variable, and refuse with the path to write rather than the value when they are absent.
+
 ## Spoken interface and captain inbox (config/voice-*, config/inbox-*)
 
 The spoken interface in [`docs/voice-relay.md`](voice-relay.md) and the model-backed subcommands of `bin/fm-inbox.sh` reach a paid API in a named account, so no region, model id or AWS profile is shipped as a tracked default.
@@ -1109,6 +1187,7 @@ FMX_FOLLOWUP_MAX_COUNT=3   # local cap on Relay completion follow-ups per linked
 FM_PF_RETRY_BACKOFF_SECS=900   # seconds before the next attempt after a retryable promised-public-reply delivery error
 FM_LOCK_STALE_AFTER=2   # grace seconds for missing or nonnumeric lock-owner PIDs (minimum 2s); dead numeric PIDs have no age grace
 FM_GUARD_GRACE=300      # beacon freshness threshold for guard verdicts, arm health checks, and the primary turn-end guard; see docs/turnend-guard.md for model-aware exceptions
+FM_PR_ASSIGN_CAPTAIN=1  # fm-pr-check.sh assigns a registered GitHub PR to the authenticated account; 0 declines that edit, as fm-pr-merge.sh does when it records metadata for a PR it is about to merge
 FM_CLAUDE_AUTOARM_ATTEMPTS=2   # bounded Stop-owned arm attempts per Claude auto-arm cycle; accepted values are 1, 2, or 3
 FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=800   # milliseconds the --claude turn-end guard waits for watcher health, an open Stop auto-arm generation claim, or a fresh epoch before deciding recovery ownership or failure progression
 FM_CLAUDE_AUTOARM_EPOCH_FRESH=15   # seconds a recorded auto-arm outcome remains eligible for the current event epoch's recovery or failure decision
@@ -1133,6 +1212,8 @@ FM_BUSY_TURN_MAX_SECS=3600         # maximum age without a completed turn or exp
 FM_PAUSE_RESURFACE_SECS=14400      # four hours between bounded rechecks of a declared external wait or verified captain-held transfer, and between repeated new-hash stale alarms for an ordinary crew task with an open backlog captain call; a structured until time can make an external-wait recheck occur sooner but cannot extend this bound; this includes a live idle pane after its first inconclusive stale wake, a provably-working pane whose own unelapsed declared wait defers its FM_STALE_ESCALATE_SECS escalation, and a live busy pane past FM_BUSY_TURN_MAX_SECS, while the away-mode daemon uses the same setting and ages its window against the crew's own latest status line rather than pane busy state; a captain-held transfer is never rechecked while the away-posture record exists
 FM_SECONDMATE_WAKE_STALL_SECS=180  # minimum interval with no change of the oldest actionable foreign wake-queue row (it advances as the mate drains, and a queue reprovisioned under the same task id starts a fresh interval at whatever sequence it restarts) before an endpoint-recorded local secondmate produces one durable parent wake-loop-stall notification for that no-progress episode; a mate that is provably inside an active turn (an exact busy verdict) does not escalate until that same no-progress interval reaches FM_BUSY_TURN_MAX_SECS above, declared external-wait pause rows are excluded, and zero or invalid values use 180
 FM_WEDGE_DEMAND_INSPECT_COUNT=3    # consecutive provably-working stale escalations on the same unchanged pane before demand-deep-inspection is added
+FM_BRANCH_OUTCOME_DEDUPE_WINDOW=21600   # seconds an unchanged routine supervision-branch outcome about one task is stored but not presented again after being presented once; expiry re-delivers it once, annotated with how many identical updates it stands for; a captain outcome and a changed fact are never suppressed; 0 disables suppression and a malformed value uses the default (docs/pi-supervision-branch.md "Repeat suppression")
+FM_WAKE_REPEAT_SUPPRESS_SECS=900   # seconds an UNDECLARED stale notification already handled and acknowledged suppresses a byte-identical repeat for the same window; a changed reason, and every other wake kind, always surfaces; a declared external wait is bounded by FM_PAUSE_RESURFACE_SECS and its own declaration instead; 0 disables suppression
 FM_WORKTREE_WRITE_PRUNE='.git node_modules .venv venv __pycache__ .mypy_cache .pytest_cache .ruff_cache .tox target dist build .next .cache vendor'   # directory names the wedge detector's task-worktree write probe skips; the default keeps .git out so a supervisor's own read-only git command can never look like crew progress; set it to the empty string to prune nothing, which widens the probe to the whole depth-bounded tree rather than disabling it
 FM_WORKTREE_WRITE_MAXDEPTH=6       # depth that same probe walks below the recorded worktree; it runs only at the moment a wedge escalation would otherwise fire, never on every poll; no probe knob applies to a secondmate, whose recorded worktree is a provisioned home the probe skips entirely
 FM_WORKTREE_WRITE_TIMEOUT=10       # wall-clock seconds that one walk may take, so a worktree on a hung mount cannot stall the watcher poll that started it; hitting the bound reads as no write evidence, which leaves the escalation schedule exactly as it was; a value that is not a positive integer falls back to the default
