@@ -34,6 +34,7 @@ Use it only when the brief already fixed the candidate order and every candidate
 It does not replace the reasoning-class, runway-feasibility, or authentication gates above.
 Firstmate can optionally arm `bin/fm-procevent-quota.sh` for a recurring mid-task check that wakes when the tracked provider drops below its configured threshold or its runway becomes `exhausted_now`.
 The opt-in `bin/fm-dispatch-resolve.sh` (`docs/configuration.md` "Typed dispatch resolution") applies the same eligibility gates and `spendPriority` argmax in code after a typed rule match; it never removes this skill's authority, and its `ambiguous`, `escalate`, and `error` outcomes return here.
+`quota-axi`'s provider set is compiled in, so a candidate whose provider it does not report is unmetered rather than exhausted; run `bin/fm-quota-unmetered.sh` once per intake alongside that snapshot when a candidate sits on one of those providers, and read its schema-compatible records the same way.
 
 ## Read the default TOON
 
@@ -44,6 +45,7 @@ Sparse `attention[]` names auth, stale, and unmeasurable facts.
 `spendPriority` is THE quota-perspective ranker.
 It already computes the economics that older instructions reconstructed by hand from headroom, pace, reserve, and window-id lists; do not recompute those.
 Do not read `--json` on the normal path, and do not reach for `--full` to rebuild that economics.
+DeepSeek reports `credits` with no windows for the same reason: it publishes no usage window at all, so its quota is genuinely unknown and its balance is never headroom.
 
 After reading the TOON, fall back to one `quota-axi --json` call only when that TOON is genuinely ambiguous for the decision, or when the installed quota-axi is somehow below the floor so its TOON lacks `spendPriority`.
 Ambiguous means a candidate's `spendPriority` is the literal `unknown` or unmeasurable, a real tie still needs extra evidence, or a candidate's eligibility is unclear from `quota[]` plus `attention[]`.
