@@ -1209,6 +1209,7 @@ printf '%s\n' "\$*" >> "\$FM_TEST_GH_LOG"
 case "\${1:-} \${2:-}" in
   "pr view")
     case " \$* " in
+      *statusCheckRollup*) cat "\$FM_TEST_GH_VIEW_JSON" ; exit 0 ;;
       *headRefOid*) printf '%s\n' '6262626262626262626262626262626262626262' ; exit 0 ;;
     esac
     ;;
@@ -1235,7 +1236,10 @@ SH
   : > "$case_dir/gh.log"
 
   set +e
-  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/71 -- --auto --merge \
+  # Upstream's merge entrypoint refuses extra arguments that request auto-merge,
+  # so this case passes only the merge method; the queue observation it pins comes
+  # from the GraphQL read, not from --auto.
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/71 -- --merge \
     > "$case_dir/stdout" 2> "$case_dir/stderr"
   rc=$?
   set -e

@@ -62,6 +62,94 @@ _FM_MERGE_OUTCOME_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC2034 # Public result consumed by sourcing callers.
 FM_MERGE_OUTCOME_ALREADY_RECORDED=false
 
+
+# fm_merge_outcome_receipt <home> <state> <task-id> <pr-url> [commit-sha]
+#                          [sha-source] [head-sha] [head-sha-source]
+#
+# Upgrade the task's landing receipt to verified through bin/fm-receipt.sh
+# (which creates one when no registration receipt exists, so a proved merge
+# always ends with a receipt). Returns 0 on success.
+fm_merge_outcome_receipt() {  # <home> <state> <task-id> <pr-url> [commit-sha] [sha-source] [head-sha] [head-sha-source]
+  local home=$1 state=$2 id=$3 url=$4 sha=${5:-} sha_source=${6:-}
+  local head=${7:-} head_source=${8:-}
+  local args=(upgrade-landing --task "$id" --pr-url "$url")
+  if [ -n "$sha" ]; then
+    [ -n "$sha_source" ] || return 2
+    args+=(--commit-sha "$sha" --sha-source "$sha_source")
+  fi
+  # A merge that can only prove the source-branch head records it as pr_head,
+  # never as commit_sha: commit_sha answers "what landed on the target
+  # branch", and a source head is not that answer on every merge strategy.
+  if [ -n "$head" ]; then
+    [ -n "$head_source" ] || return 2
+    args+=(--head-sha "$head" --head-sha-source "$head_source")
+  fi
+  # A record that predates project= still gets an honest project name: the
+  # forge repo path parsed from the canonical URL.
+  [ -z "$FM_PR_PATH" ] || args+=(--project-fallback "$(basename "$FM_PR_PATH")")
+  FM_HOME="$home" FM_STATE_OVERRIDE="$state" \
+    "$_FM_MERGE_OUTCOME_LIB_DIR/fm-receipt.sh" "${args[@]+"${args[@]}"}" >/dev/null
+}
+
+# How many times a non-permanent receipt failure may hold the merge-notified
+# marker back before the outcome degrades to the disclosed-gap path.
+FM_MERGE_OUTCOME_RECEIPT_MAX_ATTEMPTS=${FM_MERGE_OUTCOME_RECEIPT_MAX_ATTEMPTS:-3}
+
+_fm_merge_outcome_attempts_path() {  # <state> <id>
+  printf '%s/%s.pr-poll-merge-receipt-attempts' "$1" "$2"
+}
+
+# Read the recorded failed-receipt attempt count for this PR identity. A ledger
+# that is absent, unreadable, or written for a different PR reads as 0, so a
+# reused task id never inherits another PR's spent retries.
+fm_merge_outcome_receipt_attempts() {  # <state> <id> <provider> <host> <path> <number>
+  local state=$1 id=$2 provider=$3 host=$4 path=$5 number=$6
+  local file version p h pa n count extra
+  file=$(_fm_merge_outcome_attempts_path "$state" "$id")
+  if [ ! -f "$file" ] || [ -L "$file" ]; then
+    printf '0'
+    return 0
+  fi
+  {
+    IFS= read -r version && IFS= read -r p && IFS= read -r h \
+      && IFS= read -r pa && IFS= read -r n && IFS= read -r count
+  } < "$file" || { printf '0'; return 0; }
+  extra=$(tail -n +7 -- "$file")
+  if [ -n "$extra" ] \
+    || [ "$version" != fm-merge-outcome-receipt-attempts-v1 ] \
+    || [ "$p" != "$provider" ] || [ "$h" != "$host" ] \
+    || [ "$pa" != "$path" ] || [ "$n" != "$number" ]; then
+    printf '0'
+    return 0
+  fi
+  case "$count" in ''|*[!0-9]*) printf '0'; return 0 ;; esac
+  printf '%s' "$count"
+}
+
+fm_merge_outcome_receipt_attempts_record() {  # <state> <id> <provider> <host> <path> <number> <count>
+  local state=$1 id=$2 provider=$3 host=$4 path=$5 number=$6 count=$7
+  local file tmp
+  file=$(_fm_merge_outcome_attempts_path "$state" "$id")
+  { [ ! -e "$file" ] && [ ! -L "$file" ]; } || { [ -f "$file" ] && [ ! -L "$file" ]; } || return 1
+  tmp=$(umask 077; mktemp "$state/.fm-merge-outcome-receipt-attempts.XXXXXX") || return 1
+  if ! printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+      fm-merge-outcome-receipt-attempts-v1 \
+      "$provider" "$host" "$path" "$number" "$count" > "$tmp" \
+    || ! chmod 0600 "$tmp" \
+    || ! mv -f -- "$tmp" "$file"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+}
+
+fm_merge_outcome_receipt_attempts_clear() {  # <state> <id>
+  local file
+  file=$(_fm_merge_outcome_attempts_path "$1" "$2")
+  { [ -e "$file" ] || [ -L "$file" ]; } || return 0
+  rm -f -- "$file"
+}
+
+
 # fm_merge_outcome_report <home> <state> <task-id> <pr-url> <origin> [authority]
 #                         [commit-sha] [sha-source] [head-sha] [head-sha-source]
 #
