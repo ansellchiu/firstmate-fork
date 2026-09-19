@@ -17,6 +17,7 @@
 # suite sets its own (e.g. the watcher-lock guard-banner cases).
 if [ -z "${FM_ROOT_OVERRIDE:-}" ]; then
   FM_ROOT_OVERRIDE="$(fm_test_tmproot fm-wake-tangle-root)"
+  [ -e "$FM_ROOT_OVERRIDE/bin" ] || ln -s "$ROOT/bin" "$FM_ROOT_OVERRIDE/bin"
   export FM_ROOT_OVERRIDE
 fi
 
@@ -350,3 +351,27 @@ dead_pid() {
   done
   printf '%s\n' "$p"
 }
+
+seed_daemon_lock() {  # <state> [pid]
+  local state=$1 pid=${2:-$$} lock
+  lock="$state/.supervise-daemon.lock"
+  mkdir -p "$lock"
+  printf '%s' "$pid" > "$lock/pid"
+  # Compute the identity in a real child process rather than a ( ) subshell.
+  # fm-wake-lib.sh sources fm-classify-lib.sh, whose variable defaults would then
+  # read as subshell modifications and make every later top-level use of them
+  # report SC2031. fm_pid_identity derives everything from its pid argument, so
+  # the computing process is irrelevant to the result.
+  bash -c '. "$1/bin/fm-wake-lib.sh"; fm_pid_identity "$2"' _ "$ROOT" "$pid" \
+    > "$lock/pid-identity" 2>/dev/null || true
+}
+
+seed_stale_daemon_lock() {  # <state>
+  local state=$1 lock dpid
+  dpid=$(dead_pid)
+  lock="$state/.supervise-daemon.lock"
+  mkdir -p "$lock"
+  printf '%s' "$dpid" > "$lock/pid"
+  printf 'dead-process-identity\n' > "$lock/pid-identity"
+}
+
