@@ -13,9 +13,7 @@
 #      launch through that mode, durably (every respawn re-resolves), while an
 #      explicit per-spawn harness arg still wins.
 #   B) Inheritance. The primary pushes a declared, extensible set of LOCAL
-#      (gitignored) config items - config/crew-dispatch.json, config/crew-harness,
-#      config/backlog-backend, config/backend, config/herdr-presentation-spaces,
-#      config/startup-memory-budget, and config/trace-context -
+#      (gitignored) config items (FM_INHERITABLE_CONFIG in bin/fm-config-inherit-lib.sh)
 #      down into each secondmate home's config/, so the secondmate's OWN crewmates,
 #      dispatch profiles, backlog backend, runtime-backend default, Herdr
 #      presentation choice, startup-memory budget, and trace context inherit the
@@ -422,6 +420,82 @@ test_propagate_lib() {
   [ ! -e "$guard_repo/config/crew-dispatch.json" ] || fail "guard skip still copied the unignored item"
 
   pass "B1 propagate_inheritable_config: copy, idempotence, convergence, absence-mirror, exclusion, no-op, skip diagnostics"
+}
+
+test_inheritable_config_single_owner_and_divergence() {
+  local d home remote_script empty_hash item items_out err_file sub_items prop_src prop_dest
+  d="$TMP_ROOT/single-owner"
+  home="$d/home"
+  remote_script="$ROOT/bin/fm-remote-inherit.sh"
+  empty_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  mkdir -p "$home/config" "$home/data" "$home/state"
+
+  # 1. FM_INHERITABLE_CONFIG is defined in bin/fm-config-inherit-lib.sh as the single owner.
+  # Verify default items are all present in FM_INHERITABLE_CONFIG.
+  for item in crew-dispatch.json crew-harness backlog-backend backend herdr-presentation-spaces startup-memory-budget trace-context av-inject; do
+    case " $FM_INHERITABLE_CONFIG " in
+      *" $item "*) : ;;
+      *) fail "default FM_INHERITABLE_CONFIG missing item: $item" ;;
+    esac
+  done
+
+  # 2. fm_config_inherit_items derives directly from FM_INHERITABLE_CONFIG and includes captain-shared.md.
+  items_out=$(fm_config_inherit_items)
+  for item in $FM_INHERITABLE_CONFIG; do
+    assert_contains "$items_out" "config/$item" "fm_config_inherit_items missing config/$item"
+  done
+  assert_contains "$items_out" "data/captain-shared.md" "fm_config_inherit_items missing data/captain-shared.md"
+
+  # 3. fm-remote-inherit.sh derives allowed paths from fm_config_inherit_items.
+  err_file="$d/remote.err"
+  for item in $FM_INHERITABLE_CONFIG; do
+    FM_HOME="$home" "$remote_script" absent "config/$item" 0 "$empty_hash" 1 >/dev/null 2>"$err_file" \
+      || fail "fm-remote-inherit.sh refused valid inheritable item config/$item: $(cat "$err_file")"
+  done
+  FM_HOME="$home" "$remote_script" absent "data/captain-shared.md" 0 "$empty_hash" 1 >/dev/null 2>"$err_file" \
+    || fail "fm-remote-inherit.sh refused valid shared captain file: $(cat "$err_file")"
+
+  # 4. Unlisted files (e.g. secondmate-harness, arbitrary paths) are rejected by fm-remote-inherit.sh.
+  if FM_HOME="$home" "$remote_script" absent "config/secondmate-harness" 0 "$empty_hash" 1 >/dev/null 2>"$err_file"; then
+    fail "fm-remote-inherit.sh unexpectedly allowed un-inheritable config/secondmate-harness"
+  fi
+  assert_contains "$(cat "$err_file")" "path is not inherited material: config/secondmate-harness" \
+    "error message for unallowlisted path was not explicit"
+
+  if FM_HOME="$home" "$remote_script" absent "config/unrelated-file" 0 "$empty_hash" 1 >/dev/null 2>"$err_file"; then
+    fail "fm-remote-inherit.sh unexpectedly allowed config/unrelated-file"
+  fi
+
+  # 5. Overriding FM_INHERITABLE_CONFIG changes the derived set dynamically across all consumers.
+  (
+    FM_INHERITABLE_CONFIG="custom-sample-1 custom-sample-2"
+    sub_items=$(fm_config_inherit_items)
+    assert_contains "$sub_items" "config/custom-sample-1" "overridden items missing custom-sample-1"
+    assert_contains "$sub_items" "config/custom-sample-2" "overridden items missing custom-sample-2"
+    assert_not_contains "$sub_items" "config/crew-dispatch.json" "overridden items should not contain default crew-dispatch.json"
+
+    # fm-remote-inherit.sh with overridden FM_INHERITABLE_CONFIG allows custom items and rejects default items
+    FM_HOME="$home" FM_INHERITABLE_CONFIG="custom-sample-1 custom-sample-2" \
+      "$remote_script" absent "config/custom-sample-1" 0 "$empty_hash" 1 >/dev/null 2>"$err_file" \
+      || fail "remote-inherit failed for custom item under overridden FM_INHERITABLE_CONFIG"
+
+    if FM_HOME="$home" FM_INHERITABLE_CONFIG="custom-sample-1 custom-sample-2" \
+      "$remote_script" absent "config/crew-dispatch.json" 0 "$empty_hash" 1 >/dev/null 2>"$err_file"; then
+      fail "remote-inherit allowed crew-dispatch.json when FM_INHERITABLE_CONFIG was overridden to custom items"
+    fi
+
+    # propagate_inheritable_config with overridden FM_INHERITABLE_CONFIG copies only custom items
+    prop_src="$d/sub-src"
+    prop_dest="$d/sub-dest"
+    mkdir -p "$prop_src" "$prop_dest"
+    printf 'custom1\n' > "$prop_src/custom-sample-1"
+    printf 'default\n' > "$prop_src/crew-dispatch.json"
+    FM_INHERITABLE_CONFIG="custom-sample-1 custom-sample-2" propagate_inheritable_config "$prop_src" "$prop_dest"
+    [ -f "$prop_dest/custom-sample-1" ] || fail "overridden propagate did not copy custom-sample-1"
+    [ ! -e "$prop_dest/crew-dispatch.json" ] || fail "overridden propagate copied unlisted crew-dispatch.json"
+  ) || fail "subshell testing dynamic FM_INHERITABLE_CONFIG override failed"
+
+  pass "B1b inheritable config single owner: all consumers derive from FM_INHERITABLE_CONFIG and reject divergence"
 }
 
 # ===========================================================================
@@ -2634,6 +2708,7 @@ test_secondmate_model_effort_tokens
 test_pi_signed_detection_and_session_lock_identity
 test_dash_leading_process_names_are_basename_operands
 test_propagate_lib
+test_inheritable_config_single_owner_and_divergence
 test_spawn_split_and_inherit
 test_spawn_backward_compat_crew_fallback
 test_spawn_bare_backward_compat
