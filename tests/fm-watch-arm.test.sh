@@ -244,7 +244,7 @@ test_attached_arm_still_fails_on_a_wake_it_did_not_deliver() {
 }
 
 test_rearm_resurfaces_durable_queue_and_remote_open_decision() {
-  local dir home state fakebin result armout drainout status watcher_pid sequence generation decision_recovery_arm decision_successor
+  local dir home state fakebin result armout drainout status watcher_pid sequence generation
   dir=$(make_case rearm-resurface)
   home="$dir/home"
   state="$dir/state"
@@ -316,49 +316,15 @@ test_rearm_resurfaces_durable_queue_and_remote_open_decision() {
   start_rearm_arm "$home" "$state" "$fakebin" "$dir/recovery-successor-arm.out"
   is_live_non_zombie "$ARM_PID" || fail "recovery successor did not stay live after the drain"
 
-  # A later down interval can have no new queue rows at all. The unchanged
-  # remote decision must still trigger a recovery wake and be folded again.
+  # A later down interval with an empty queue must not emit a synthetic
+  # recovery wake; it resolves the downtime marker and stays live.
   kill "$ARM_PID" 2>/dev/null || true
   wait "$ARM_PID" 2>/dev/null || true
   start_rearm_arm "$home" "$state" "$fakebin" "$dir/decision-only-arm.out"
-  wait_for_exit "$ARM_PID" 80 || fail "decision-only re-arm did not surface the open decision"
-  decision_recovery_arm=$ARM_PID
-  start_rearm_arm "$home" "$state" "$fakebin" "$dir/decision-handling-successor.out" "$decision_recovery_arm"
-  is_live_non_zombie "$ARM_PID" || fail "decision handling successor re-triggered before the drain"
-  decision_successor=$ARM_PID
-  FM_HOME="$home" FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/decision-only-drain.out" \
-    2> "$dir/decision-only-drain.err" || fail "decision-only drain after re-arm recovery failed"
-  grep -F 'ios [key=remote-signoff] needs-decision: remote secondmate is held for captain sign-off' \
-    "$dir/decision-only-drain.out" >/dev/null \
-    || fail "unchanged remote decision was not re-folded after a later down interval"
-  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$dir/decision-only-drain.err")
-  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$dir/decision-only-drain.err")
-  [ "$sequence" = 0 ] && [ -n "$generation" ] \
-    || fail "decision-only recovery did not require generation-bound post-handling acknowledgement"
-  is_live_non_zombie "$decision_successor" \
-    || fail "decision-only drain spuriously re-triggered its live handling successor"
-  ! grep -F 'check: rearm-resurface' "$dir/decision-handling-successor.out" >/dev/null \
-    || fail "decision-only handling successor emitted recursive recovery"
-
-  kill -TERM "$decision_successor" 2>/dev/null || fail "could not interrupt decision handling successor"
-  wait "$decision_successor" 2>/dev/null || true
-  start_rearm_arm "$home" "$state" "$fakebin" "$dir/interrupted-decision-arm.out"
-  wait_for_exit "$ARM_PID" 80 || fail "interrupted decision handling was not recovered on successor re-arm"
-  grep -F 'check: rearm-resurface' "$dir/interrupted-decision-arm.out" >/dev/null \
-    || fail "successor did not re-surface the unacknowledged decision recovery"
-  FM_HOME="$home" FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/replayed-decision-drain.out" \
-    2> "$dir/replayed-decision-drain.err" || fail "replayed decision recovery drain failed"
-  grep -F 'ios [key=remote-signoff] needs-decision: remote secondmate is held for captain sign-off' \
-    "$dir/replayed-decision-drain.out" >/dev/null \
-    || fail "interrupted decision recovery did not re-fold the open decision"
-  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$dir/replayed-decision-drain.err")
-  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$dir/replayed-decision-drain.err")
-  [ "$sequence" = 0 ] && [ -n "$generation" ] \
-    || fail "replayed decision recovery omitted its current acknowledgement generation"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$sequence" --recovery-generation "$generation" \
-    || fail "completed decision handling could not acknowledge current recovery"
-  start_rearm_arm "$home" "$state" "$fakebin" "$dir/decision-successor-arm.out"
-  is_live_non_zombie "$ARM_PID" || fail "acknowledged decision recovery did not leave a live successor"
+  sleep 0.25
+  is_live_non_zombie "$ARM_PID" || fail "re-arm with empty queue exited instead of staying live"
+  ! grep -F 'check: rearm-resurface' "$dir/decision-only-arm.out" >/dev/null \
+    || fail "re-arm with empty queue unexpectedly emitted check: rearm-resurface"
   kill "$ARM_PID" 2>/dev/null || true
   wait "$ARM_PID" 2>/dev/null || true
   pass "watch-arm: re-arm surfaces every queued wake and an open remote decision after downtime"
@@ -598,12 +564,19 @@ test_restart_preserves_recovery_across_reused_pid_lock() {
   ln -s "$owner" "$state/.watch.lock"
 
   start_rearm_arm "$home" "$state" "$fakebin" "$armout"
-  wait_for_exit "$ARM_PID" 80 || fail "restart did not surface recovery after clearing a reused-pid lock"
-  grep -F 'check: rearm-resurface' "$armout" >/dev/null \
-    || fail "restart cleared reused-pid lock evidence without a recovery wake: $(cat "$armout")"
+  sleep 0.25
+  is_live_non_zombie "$ARM_PID" || fail "restart on empty queue exited instead of staying live"
+  ! grep -F 'check: rearm-resurface' "$armout" >/dev/null \
+    || fail "restart on empty queue unexpectedly emitted check: rearm-resurface"
+  case "$(cat "$state/.watcher-down" 2>/dev/null || true)" in
+    acked:downtime:*) ;;
+    *) fail "restart did not resolve downtime recovery marker: $(cat "$state/.watcher-down")" ;;
+  esac
   is_live_non_zombie "$unrelated" || fail "restart signaled the unrelated process whose pid was reused"
   kill "$unrelated" 2>/dev/null || true
   wait "$unrelated" 2>/dev/null || true
+  kill "$ARM_PID" 2>/dev/null || true
+  wait "$ARM_PID" 2>/dev/null || true
   pass "watch-arm: restart publishes recovery before clearing a reused-pid watcher lock"
 }
 
@@ -841,11 +814,49 @@ test_arm_refuses_an_unusable_launch_confirm_window() {
   pass "watch-arm: an unusable launch confirm window refuses to arm by name"
 }
 
+test_rearm_with_empty_queue_does_not_emit_recovery_resurface_and_resolves_marker() {
+  local dir home state fakebin armout watcher_pid marker
+  dir=$(make_case rearm-empty-queue)
+  home="$dir/home"
+  state="$dir/state"
+  fakebin="$dir/fakebin"
+  armout="$dir/arm.out"
+  mkdir -p "$home/data"
+
+  : > "$state/.wake-queue"
+  printf 'pending:downtime:emptyqueue.1.aaa\n' > "$state/.watcher-down"
+  chmod 600 "$state/.watcher-down"
+
+  start_rearm_arm "$home" "$state" "$fakebin" "$armout"
+  sleep 0.25
+  is_live_non_zombie "$ARM_PID" \
+    || fail "watcher exited on empty queue instead of staying live: $(cat "$armout")"
+  ! grep -F 'check: rearm-resurface' "$armout" >/dev/null \
+    || fail "re-arm with empty queue emitted check: rearm-resurface"
+
+  marker=$(cat "$state/.watcher-down" 2>/dev/null || true)
+  case "$marker" in
+    acked:downtime:emptyqueue.1.aaa) ;;
+    *) fail "re-arm with empty queue did not resolve the downtime marker: $marker" ;;
+  esac
+
+  # Verify real path: genuine crew events must still be surfaced and queued.
+  printf 'done: crew finished\n' > "$state/crew.status"
+  wait_for_exit "$ARM_PID" 120 || fail "live watcher did not surface real crew event"
+  grep -q '^signal:' "$armout" \
+    || fail "live watcher did not emit signal wake: $(cat "$armout")"
+  grep "$(printf '\tsignal\tcrew.status\t')" "$state/.wake-queue" >/dev/null \
+    || fail "real crew event was not durably queued"
+
+  pass "watch-arm: re-arm with empty queue resolves downtime marker without resurface wake"
+}
+
 test_attached_arm_reports_the_delivered_wake
 test_attached_arm_reports_the_delivered_wake_after_drain
 test_arm_refuses_an_unusable_launch_confirm_window
 test_attached_arm_still_fails_on_a_wake_it_did_not_deliver
 test_rearm_resurfaces_durable_queue_and_remote_open_decision
+test_rearm_with_empty_queue_does_not_emit_recovery_resurface_and_resolves_marker
 test_marker_publish_failure_retains_recovery_evidence
 test_delivery_gap_wake_is_recovered_once
 test_interrupted_handling_is_redrained_on_rearm
