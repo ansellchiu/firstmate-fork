@@ -43,6 +43,7 @@ run_watcher_once() {
   local state=$1 fakebin=$2 out=$3
   mkdir -p "$state"
   date '+%s' > "$state/.afk"
+  seed_daemon_lock "$state"
   PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   wait_for_exit "$!" 50
