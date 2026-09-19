@@ -99,6 +99,18 @@ test_daemon_state_root_uses_fm_home() {
 # through here" writes that position.
 log_size() { LC_ALL=C wc -c < "$1" | tr -d '[:space:]'; }
 
+# The always-on watcher's own catch-all backstop records its progress in
+# .hb-surfaced-<task>. Away mode does not stop that watcher, so a fixture that
+# means "the watcher backstop already presented this log through here" writes
+# that layer's marker instead of the daemon's.
+hb_surfaced_through() {  # <state> <task>
+  local state=$1 task=$2 key
+  key=$(printf '%s' "$task" | tr ':/.' '___')
+  status_presentation_marker_commit "$state/.hb-surfaced-$key" "$state/$task.status" \
+    "$(log_size "$state/$task.status")" \
+    "$(_fm_open_decisions_file_ident "$state/$task.status")"
+}
+
 seen_through() {  # <state> <task>
   local state=$1 task=$2 key ident
   key=$(printf '%s' "$task" | tr ':/.' '___')
@@ -757,6 +769,116 @@ test_enriched_wedge_under_declared_wait_uses_pause_cadence() {
   [ ! -e "$state/.subsuper-paused-$key" ] \
     || fail "pause tracking survived a status append that no longer declares the wait"
   pass "an enriched wedge under a declared wait uses the pause cadence and restores wedge detection on resume"
+}
+
+# --- rate-limited panes: classified as a bounded external wait, never a wedge --
+# A stalled worker whose pane tail carries a model rate-limit signal (HTTP 429 /
+# GLM code 1308; bin/fm-rate-limit-lib.sh) is waiting on a limit reset, so the
+# daemon classifies it as rate-limited: the first sighting escalates once with
+# the signal named, a long-cadence marker replaces any wedge stale marker, and
+# housekeeping re-surfaces per PAUSE_RESURFACE_SECS while the signal persists.
+
+rl_case() {  # <name> <task> <pane-text> -> dir; writes meta + status + capture
+  local name=$1 task=$2 pane=$3 dir state
+  dir=$(make_supercase "$name")
+  state="$dir/state"
+  fm_write_meta "$state/$task.meta" "window=sess:fm-$task" "backend=tmux" "harness=pi" "model=default"
+  printf 'working: implementing\n' > "$state/$task.status"
+  printf '%s\n' "$pane" > "$dir/pane.txt"
+  printf '%s' "$dir"
+}
+
+rl_key() { printf '%s' "$1" | tr ':/.' '___'; }
+
+test_stale_rate_limited_classifies_rl() {
+  local dir state win task out
+  task=rlstall; win="sess:fm-$task"
+  dir=$(rl_case rate-limited-stale "$task" 'HTTP/1.1 429 Too Many Requests
+{"error":{"code":"1308","message":"Usage"}}')
+  state="$dir/state"
+  out=$(PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+    FM_STATE_OVERRIDE="$state" classify_stale "$win" "$state")
+  case "$out" in
+    rl\|*rate-limited\ on\ glm-1308*) ;;
+    *) fail "rate-limited stale did not classify as rl with the signal: $out" ;;
+  esac
+  case "$out" in *"not a wedge"*) ;; *) fail "rl classification lost its not-a-wedge wording: $out" ;; esac
+  pass "classify_stale names a rate-limited stale as rl with the signal, never a wedge"
+}
+
+test_handle_wake_rate_limited_records_marker_and_escalates_once() {
+  local dir state win task key
+  task=rlwake; win="sess:fm-$task"
+  dir=$(rl_case rate-limited-wake "$task" '429 rate limit reached, backing off')
+  state="$dir/state"
+  key=$(rl_key "$task")
+  (
+    LOG="$dir/daemon.log" PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+      FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 handle_wake "stale: $win" "$state"
+    LOG="$dir/daemon.log" PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+      FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 handle_wake "stale: $win" "$state"
+  )
+  [ -e "$state/.subsuper-rl-$key" ] || fail "rate-limited wake did not record the rl marker"
+  [ ! -e "$state/.subsuper-stale-$key" ] || fail "rate-limited wake retained a wedge stale marker"
+  [ "$(wc -l < "$state/.subsuper-escalations" | tr -d ' ')" = 1 ] \
+    || fail "rate-limited repeat wakes escalated more than once"
+  grep -F "rate-limited on 429-rate-limit" "$state/.subsuper-escalations" >/dev/null \
+    || fail "rate-limited escalation lost its classification: $(cat "$state/.subsuper-escalations" 2>/dev/null)"
+  grep -F "possible wedge" "$state/.subsuper-escalations" >/dev/null \
+    && fail "rate-limited escalation was mislabeled a possible wedge"
+  pass "handle_wake records the rl marker, escalates once, and never wedge-pages"
+}
+
+test_possible_wedge_wake_reclassified_when_rate_limited() {
+  local dir state win task key reason
+  task=rlwedge; win="sess:fm-$task"
+  dir=$(rl_case rate-limited-wedge-wake "$task" '429 code 1308 Usage')
+  state="$dir/state"
+  key=$(rl_key "$task")
+  reason="stale: $win (idle 500s, possible wedge, escalation 2)"
+  LOG="$dir/daemon.log" PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+    FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 handle_wake "$reason" "$state"
+  [ -e "$state/.subsuper-rl-$key" ] || fail "possible-wedge wake with a rate-limit pane did not record the rl marker"
+  grep -F "possible wedge" "$state/.subsuper-escalations" >/dev/null \
+    && fail "a rate-limited pane kept the possible-wedge phrasing"
+  grep -F "rate-limited on glm-1308" "$state/.subsuper-escalations" >/dev/null \
+    || fail "possible-wedge wake with a rate-limit pane lost the classification: $(cat "$state/.subsuper-escalations" 2>/dev/null)"
+  pass "a possible-wedge wake whose pane carries a rate-limit signal is reclassified"
+}
+
+test_housekeeping_rate_limited_resurfaces_and_clears() {
+  local dir state win task key now
+  task=rlhouse; win="sess:fm-$task"
+  dir=$(rl_case rate-limited-house "$task" '429 rate limit reached, backing off')
+  state="$dir/state"
+  key=$(rl_key "$task")
+  now=$(date +%s)
+  echo $(( now - 5000 )) > "$state/.subsuper-rl-$key"
+  (
+    PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+      FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
+      housekeeping "$state"
+  )
+  grep -F "still rate-limited 5000s on 429-rate-limit" "$state/.subsuper-escalations" >/dev/null \
+    || fail "housekeeping did not re-surface a still-rate-limited pane: $(cat "$state/.subsuper-escalations" 2>/dev/null)"
+  grep -F "possible wedge" "$state/.subsuper-escalations" >/dev/null \
+    && fail "housekeeping re-surface mislabeled the rate-limited pane a wedge"
+  [ "$(cat "$state/.subsuper-rl-$key" 2>/dev/null || echo 0)" -ge "$now" ] \
+    || fail "housekeeping did not reset the rate-limit marker after re-surfacing"
+  # Signal gone (the limit cleared): the marker drops and nothing re-escalates.
+  printf 'normal work resumed\n' > "$dir/pane.txt"
+  : > "$state/.subsuper-escalations"
+  rm -f "${state}/.subsuper-escalations.since"
+  echo $(( $(date +%s) - 5000 )) > "$state/.subsuper-rl-$key"
+  (
+    PATH="$dir/fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$win" FM_FAKE_TMUX_CAPTURE="$dir/pane.txt" \
+      FM_STATE_OVERRIDE="$state" FM_ESCALATE_BATCH_SECS=999999 FM_PAUSE_RESURFACE_SECS=3600 \
+      housekeeping "$state"
+  )
+  [ ! -e "$state/.subsuper-rl-$key" ] || fail "cleared rate-limit signal kept the rl marker"
+  [ ! -s "$state/.subsuper-escalations" ] \
+    || fail "cleared rate-limit signal still escalated a recheck: $(cat "$state/.subsuper-escalations" 2>/dev/null)"
+  pass "housekeeping re-surfaces a still-rate-limited pane and drops the marker when the signal clears"
 }
 
 test_stale_terminal_escalates() {
@@ -1468,6 +1590,39 @@ test_heartbeat_scan_dedup() {
   pass "catch-all scan escalates a missed terminal once, not twice"
 }
 
+# Cross-layer catch-all dedupe. The daemon and the always-on watcher each keep
+# their own catch-all marker family, and `afk stop` re-arms the watcher while the
+# daemon is still live, so both layers scan the same logs. Without a cross-check
+# each layer re-presents whatever the other already presented, forever.
+test_catchall_scan_honors_watcher_backstop_marker() {
+  local dir state
+  dir=$(make_supercase scan-cross-layer)
+  state="$dir/state"
+  printf 'done: ready\n' > "$state/cross-t1.status"
+  hb_surfaced_through "$state" cross-t1
+  rm -f "$state/.subsuper-last-scan"
+  FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  [ -s "$state/.subsuper-escalations" ] \
+    && fail "catch-all scan re-escalated a terminal the watcher backstop already surfaced"
+  pass "the away-mode catch-all scan honours the watcher backstop's marker"
+}
+
+# The daemon's own marker family still owns its own dedupe: a watcher marker that
+# stops short of a later captain-relevant append must not suppress it.
+test_catchall_scan_still_escalates_past_watcher_marker() {
+  local dir state
+  dir=$(make_supercase scan-cross-layer-partial)
+  state="$dir/state"
+  printf 'working: setup\n' > "$state/cross-t2.status"
+  hb_surfaced_through "$state" cross-t2
+  printf 'needs-decision: pick A or B\n' >> "$state/cross-t2.status"
+  rm -f "$state/.subsuper-last-scan"
+  FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  grep -F 'needs-decision: pick A or B' "$state/.subsuper-escalations" >/dev/null \
+    || fail "catch-all scan swallowed an event appended past the watcher backstop marker"
+  pass "the catch-all scan still escalates events past the watcher backstop marker"
+}
+
 test_handle_wake_routes_self_and_escalate() {
   local dir state
   dir=$(make_supercase handle)
@@ -2122,6 +2277,139 @@ test_max_defer_pending_composer_alarms_without_typing() {
   [ -s "$state/.subsuper-escalations" ] || fail "buffer lost while composer was pending"
   grep -F 'human draft' "$dir/composer" >/dev/null || fail "pending composer content changed"
   pass "max-defer on a pending composer alarms without typing"
+}
+
+# --- wedge circuit breaker (away-supervisor inject-wedge loop fix) ---------
+# RCA: data/afk-inject-rca-s1/report.md. Once MAX_DEFER trips and the wedge
+# alarm has fired for a digest, housekeeping's per-tick batch flush (1) used
+# to keep re-typing that SAME unchanged digest on every ~15s tick forever
+# (each Enter still lands as a real turn even when confirmation fails, which
+# is what burned ~400k tokens over ~3.4h in production). The circuit breaker
+# (wedge_digest_unchanged) must stop that: the alarm still fires once, the
+# buffer survives untouched for catch-up, and a genuinely NEW escalation
+# appended after the alarm still flushes normally.
+
+# Both tests below reset the composer back to its empty bordered box between
+# housekeeping calls. This mirrors the RCA's actual production evidence:
+# "the composer guard read `empty` at the start of almost every cycle - the
+# text is NOT lingering in the composer between cycles" (each swallowed
+# injection still genuinely lands and clears the composer; only the
+# CONFIRMATION verdict keeps reading it as undelivered). Without that reset
+# the pre-existing composer guard alone would block a retype regardless of
+# the circuit breaker, which would make these tests pass for the wrong
+# reason.
+
+test_wedge_circuit_breaker_skips_retyping_unchanged_digest() {
+  local dir state fakebin sent count1 count2
+  dir=$(make_bordered_case wedge-breaker-unchanged)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  sent="$dir/sent.log"; : > "$sent"
+  printf '╭─────╮\n│ >   │\n╰─────╯\n' > "$dir/composer"
+  touch "$dir/.swallow"
+  escalate_add "$state" "needs-decision: pick A"
+  echo $(( $(date +%s) - 600 )) > "$state/.subsuper-escalations.since"
+  afk_enter "$state"
+  # First tick: isolate to the max-defer path (batch disabled, exactly like
+  # test_max_defer_empty_swallow_types_once_and_alarms) so this call types
+  # once, fails to confirm (persistent swallow), and raises the wedge alarm.
+  PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
+    FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
+    FM_ESCALATE_BATCH_SECS=99999 FM_MAX_DEFER_SECS=60 housekeeping "$state"
+  count1=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  [ "$count1" -eq 1 ] || fail "first tick should type the digest exactly once, typed $count1"
+  [ -s "$state/.subsuper-inject-wedged" ] || fail "first tick did not raise the wedge alarm"
+  [ -s "$state/.subsuper-inject-wedged.count" ] || fail "first tick did not snapshot the wedged buffer's line count"
+  printf '╭─────╮\n│ >   │\n╰─────╯\n' > "$dir/composer"
+  # Later ticks (the ~15s housekeeping cadence, batching back on and no
+  # longer past MAX_DEFER age since the marker was just written): the SAME
+  # unchanged, already-alarmed digest must NOT be retyped, even though the
+  # composer is legibly empty again and would otherwise pass the guard.
+  PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
+    FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
+    FM_ESCALATE_BATCH_SECS=1 FM_MAX_DEFER_SECS=60 housekeeping "$state"
+  printf '╭─────╮\n│ >   │\n╰─────╯\n' > "$dir/composer"
+  PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
+    FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
+    FM_ESCALATE_BATCH_SECS=1 FM_MAX_DEFER_SECS=60 housekeeping "$state"
+  count2=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  [ "$count2" -eq 1 ] || fail "housekeeping retyped an unchanged, already-alarmed digest on later ticks, typed $count2 time(s)"
+  [ -s "$state/.subsuper-escalations" ] || fail "buffer lost while wedged (must survive untouched for catch-up)"
+  [ -s "$state/.subsuper-inject-wedged" ] || fail "wedge marker lost on a later tick"
+  pass "housekeeping's circuit breaker stops retyping an unchanged, already-alarmed digest on later ticks while keeping the buffer durable for catch-up"
+}
+
+test_wedge_circuit_breaker_flushes_a_new_escalation_after_the_alarm() {
+  local dir state fakebin sent count1 count2
+  dir=$(make_bordered_case wedge-breaker-new-escalation)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  sent="$dir/sent.log"; : > "$sent"
+  printf '╭─────╮\n│ >   │\n╰─────╯\n' > "$dir/composer"
+  touch "$dir/.swallow"
+  escalate_add "$state" "needs-decision: pick A"
+  echo $(( $(date +%s) - 600 )) > "$state/.subsuper-escalations.since"
+  afk_enter "$state"
+  PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
+    FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
+    FM_ESCALATE_BATCH_SECS=99999 FM_MAX_DEFER_SECS=60 housekeeping "$state"
+  count1=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  [ "$count1" -eq 1 ] || fail "first tick should type the digest exactly once, typed $count1"
+  printf '╭─────╮\n│ >   │\n╰─────╯\n' > "$dir/composer"
+  # A genuinely new escalation arrives while wedged: it must still flush
+  # normally on the very next tick rather than staying silenced by the
+  # breaker.
+  escalate_add "$state" "done: PR https://x/y/pull/3"
+  PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
+    FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
+    FM_ESCALATE_BATCH_SECS=1 FM_MAX_DEFER_SECS=60 housekeeping "$state"
+  count2=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  [ "$count2" -eq 2 ] || fail "a new escalation appended after the alarm must still flush normally, typed $count2 time(s) total"
+  grep -q 'needs-decision: pick A | done: PR https://x/y/pull/3' "$sent" \
+    || fail "the retyped digest after a new escalation should include BOTH the original and the new item, sent: $(cat "$sent")"
+  pass "housekeeping's circuit breaker still flushes normally once a new escalation is appended after the alarm"
+}
+
+test_inject_wedge_alarm_enqueues_durable_check_wake() {
+  local dir state log
+  dir=$(make_wedge_case wedge-enqueue-wake)
+  state="$dir/state"; log="$dir/alert.log"
+  escalate_add "$state" "needs-decision: pick A"
+  WEDGE_ALARM_LAST_EPOCH=0
+  FM_WEDGE_ALARM_LOG="$log" FM_STATE_OVERRIDE="$state" \
+    FM_WEDGE_ALARM_CHANNEL=osascript FM_SUPERVISOR_BACKEND=herdr \
+    inject_wedge_alarm "$state" 300
+  [ -s "$state/.subsuper-inject-wedged" ] || fail "inject_wedge_alarm did not write the marker"
+  [ -s "$state/.wake-queue" ] || fail "inject_wedge_alarm did not enqueue a durable wake"
+  grep -F $'check\taway-mode-inject-wedge\tfm away-mode inject WEDGED: 300s undelivered' "$state/.wake-queue" >/dev/null \
+    || fail "durable wake queue missing check away-mode-inject-wedge wake: $(cat "$state/.wake-queue")"
+  pass "inject_wedge_alarm enqueues a durable check wake so undelivered escalations surface loudly"
+}
+
+test_daemon_shutdown_alarms_on_undelivered_escalation() {
+  local dir state fakebin sent
+  dir=$(make_bordered_case shutdown-undelivered)
+  state="$dir/state"; fakebin="$dir/fakebin"
+  sent="$dir/sent.log"; : > "$sent"
+  escalate_add "$state" "needs-decision: pick A"
+  afk_enter "$state"
+  WEDGE_ALARM_LAST_EPOCH=0
+  FM_STATE_OVERRIDE="$state" FM_SUPERVISOR_BACKEND=herdr \
+    PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SWALLOW="$dir/.swallow" \
+    bash -c '
+      . "$0/bin/fm-supervise-daemon.sh"
+      FM_DAEMON_DIR="$0/bin"
+      cleanup_test() {
+        escalate_flush "$1" 2>/dev/null || true
+        if [ -s "$1/.subsuper-escalations" ]; then
+          inject_wedge_alarm "$1" "$(_oldest_line_age "$1/.subsuper-escalations")"
+        fi
+      }
+      cleanup_test "$1"
+    ' "$ROOT" "$state"
+  [ -s "$state/.subsuper-inject-wedged" ] || fail "shutdown with undelivered escalation did not raise wedge marker"
+  [ -s "$state/.wake-queue" ] || fail "shutdown with undelivered escalation did not enqueue durable check wake"
+  grep -F $'check\taway-mode-inject-wedge' "$state/.wake-queue" >/dev/null \
+    || fail "shutdown missing check away-mode-inject-wedge wake: $(cat "$state/.wake-queue")"
+  pass "daemon shutdown raises wedge alarm and enqueues durable check wake when escalations remain undelivered"
 }
 
 test_normal_flush_clears_stale_wedge_marker() {
@@ -2790,6 +3078,10 @@ test_classify_terminal_signal_escalates
 test_classify_check_and_unknown_escalate
 test_stale_transient_self_records_marker
 test_stale_diagnostic_wedge_survives_busy_housekeeping
+test_stale_rate_limited_classifies_rl
+test_handle_wake_rate_limited_records_marker_and_escalates_once
+test_possible_wedge_wake_reclassified_when_rate_limited
+test_housekeeping_rate_limited_resurfaces_and_clears
 test_enriched_wedge_under_declared_wait_uses_pause_cadence
 test_stale_terminal_escalates
 test_stale_actionable_wait_escalates_and_keeps_pause_cadence
@@ -2820,6 +3112,8 @@ test_housekeeping_orca_persistent_stale_resolves_terminal
 test_escalate_batches_into_one_digest
 test_escalate_batch_age_uses_first_append
 test_heartbeat_scan_dedup
+test_catchall_scan_honors_watcher_backstop_marker
+test_catchall_scan_still_escalates_past_watcher_marker
 test_handle_wake_routes_self_and_escalate
 test_needs_decision_queued_row_escalates_once_as_the_decision
 test_captain_held_decision_owned_row_is_self_handled
@@ -2869,6 +3163,10 @@ test_submit_ack_reports_pending_on_persistent_swallow
 test_max_defer_empty_swallow_types_once_and_alarms
 test_max_defer_flushes_empty_idle_pane
 test_max_defer_pending_composer_alarms_without_typing
+test_wedge_circuit_breaker_skips_retyping_unchanged_digest
+test_wedge_circuit_breaker_flushes_a_new_escalation_after_the_alarm
+test_inject_wedge_alarm_enqueues_durable_check_wake
+test_daemon_shutdown_alarms_on_undelivered_escalation
 test_normal_flush_clears_stale_wedge_marker
 test_below_max_defer_does_nothing
 test_max_defer_afk_inactive_does_not_flush_or_alarm
