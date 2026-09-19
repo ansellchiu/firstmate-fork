@@ -1,0 +1,12 @@
+[38;2;255;255;0mOnly showing models from configured providers. Use /login to add providers.[39m
+
+> STEER_INTO_MODAL[7m [0m
+
+[38;2;128;128;128m  No matching models[39m
+
+[38;2;181;189;104m  Model catalogs refreshed.[39m
+
+[38;2;102;102;102m  Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel[39m
+[38;2;95;135;255m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[38;2;102;102;102m/home/fixture/project (main)[39m
+[38;2;102;102;102m↑4.3k ↓52 R2.9k W4.3k CH34.8% 54.0%/4.1k (auto)                                                                     held

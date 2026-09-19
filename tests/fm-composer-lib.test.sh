@@ -836,3 +836,361 @@ test_queued_enter_verdict_does_not_convert_other_states() {
 test_queued_enter_verdict_busy_pending_is_empty
 test_queued_enter_verdict_idle_pending_stays_pending
 test_queued_enter_verdict_does_not_convert_other_states
+
+# =============================================================================
+# pi 0.85 working-composer shapes, from byte-level captures of a REAL pi
+# =============================================================================
+# tests/assets/pi-0.85-composer/ holds tail captures of live pi 0.85.1 panes
+# driven in a disposable tmux server, stock and with Calm on
+# (docs/verification/pi-composer-shapes.md records how they were taken and
+# what each one proves). They exist because the FIRST attempt at this fix was
+# written from a guessed rendering and had to be reverted; every assertion
+# below reads the captured bytes rather than a description of them.
+#
+# What the captures established, and what these cases pin:
+#   - pi >=0.85 embeds its working indicator in the composer's own TOP border
+#     instead of drawing a `Working...` row inside the separator pair, so the
+#     pair itself has to be recognized through a titled rule.
+#   - Calm clears that indicator and draws its boat ABOVE the pair, so the
+#     composer region is blank in BOTH presentations while pi generates:
+#     a working pi never holds unsubmitted input.
+#   - Real typed text still reads `pending` in both states, and a pane whose
+#     keyboard belongs to something in front of the composer reads `unknown`.
+PI_085_ASSETS="$ROOT/tests/assets/pi-0.85-composer"
+
+# pi_085_screen/pi_085_cursor: one captured frame and its captured cursor row.
+pi_085_screen() { cat "$PI_085_ASSETS/$1.ansi"; }
+pi_085_cursor() { cat "$PI_085_ASSETS/$1.cursor"; }
+
+# pi_085_busy: the delivery busy verdict for a captured frame, read the way
+# the herdr adapter reads a live pane (last 12 non-blank rows, opted into the
+# pi shapes with `+pi-shapes`). The scope argument is the whole point: these
+# captures came through herdr, so only a herdr delivery read may consult them.
+# Read in BOTH locales, and disagreement is itself a failure: the daemons that
+# consume this verdict run in the C locale, so a shape that matches only under
+# a UTF-8 locale is dead exactly where an unconfirmed submit becomes a
+# re-injection wedge (the issue #1988 class, which is why assert_screen above
+# does the same for every classifier assertion). The titled border was dead
+# that way once: `─+` quantified only a rule glyph's trailing byte, and a
+# negated class holding `─` also excluded the spinner cell's leading byte.
+pi_085_busy() {  # <fixture> [harness] [shape-scope]
+  local visible utf8 c
+  visible=$(pi_085_screen "$1" | fm_composer_strip_ansi | grep -v '^[[:space:]]*$' | tail -12)
+  utf8=idle; c=idle
+  printf '%s' "$visible" | fm_busy_lines_match "${2:-pi}" "${3-+pi-shapes}" && utf8=busy
+  printf '%s' "$visible" | LC_ALL=C fm_busy_lines_match "${2:-pi}" "${3-+pi-shapes}" && c=busy
+  [ "$utf8" = "$c" ] \
+    || fail "pi 0.85 busy read for '$1' (harness='${2:-pi}' scope='${3-+pi-shapes}') disagrees across locales: $utf8 vs LC_ALL=C $c"
+  printf '%s' "$utf8"
+}
+
+# pi_085_busy_row: the same two-locale reading for a single synthetic row, so
+# the refusals are pinned in the C locale too.
+pi_085_busy_row() {  # <row>
+  local utf8=idle c=idle
+  printf '%s\n' "$1" | fm_busy_lines_match pi +pi-shapes && utf8=busy
+  printf '%s\n' "$1" | LC_ALL=C fm_busy_lines_match pi +pi-shapes && c=busy
+  [ "$utf8" = "$c" ] \
+    || fail "pi 0.85 busy read for row '$1' disagrees across locales: $utf8 vs LC_ALL=C $c"
+  printf '%s' "$utf8"
+}
+
+test_pi_085_working_composer_is_never_unsubmitted_input() {
+  local fixture plain
+  # The headline capture-driven fact: while pi generates, its composer region
+  # is EMPTY in both presentations. The RCA that scoped this fix assumed the
+  # opposite (that the working indicator or the Calm boat sat inside the
+  # separator pair and read `pending`); the captures disprove it, so a working
+  # pi must never be reported as holding a half-typed message.
+  for fixture in stock-working calm-working; do
+    assert_screen "pi 0.85 $fixture is not unsubmitted input" unknown \
+      "$CAPS_TMUX" "$(pi_085_screen "$fixture")" "$(pi_085_cursor "$fixture")" "pi"$'\t'"working"
+    # Non-vacuousness, without relying on a verdict: the pair really was found
+    # and valid, and its region really classifies as non-pending, so the
+    # `unknown` above is a refusal to call a generating pane injectable rather
+    # than an unreadable pane.
+    plain=$(pi_085_screen "$fixture" | fm_composer_strip_ansi)
+    _fm_composer_scan_screen "$plain" "$(pi_085_cursor "$fixture")"
+    [ "$FM_COMPOSER_SCAN_PI_PAIR_VALID" = 1 ] \
+      || fail "pi 0.85 $fixture: the composer pair was not found and valid, so the verdict proves nothing"
+    [ "$(_fm_composer_classify_pi_rows "$(pi_085_screen "$fixture")" 1)" != pending ] \
+      || fail "pi 0.85 $fixture: the composer region is not blank after all"
+  done
+  # The Calm capture's opener is a SOLID rule (Calm clears pi's indicator), so
+  # its blankness is still observable through a verdict: read as an idle pi it
+  # is `empty`. The stock capture's opener is titled, which is itself proof the
+  # pane is generating, so it is refused below whatever status is handed in.
+  # This `empty` for a GENERATING Calm pane is a KNOWN RECORDED GAP, not a
+  # property worth having: see "Still reachable, and NOT introduced here" in
+  # docs/verification/pi-composer-shapes.md. It predates this branch, and the
+  # titled-opener refusal cannot reach it because Calm leaves no titled opener
+  # to refuse. Asserted so the gap's exact shape is visible rather than latent.
+  assert_screen "pi 0.85 calm-working region is blank" empty \
+    "$CAPS_TMUX" "$(pi_085_screen calm-working)" "$(pi_085_cursor calm-working)" "pi"$'\t'"idle"
+  pass "pi 0.85: a generating pi's composer is blank in both presentations and is never read as unsubmitted input"
+}
+
+test_pi_085_titled_opener_is_never_injectable_whatever_the_status() {
+  # `empty` is the verdict that authorizes the away-mode injector to type into
+  # a pane, so it must never be reachable for a pane that is mid-turn. The
+  # agent_status handed to the classifier cannot be trusted to say so: on the
+  # tmux plane it is derived from a busy read that does not carry pi's 0.85
+  # shapes, so a generating pi arrives here as `pi<TAB>idle`, and before this
+  # refusal the stock capture classified `empty` for it.
+  # The titled opener is the structural proof instead: pi draws that border
+  # titled only while a status indicator is set, so a pair opened by one
+  # cannot belong to a settled pane, on any backend and with no shape
+  # activation anywhere.
+  local st verdict
+  for st in idle 'done' working blocked; do
+    verdict=$(fm_composer_classify_screen "$CAPS_TMUX" "$(pi_085_screen stock-working)" \
+      "$(pi_085_cursor stock-working)" "pi"$'\t'"$st")
+    [ "$verdict" != empty ] \
+      || fail "a generating pi whose composer pair was opened by a titled border must never be injectable (agent_status=$st)"
+    [ "$verdict" = unknown ] \
+      || fail "a titled-opener pair should defer as unknown on agent_status=$st, got '$verdict'"
+  done
+  # And the refusal is keyed to the TITLED opener, not to pi in general: a
+  # settled pi whose opener is a solid rule still reads empty, so the
+  # away-mode injector is not blinded fleet-wide.
+  assert_screen "pi 0.85 settled pi still injectable" empty \
+    "$CAPS_TMUX" "$(pi_085_screen calm-idle)" "$(pi_085_cursor calm-idle)" "pi"$'\t'"idle"
+  pass "pi 0.85: a pair opened by pi's titled working border is never injectable, while a settled pi still is"
+}
+
+test_pi_085_titled_border_is_what_makes_the_working_pair_readable() {
+  # The counterfactual for the stock capture specifically: its opening rule is
+  # titled (`── <spinner> Working ────`), so without titled-border recognition
+  # the pair is not found AT ALL and the pane is unreadable rather than blank.
+  # Drive the two presentations apart to prove the fix is load-bearing for
+  # exactly the one that changed.
+  local plain
+  plain=$(pi_085_screen stock-working | fm_composer_strip_ansi)
+  _fm_composer_scan_screen "$plain" "$(pi_085_cursor stock-working)"
+  [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 1 ] \
+    || fail "the captured stock working pane's titled top border was not recognized as a composer pair"
+  [ "$FM_COMPOSER_SCAN_PI_PAIR_VALID" = 1 ] \
+    || fail "the captured stock working pane's composer pair was found but not valid"
+  # Calm's capture never needed it: Calm clears the indicator, so its opening
+  # rule is solid and the pre-existing plain-rule scan already found the pair.
+  plain=$(pi_085_screen calm-working | fm_composer_strip_ansi)
+  _fm_composer_scan_screen "$plain" "$(pi_085_cursor calm-working)"
+  [ "$FM_COMPOSER_SCAN_PI_PAIR_FOUND" = 1 ] \
+    || fail "the captured Calm working pane's solid composer pair was not found"
+  pass "pi 0.85: the titled top border is what makes a stock generating pi's composer readable at all"
+}
+
+test_pi_085_titled_border_predicate_rejects_other_harnesses() {
+  # The predicate must recognize pi's indicator border by the vendor's own
+  # composition, not by any titled rule: muse draws a WORD-titled rule and must
+  # not be mistaken for a pi composer top border.
+  _fm_composer_pi_titled_open_row '── ⠦ Working ────────────────────────' \
+    || fail "pi's captured working border was rejected"
+  _fm_composer_pi_titled_open_row '── ⠦ ────────────────────────' \
+    || fail "pi's narrow spinner-only border fallback was rejected"
+  ! _fm_composer_pi_titled_open_row '── Voice input (⌥ + v to start) ─────────────' \
+    || fail "muse's word-titled rule was accepted as a pi composer border"
+  ! _fm_composer_pi_titled_open_row '────────────────────────────────' \
+    || fail "a solid rule was accepted as a TITLED border"
+  ! _fm_composer_pi_titled_open_row '── ⠦ Working' \
+    || fail "a border with no closing rule run was accepted"
+  pass "pi 0.85: the titled-border predicate accepts pi's indicator border and rejects a word-titled rule"
+}
+
+test_pi_085_real_typed_text_stays_pending() {
+  # The counterfactuals, both captured from a live pane with real keystrokes in
+  # the composer. Neither may be converted into "delivered": a half-typed
+  # message must keep earning its Enter retry and must never be typed over.
+  assert_screen "pi 0.85 typed while idle" pending \
+    "$CAPS_TMUX" "$(pi_085_screen calm-typed-idle)" "$(pi_085_cursor calm-typed-idle)" "pi"$'\t'"idle"
+  assert_screen "pi 0.85 typed while working" pending \
+    "$CAPS_TMUX" "$(pi_085_screen calm-typed-working)" "$(pi_085_cursor calm-typed-working)" "pi"$'\t'"working"
+  pass "pi 0.85: real typed text in the composer stays pending whether pi is idle or generating"
+}
+
+test_pi_085_modal_in_front_of_the_composer_is_unknown() {
+  # Captured live: with a modal open, typed text lands in the MODAL's own row,
+  # the composer is not what owns the keyboard, and Enter selects in the modal
+  # instead of submitting. The verdict must be `unknown` - never `empty` (which
+  # would authorize typing into it) and never `pending` (which a caller could
+  # convert into proof of a queued delivery).
+  local st verdict
+  for st in idle working blocked; do
+    verdict=$(fm_composer_classify_screen "$CAPS_TMUX" "$(pi_085_screen modal-eats-enter)" \
+      "$(pi_085_cursor modal-eats-enter)" "pi"$'\t'"$st")
+    [ "$verdict" = unknown ] \
+      || fail "a pi pane whose keyboard belongs to a modal must read unknown on agent_status=$st, got '$verdict'"
+  done
+  pass "pi 0.85: a modal in front of the composer reads unknown, never an injectable empty or a convertible pending"
+}
+
+test_pi_085_busy_shapes_from_the_captures() {
+  local out
+  # Both presentations of a genuinely generating pi must read busy: this is the
+  # read that turns a landed steer into a confirmed one. Before the captures,
+  # BOTH read idle - pi 0.85 dropped the `Working...` ellipsis the token
+  # required and moved the indicator off the transcript entirely.
+  out=$(pi_085_busy stock-working); [ "$out" = busy ] \
+    || fail "the captured stock generating pi must read busy, got '$out'"
+  out=$(pi_085_busy calm-working); [ "$out" = busy ] \
+    || fail "the captured Calm generating pi must read busy, got '$out'"
+  # The herdr submit core reads a pane with NO recorded harness, so the
+  # harness-less union must honour the scope too or a confirmed submit still
+  # cannot be proven there.
+  out=$(pi_085_busy stock-working ''); [ "$out" = busy ] \
+    || fail "the harness-less union must also read the captured stock generating pi busy, got '$out'"
+  out=$(pi_085_busy calm-working ''); [ "$out" = busy ] \
+    || fail "the harness-less union must also read the captured Calm generating pi busy, got '$out'"
+  # And the inverse, from captures of the same pane: settled and typed-into
+  # panes are idle, so busy is a transition signal rather than a constant.
+  out=$(pi_085_busy calm-idle); [ "$out" = idle ] \
+    || fail "the captured settled pi must read idle, got '$out'"
+  out=$(pi_085_busy calm-typed-idle); [ "$out" = idle ] \
+    || fail "the captured idle pi holding typed text must read idle, got '$out'"
+  out=$(pi_085_busy modal-eats-enter); [ "$out" = idle ] \
+    || fail "the captured modal-parked pi must read idle, got '$out'"
+  pass "pi 0.85: both generating presentations read busy while settled, typed-into, and modal-parked panes read idle"
+}
+
+test_pi_085_busy_shapes_are_opt_in_per_reader() {
+  # The captures were taken through the herdr adapter, and herdr's submit core
+  # is the only one that pairs a busy reading with a pre-Enter composer
+  # narrowing. A reader that does NOT ask for the shapes must therefore see a
+  # generating pi exactly as it did before these captures existed - which is
+  # what keeps the tmux submit core's baseline-gated conversion unreachable
+  # for pi until tmux captures of its own authorize it. A busy reading tmux
+  # cannot narrow is a busy reading that can convert an undelivered message
+  # into a confirmed one.
+  local out fixture
+  for fixture in stock-working calm-working; do
+    out=$(pi_085_busy "$fixture" pi ''); [ "$out" = idle ] \
+      || fail "the pi regex must not carry the shapes without the opt-in scope ($fixture), got '$out'"
+    out=$(pi_085_busy "$fixture" '' ''); [ "$out" = idle ] \
+      || fail "the harness-less union must not carry the shapes without the opt-in scope ($fixture), got '$out'"
+  done
+  # And the scope is what production actually reads: every herdr call site
+  # passes no harness, so the harness-less union plus `+pi-shapes` is the one
+  # combination a live herdr pane is ever classified by. Pin that combination
+  # rather than a harness argument no caller supplies - the shapes are scoped
+  # to the herdr BACKEND, not to the pi HARNESS, so they are consulted for
+  # every herdr pane whatever harness it runs.
+  for fixture in stock-working calm-working; do
+    out=$(pi_085_busy "$fixture" ''); [ "$out" = busy ] \
+      || fail "the reading production takes (harness-less union, +pi-shapes) must read the captured generating pi busy ($fixture), got '$out'"
+  done
+  out=$(pi_085_busy calm-idle ''); [ "$out" = idle ] \
+    || fail "the reading production takes must leave a settled pi idle, got '$out'"
+  pass "pi 0.85: the captured busy shapes are opt-in per reader, and the reading production takes is the harness-less union"
+}
+
+test_pi_085_busy_shapes_reject_the_word_alone() {
+  # The trap the reverted attempt fell into: matching pi's MESSAGE rather than
+  # its border would make ordinary prose a busy signal, and a busy signal is
+  # what converts a still-pending composer into "delivered". A `pending`
+  # composer plus a false busy is a message reported delivered that never was.
+  local text out
+  while IFS= read -r text; do
+    out=$(pi_085_busy_row "$text")
+    [ "$out" = idle ] || fail "user text '$text' must not read busy"
+  done <<'TEXT'
+Working on the auth refactor
+still Working
+\__/
+the boat is -~~~\__/-~~~ in prose
+── Voice input (⌥ + v to start) ─────────────
+────────────────────────────────
+── ⠦ Working
+TEXT
+  # ... and the shapes the vendor really does emit still read busy, in both
+  # locales, so the refusals above are a narrowing rather than a dead pattern.
+  out=$(pi_085_busy_row '── ⠦ Working ────────────────────────')
+  [ "$out" = busy ] || fail "pi's captured working border must read busy, got '$out'"
+  out=$(pi_085_busy_row '── ⠦ ────────────────────────')
+  [ "$out" = busy ] || fail "pi's narrow spinner-only border must read busy, got '$out'"
+  # Rows whose STATUS MESSAGE carries non-ASCII bytes. None of the committed
+  # captures does - every one spells pi's default ASCII `Working` - which is
+  # why the two-locale helper alone could not catch a message segment that was
+  # byte-fragile. Each of these read busy under UTF-8 and idle under LC_ALL=C
+  # while the segment was a negated class holding the rule glyph, whose bytes
+  # are also continuation bytes of these characters.
+  local row
+  for row in '── ⠦ Working… ──────────────────' \
+    '── ⠦ Thinking → tool ────────────' \
+    '── ⠦ retry in 3s • attempt 2 ────────' \
+    '── ⣀ Working ────────────────'; do
+    out=$(pi_085_busy_row "$row")
+    [ "$out" = busy ] || fail "a working border whose message carries non-ASCII bytes must read busy, got '$out' for '$row'"
+  done
+  # Calm's hull at the RIGHT EDGE of its traverse: the renderer's track span is
+  # `width - HULL_WIDTH`, so the hull ends at the last column with no water
+  # after it. That frame read idle while the shape required trailing water -
+  # one frame of every traverse misreading a generating Calm pi as settled.
+  out=$(pi_085_busy_row '-~~~-~~~-~~~-~~~-~~~-~~~\__/')
+  [ "$out" = busy ] || fail "Calm's right-edge hull frame must read busy, got '$out'"
+  pass "pi 0.85: pi's working WORD, its Calm sprite glyphs, and another harness's word-titled rule are never busy signals"
+}
+
+test_pi_085_working_composer_is_never_unsubmitted_input
+test_pi_085_titled_opener_is_never_injectable_whatever_the_status
+test_pi_085_titled_border_is_what_makes_the_working_pair_readable
+test_pi_085_titled_border_predicate_rejects_other_harnesses
+test_pi_085_real_typed_text_stays_pending
+test_pi_085_modal_in_front_of_the_composer_is_unknown
+test_pi_085_busy_shapes_from_the_captures
+test_pi_085_busy_shapes_are_opt_in_per_reader
+test_pi_085_busy_shapes_reject_the_word_alone
+
+test_pi_085_titled_row_pasted_into_an_open_composer_stays_pending() {
+  # Regression: the titled-border predicate above recognizes pi's composer TOP
+  # border, but the same shape can arrive as CONTENT - any pasted box art or
+  # table whose last line is a `── <glyph> ... ────────` rule. Accepting it as
+  # an opener while a pair is already open re-opens the pair below itself, and
+  # the classifier then scans the blank remainder and reports `empty`.
+  # `empty` is the verdict that authorizes the away-mode injector to type into
+  # the pane, so it must never be reachable for a composer that still holds
+  # the operator's unsent text: that text would be typed over, and the submit
+  # that followed would be "confirmed" against a composer that never cleared.
+  local screen
+  screen=$(printf '%s\n' \
+    'transcript' \
+    '────────────────────────────────' \
+    'real unsent text' \
+    '── ⚑ Section ────────────────────' \
+    '' \
+    '────────────────────────────────')
+  assert_screen "pi 0.85 titled rule pasted inside an open composer" pending \
+    "$CAPS_TMUX" "$screen" 4 "pi"$'\t'"idle"
+  pass "pi 0.85: a titled rule INSIDE an open composer pair is content, so real unsent text stays pending"
+}
+
+test_queued_enter_verdict_excludes_pi() {
+  # pi is excluded from the pending+busy queued-Enter conversion. The
+  # conversion's premise is opencode 1.18.4's: Enter mid-turn is accepted and
+  # QUEUED while the typed text stays visible. No capture establishes that for
+  # pi; pi 0.85.1 was observed to render a `Steering:` row and CLEAR its
+  # composer on an accepted mid-turn submit instead, so text still sitting in
+  # a generating pi's composer is evidence AGAINST delivery. Converting it
+  # would report an undelivered message as delivered; `pending` keeps the
+  # durable steering inbox re-ringing.
+  local out harness
+  for harness in pi pi-signed; do
+    out=$(fm_composer_queued_enter_verdict pending busy "$harness")
+    [ "$out" = pending ] \
+      || fail "a busy $harness pane whose composer still holds text must stay pending, got '$out'"
+  done
+  # The exclusion is harness-scoped, not a removal of the policy: every other
+  # harness (and a caller with no recorded harness) keeps the conversion.
+  out=$(fm_composer_queued_enter_verdict pending busy opencode)
+  [ "$out" = empty ] || fail "the queued-Enter conversion must survive for opencode, got '$out'"
+  out=$(fm_composer_queued_enter_verdict pending busy)
+  [ "$out" = empty ] || fail "the queued-Enter conversion must survive for a harness-less caller, got '$out'"
+  # And the exclusion never manufactures a verdict of its own.
+  out=$(fm_composer_queued_enter_verdict empty busy pi)
+  [ "$out" = empty ] || fail "a cleared composer must stay empty for pi too, got '$out'"
+  out=$(fm_composer_queued_enter_verdict unknown busy pi)
+  [ "$out" = unknown ] || fail "an unreadable composer must stay unknown for pi too, got '$out'"
+  pass "fm_composer_queued_enter_verdict: pi is excluded from the pending+busy conversion, every other harness keeps it"
+}
+
+test_pi_085_titled_row_pasted_into_an_open_composer_stays_pending
+test_queued_enter_verdict_excludes_pi
