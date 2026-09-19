@@ -49,6 +49,41 @@ EOF
   pass "fm-mail: environment values override the .env file"
 }
 
+test_env_file_tolerates_spaced_and_invalid_keys() {
+  local env_home out rc=0
+  env_home="$TMP_ROOT/envfile-spaced-home"
+  mkdir -p "$env_home"
+  cat > "$env_home/.env" <<'EOF'
+FM_MAIL_USER = spaced@example.com
+FM_MAIL_PASS=filepass
+not a key=ignored
+1BAD=ignored
+FM_IMAP_HOST=imap.file.invalid
+FM_SMTP_HOST=smtp.file.invalid
+EOF
+  out=$(env -u FM_MAIL_USER -u FM_MAIL_PASS -u FM_IMAP_HOST -u FM_SMTP_HOST \
+    FM_HOME="$env_home" "$MAIL" status 2>&1) || rc=$?
+  expect_code 0 "$rc" "a .env with spaced and non-identifier keys must not abort the client"
+  assert_contains "$out" "mail account: spaced@example.com" "a spaced key is trimmed and still loaded"
+  assert_not_contains "$out" "invalid variable name" "a malformed .env line never triggers a bash expansion error"
+  pass "fm-mail: .env loading tolerates spaced keys and skips non-identifier keys"
+}
+
+test_send_rejects_header_newlines() {
+  local out rc=0
+  out=$(FM_MAIL_USER=test FM_MAIL_PASS=pass FM_IMAP_HOST=h FM_SMTP_HOST=h \
+    FM_HOME="$HOME_DIR" "$MAIL" send \
+    "$(printf 'to@example.com\nBcc: sneak@example.com')" subj body 2>&1) || rc=$?
+  expect_code 1 "$rc" "a recipient carrying a newline must be refused"
+  assert_contains "$out" "one line" "the refusal explains the one-line header requirement"
+  rc=0
+  out=$(FM_MAIL_USER=test FM_MAIL_PASS=pass FM_IMAP_HOST=h FM_SMTP_HOST=h \
+    FM_HOME="$HOME_DIR" "$MAIL" send to@example.com \
+    "$(printf 'subj\rBcc: sneak@example.com')" body 2>&1) || rc=$?
+  expect_code 1 "$rc" "a subject carrying a carriage return must be refused"
+  pass "fm-mail: send refuses CR/LF in recipient and subject"
+}
+
 test_status_without_network() {
   local out rc
   out=$(FM_MAIL_USER="test@example.com" FM_MAIL_PASS="test-pass" \
@@ -2602,6 +2637,8 @@ SH
 
 test_missing_secret_fails_cleanly
 test_env_overrides_env_file
+test_env_file_tolerates_spaced_and_invalid_keys
+test_send_rejects_header_newlines
 test_status_without_network
 test_help_plumbing
 test_unknown_subcommand_prints_usage

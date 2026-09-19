@@ -12,7 +12,9 @@
 #                        Date / Subject / first line).
 #   send <to> <subject> <body | ->
 #                        Send one message. A "-" body reads plain text from
-#                        stdin.
+#                        stdin. Recipient and subject become message headers,
+#                        so each must be one line: a CR or LF in either is
+#                        refused rather than allowed to inject headers.
 #   poll                 Surface UNSEEN mail this home has not yet woken as a
 #                        `check` wake so firstmate answers it concisely. IMAP
 #                        \Seen mail never wakes a poll, no message is ever
@@ -72,8 +74,11 @@ fi
 ENV_FILE="$FM_HOME/.env"
 # Load the home .env for keys not already set, so a direct invocation's
 # environment overrides .env exactly like the Relay/FMX contract (fmx_env_get:
-# "env wins over .env"). Tolerates a leading "export ", surrounding whitespace,
-# one layer of matching quotes, comments, and blank lines.
+# "env wins over .env"). Tolerates a leading "export ", whitespace around both
+# the key and the value, one layer of matching quotes, comments, and blank
+# lines. A line whose trimmed key is not a shell identifier is skipped rather
+# than exported, because indirect expansion of an invalid name would abort this
+# script under set -e before any actionable diagnostic is printed.
 if [ -f "$ENV_FILE" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line#"${line%%[![:space:]]*}"}"
@@ -87,6 +92,10 @@ if [ -f "$ENV_FILE" ]; then
     esac
     key="${line%%=*}"
     key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    case "$key" in
+      ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) continue ;;
+    esac
     val="${line#*=}"
     val="${val#"${val%%[![:space:]]*}"}"
     val="${val%"${val##*[![:space:]]}"}"
@@ -94,7 +103,7 @@ if [ -f "$ENV_FILE" ]; then
       \"*\") val=${val#\"}; val=${val%\"} ;;
       \'*\') val=${val#\'}; val=${val%\'} ;;
     esac
-    if [ -n "$key" ] && [ -z "${!key:-}" ]; then
+    if [ -z "${!key:-}" ]; then
       export "$key=$val"
     fi
   done < "$ENV_FILE"
@@ -628,6 +637,12 @@ case "${1:-}" in
       usage
       exit 1
     fi
+    case "$to$subj" in
+      *$'\n'*|*$'\r'*)
+        echo "fm-mail: recipient and subject must each be one line" >&2
+        exit 1
+        ;;
+    esac
     if [ "$body" = "-" ]; then
       body="$(cat)"
     fi
