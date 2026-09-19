@@ -3,9 +3,8 @@
 # regression test for the exited-but-still-registered agent, the condition that
 # stranded a task on 2026-09-11: its agent exited, Herdr kept the registration,
 # and every `exit` and `relaunch` waited forever for a stop that had already
-# happened (bin/backends/herdr.sh's fm_backend_herdr_pane_agent_exited; see
-# docs/herdr-backend.md "An agent that exits without releasing its
-# registration").
+# happened (bin/backends/herdr.sh's stale-agent classification; see
+# docs/herdr-backend.md "Endpoint recovery classification").
 #
 # The verdict this pins is harness-dependent: it reads the agent label Herdr
 # itself registered and the command names in the operating system's own process

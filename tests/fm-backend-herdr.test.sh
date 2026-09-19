@@ -4251,6 +4251,84 @@ test_send_text_submit_detects_swallowed_enter() {
   pass "fm_backend_herdr_send_text_submit: reports 'pending' when agent_status stays idle and the composer still holds unsent text after retried Enters (swallowed)"
 }
 
+# --- send_text_submit: the composer fallback's native idle->busy proof ------
+# data/afk-inject-rca-s1/report.md fix 3. The fallback path (a baseline that is
+# not legibly idle - cursor reports `blocked` in every state) used to accept
+# only ONE proof of a landed Enter: the pane's RENDERED busy footer flipping
+# idle -> busy. A harness that hides that rendered token (pi under Calm, whose
+# `Working...` row is replaced by the animated boat - docs/calm.md) therefore
+# had no confirmable submit at all, and the away-mode daemon re-injected a
+# digest that had actually landed. herdr's NATIVE agent-state carries the same
+# idle -> busy transition and no presentation setting can hide it, so it is now
+# an independently sufficient proof.
+test_send_text_submit_fallback_accepts_native_transition_without_footer() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/submit-fallback-native"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  # 2: agent get - a cursor-shaped `blocked` baseline (not legibly idle, so
+  #    this attempt takes the composer fallback, never wait_for_working).
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  # 3: pane read - the rendered footer baseline: no busy token anywhere.
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/3.out"
+  # 4: pane read - the pre-Enter COMPOSER baseline. The typed text is in the
+  #    composer, so the composer owns the keyboard and the Enter about to be
+  #    sent submits THIS text.
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/4.out"
+  # 6: pane read - post-Enter composer still renders content (Calm/cursor draw
+  #    their own row there), so the content verdict is still `pending`.
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/6.out"
+  # 7: pane read - the rendered footer is still tokenless, so the cheaper
+  #    rendered-transition proof cannot fire.
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/7.out"
+  # 8: agent get - the native transition: the turn really started.
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"working"}}}\n' > "$resp/8.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 2 0.01 0.01' "$ROOT" )
+  [ "$out" = empty ] \
+    || fail "a native not-generating -> generating transition across our Enter must confirm the submit even with no rendered busy footer, got '$out'"
+  # Non-vacuousness, on the fixture that actually fed the run: the pane reads
+  # ($log records argv only, never response bodies) carry no busy token at
+  # all, so the cheaper rendered-footer rescue provably could not have
+  # produced this verdict, and the call counts pin the sequence that did -
+  # four pane reads (footer baseline, composer baseline, post-Enter composer,
+  # footer transition) and two native reads (the pre-Enter baseline and the
+  # queued-Enter proof).
+  [ "$(cat "$resp/3.out" "$resp/4.out" "$resp/6.out" "$resp/7.out" | grep -cE 'esc (to )?interrupt|Working\.\.\.|Ctrl\+c:cancel|ctrl\+c to stop')" -eq 0 ] \
+    || fail "fixture leaked a rendered busy token into a pane read; the native proof is no longer what is under test"
+  [ "$(grep -c $'\x1f''pane'$'\x1f''read' "$log")" -eq 4 ] \
+    || fail "expected 4 pane reads (footer baseline, composer baseline, post-Enter composer, footer transition), got: $(grep -c $'\x1f''pane'$'\x1f''read' "$log")"
+  [ "$(grep -c $'\x1f''agent'$'\x1f''get' "$log")" -eq 2 ] \
+    || fail "expected 2 native agent-state reads (baseline plus the queued-Enter proof), got: $(grep -c $'\x1f''agent'$'\x1f''get' "$log")"
+  pass "fm_backend_herdr_send_text_submit: the composer fallback accepts a native idle-to-busy transition as submit proof"
+}
+
+# The inverse, so the new proof cannot false-confirm: a fallback baseline whose
+# native state never leaves `blocked` and whose composer keeps the text is a
+# genuine swallow and must still report pending.
+test_send_text_submit_fallback_native_still_blocked_is_pending() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/submit-fallback-swallow"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  local n
+  # 2 is the pre-Enter baseline; after it the pane keeps rendering the same
+  # tokenless composer content and `agent get` keeps reporting `blocked` for
+  # the whole retry budget, so neither rescue can fire.
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  for n in 3 4 6 7 10 11; do printf '  \xe2\x9d\xaf hello captain\n' > "$resp/$n.out"; done
+  for n in 8 12 13; do
+    printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/$n.out"
+  done
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 2 0.01 0.01' "$ROOT" )
+  [ "$out" = pending ] \
+    || fail "a fallback attempt whose native state never starts generating is a genuine swallow and must stay pending, got '$out'"
+  # Non-vacuousness: the fixture really did answer every native read with a
+  # legible `blocked`, so this is a refused proof, not an unreadable pane.
+  [ "$(grep -c $'\x1f''agent'$'\x1f''get' "$log")" -eq 4 ] \
+    || fail "expected 4 native agent-state reads (baseline plus one per attempt plus the queued-Enter read), got: $(grep -c $'\x1f''agent'$'\x1f''get' "$log")"
+  pass "fm_backend_herdr_send_text_submit: a never-generating native state keeps the composer fallback's swallow verdict"
+}
+
 # Regression coverage for the 2026-07-03 incident using the NEW mechanism: a
 # slash command's first Enter can close a completion popup and fill an
 # argument-hint placeholder WITHOUT submitting. In the idle-baseline path,
@@ -4296,6 +4374,72 @@ test_send_text_submit_confirms_blocked_after_enter() {
   pass "fm_backend_herdr_send_text_submit: a post-Enter blocked state confirms delivery without retrying into the prompt"
 }
 
+# --- harness-aware submit baseline (away-supervisor inject-wedge fix) -------
+# RCA: data/afk-inject-rca-s1/report.md. Pi reports `blocked` while genuinely
+# idle at its prompt; Cursor reports `blocked` in every state. A single
+# baseline mapping cannot be safe for both (c0bf848 fixed Pi and broke
+# Cursor; c16d351 reverted it to fix Cursor and broke Pi again). The fix is
+# harness-aware: fm_backend_herdr_classify_submit_baseline consults the
+# native agent IDENTITY (never composer/pane rendering) and only Pi's
+# `blocked` baseline maps to idle.
+
+test_classify_submit_baseline_is_harness_aware() {
+  local out
+  out=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_classify_submit_baseline blocked pi' "$ROOT")
+  [ "$out" = idle ] || fail "a Pi identity's blocked baseline must map to idle (genuinely idle at the prompt), got '$out'"
+  out=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_classify_submit_baseline blocked ""' "$ROOT")
+  [ "$out" = busy ] || fail "an unidentified pane's blocked baseline must keep the Cursor-safe default of busy, got '$out'"
+  out=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_classify_submit_baseline blocked cursor-agent' "$ROOT")
+  [ "$out" = busy ] || fail "a non-Pi identity's blocked baseline must keep mapping to busy, got '$out'"
+  out=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_classify_submit_baseline idle pi' "$ROOT")
+  [ "$out" = idle ] || fail "Pi's idle baseline must still map to idle, got '$out'"
+  out=$(bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_classify_submit_baseline working pi' "$ROOT")
+  [ "$out" = busy ] || fail "Pi's working baseline must still map to busy, got '$out'"
+  pass "fm_backend_herdr_classify_submit_baseline: only a Pi identity's blocked baseline maps to idle; every other harness keeps the Cursor-safe busy default"
+}
+
+test_send_text_submit_pi_blocked_baseline_confirms_via_native_state() {
+  local dir log resp fb out enter_count
+  dir="$TMP_ROOT/submit-pi-blocked-native"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  # 1: send-text
+  # 2: agent get - baseline identity=pi, agent_status=blocked (Pi idle at the
+  #    prompt): the harness-aware baseline maps this to idle, taking the
+  #    native wait_for_working path instead of the composer/footer fallback.
+  # 3: send-keys enter
+  # 4: agent get - agent_status=working (a real turn started: submitted)
+  printf '{"result":{"agent":{"agent":"pi","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/4.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
+  [ "$out" = empty ] || fail "a Pi blocked-at-prompt baseline should confirm via native agent-state once it starts working, got '$out'"
+  enter_count=$(grep -c $'\x1f''pane'$'\x1f''send-keys'$'\x1f''w1:p2'$'\x1f''enter' "$log")
+  [ "$enter_count" -eq 1 ] || fail "send_text_submit should not need a second Enter for a plain message, sent $enter_count Enter(s)"
+  [ "$(grep -c $'\x1f''pane'$'\x1f''read' "$log")" -eq 0 ] || fail "a Pi blocked-at-prompt baseline must confirm via native state alone, never reading the composer/pane content"
+  pass "fm_backend_herdr_send_text_submit: a Pi blocked-at-prompt baseline takes the native path and confirms without ever reading composer content"
+}
+
+# The direct regression for the wedge: previously (pre-fix) this exact
+# sequence routed to the composer fallback, which cannot confirm a Pi submit
+# under Calm (docs/calm.md hides the rendered Working... footer), so the
+# away-supervisor daemon re-injected the same escalation every ~15s for
+# hours. Post-fix, delivery is confirmed purely from native agent-state, so
+# it is immune to Calm or any other rendering setting.
+test_send_text_submit_pi_blocked_baseline_confirms_when_still_blocked_after_enter() {
+  local dir log resp fb out enter_count
+  dir="$TMP_ROOT/submit-pi-blocked-still-blocked"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"agent":{"agent":"pi","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/4.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
+  [ "$out" = empty ] || fail "a Pi blocked-at-prompt baseline that reads blocked again after Enter must still confirm via native state, got '$out'"
+  enter_count=$(grep -c $'\x1f''pane'$'\x1f''send-keys'$'\x1f''w1:p2'$'\x1f''enter' "$log")
+  [ "$enter_count" -eq 1 ] || fail "a confirmed submit must not send a needless extra Enter, sent $enter_count Enter(s)"
+  [ "$(grep -c $'\x1f''pane'$'\x1f''read' "$log")" -eq 0 ] || fail "confirmation must never fall through to the composer/pane content for a Pi blocked baseline (that fallback is what wedged under Calm)"
+  pass "fm_backend_herdr_send_text_submit: away-supervisor inject-wedge regression - a Pi blocked baseline never falls through to the composer fallback that failed under Calm"
+}
+
 test_send_text_submit_preexisting_working_pending_is_queued_enter() {
   local dir log resp fb out enter_count
   dir="$TMP_ROOT/submit-preexisting-working-queued"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
@@ -4305,8 +4449,9 @@ test_send_text_submit_preexisting_working_pending_is_queued_enter() {
   # because the pre-Enter native status is already working.
   printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/2.out"
   printf '  ready\n' > "$resp/3.out"
-  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/5.out"
-  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/4.out"
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/6.out"
+  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/7.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 1 0.01 0.01' "$ROOT" )
@@ -4321,9 +4466,10 @@ test_send_text_submit_preexisting_working_does_not_confirm_failed_enter() {
   dir="$TMP_ROOT/submit-preexisting-working-enter-failed"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
   printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/2.out"
   printf '  ready\n' > "$resp/3.out"
-  printf '1\n' > "$resp/4.exit"
-  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/5.out"
-  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/4.out"
+  printf '1\n' > "$resp/5.exit"
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/6.out"
+  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/7.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 1 0.01 0.01' "$ROOT" )
@@ -4456,14 +4602,16 @@ test_send_text_submit_confirms_never_idle_native_state_via_footer_transition() {
   #    idle-baseline path is unreachable and the composer branch runs
   # 3: pane read - rendered footer baseline: no busy token, so the pane was NOT
   #    mid-turn before our Enter
-  # 4: send-keys enter
-  # 5: pane read - composer content mid-turn: placeholder plus busy token
-  # 6: pane read - rendered footer now busy: an idle-to-busy transition ACROSS
+  # 4: pane read - the pre-Enter composer baseline
+  # 5: send-keys enter
+  # 6: pane read - composer content mid-turn: placeholder plus busy token
+  # 7: pane read - rendered footer now busy: an idle-to-busy transition ACROSS
   #    our Enter, which is the submission proof
   printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/2.out"
   herdr_cursor_idle_plain > "$resp/3.out"
-  herdr_cursor_midturn_ansi > "$resp/5.out"
-  herdr_cursor_midturn_plain > "$resp/6.out"
+  herdr_cursor_idle_plain > "$resp/4.out"
+  herdr_cursor_midturn_ansi > "$resp/6.out"
+  herdr_cursor_midturn_plain > "$resp/7.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
@@ -4481,8 +4629,9 @@ test_send_text_submit_never_idle_native_state_keeps_pending_without_a_transition
   # borrowing someone else's turn as proof of our delivery.
   printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/2.out"
   herdr_cursor_midturn_plain > "$resp/3.out"
-  herdr_cursor_midturn_ansi > "$resp/5.out"
-  herdr_cursor_midturn_ansi > "$resp/7.out"
+  herdr_cursor_midturn_ansi > "$resp/4.out"
+  herdr_cursor_midturn_ansi > "$resp/6.out"
+  herdr_cursor_midturn_ansi > "$resp/8.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 2 0.01 0.01' "$ROOT" )
@@ -5374,7 +5523,268 @@ test_wait_for_working_treats_blocked_as_submit_active
 test_send_text_submit_detects_landed_send
 test_send_text_submit_detects_swallowed_enter
 test_send_text_submit_popup_autocomplete_requires_second_enter
+test_send_text_submit_fallback_accepts_native_transition_without_footer
+# --- review-17: a prompt in front of the composer must not read as delivered --
+# The native idle->busy proof above answers "did the agent start generating?",
+# which is NOT the same question as "did it start generating because of OUR
+# text". A pane parked on an interactive prompt takes our keystrokes AND our
+# Enter into that prompt, then answers it and starts a turn - a transition
+# indistinguishable from a delivered submission on a harness whose rendered
+# footer carries no busy token, so the message is reported delivered and lost.
+# The narrowing is the pre-Enter COMPOSER read: our typed text has to be in the
+# composer before the Enter, which is what proves the composer owns the
+# keyboard. The composer bytes below are the live pi 0.85.1 capture of exactly
+# that hazard (tests/assets/pi-0.85-composer/modal-eats-enter.ansi): the typed
+# text went into the modal's own row and the composer read `unknown`.
+test_send_text_submit_fallback_refuses_native_transition_when_a_prompt_owns_the_keyboard() {
+  local dir log resp fb out modal
+  dir="$TMP_ROOT/submit-fallback-prompt-parked"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  modal="$ROOT/tests/assets/pi-0.85-composer/modal-eats-enter.ansi"
+  [ -f "$modal" ] || fail "the captured prompt-parked pane fixture is missing: $modal"
+  # 2: agent get - a `blocked` baseline, so this attempt takes the composer
+  #    fallback rather than wait_for_working.
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  # 3: pane read - rendered footer baseline: no busy token, so the cheaper
+  #    rendered-transition proof can never fire and the native proof is the
+  #    only thing that could confirm here.
+  cat "$modal" > "$resp/3.out"
+  # 4: pane read - the pre-Enter COMPOSER baseline. Our text is NOT in the
+  #    composer: something in front of it took those keystrokes.
+  cat "$modal" > "$resp/4.out"
+  # 6: pane read after the Enter - still the same prompt-owned pane, so the
+  #    verdict is `unknown` and the cheaper rendered-footer rescue (which
+  #    requires a proven `pending`) cannot even be attempted.
+  cat "$modal" > "$resp/6.out"
+  # 7: agent get - the prompt was answered and a turn started. This is the
+  #    exact transition the native proof would otherwise accept.
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"working"}}}\n' > "$resp/7.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 1 0.01 0.01' "$ROOT" )
+  [ "$out" != empty ] \
+    || fail "a turn started by answering a prompt must never be reported as delivery of our text"
+  [ "$out" = unknown ] \
+    || fail "a prompt-parked pane should report the pane unreadable for submission, got '$out'"
+  # Non-vacuousness: the fixture really did supply the generating transition
+  # this narrowing refuses, and really did keep every rendered read tokenless,
+  # so this is a refused proof rather than a missing one.
+  grep -q 'working' "$resp/7.out" \
+    || fail "fixture did not supply the post-Enter generating state the narrowing must refuse"
+  # This case and test_send_text_submit_fallback_accepts_native_transition_
+  # without_footer above are the SAME path driven apart by ONE reading: there
+  # the pre-Enter composer holds our typed text and the native transition is
+  # accepted; here it does not and the identical transition is refused. So the
+  # refusal is attributable to that reading and to nothing else. It also costs
+  # nothing: the guard short-circuits before the queued-Enter round trip, so a
+  # prompt-parked pane spends one native read, not two.
+  [ "$(grep -c $'\x1f''pane'$'\x1f''read' "$log")" -eq 3 ] \
+    || fail "expected 3 pane reads (footer baseline, composer baseline, post-Enter composer), got: $(grep -c $'\x1f''pane'$'\x1f''read' "$log")"
+  [ "$(cat "$resp/3.out" "$resp/4.out" "$resp/6.out" | grep -cE 'esc (to )?interrupt|Ctrl\+c:cancel|ctrl\+c to stop')" -eq 0 ] \
+    || fail "fixture leaked a rendered busy token; the native proof is no longer what is under test"
+  pass "fm_backend_herdr_send_text_submit: a prompt that consumes our Enter is never confirmed as delivery (review-17)"
+}
+
+# The degraded (plain) capture path. `fm_backend_herdr_composer_state` falls
+# back to a styled=0 descriptor when an older herdr cannot serve an ANSI
+# capture, and styled=0 has no way to tell typed input from ghost text, so a
+# composer that genuinely holds our text reads `unknown` there rather than
+# `pending`. An exact-pending gate on that path would not NARROW the native
+# proof, it would delete it: every submit on that pane would stay unconfirmed,
+# which is exactly the re-injection wedge the RCA diagnosed. So the gate is
+# skipped when the baseline could not be read at full fidelity, and that pane
+# keeps its pre-gate behavior.
+test_send_text_submit_native_proof_survives_a_degraded_plain_capture() {
+  local dir log resp fb out n styled plain
+  local composer=$'  \xe2\x9d\xaf hello captain\n'
+  dir="$TMP_ROOT/submit-fallback-plain"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  # 2: agent get - a cursor-shaped `blocked` baseline, so this attempt takes
+  #    the composer fallback rather than wait_for_working.
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  # 4 and 7: the ANSI pane reads (the pre-Enter composer baseline and the
+  #    post-Enter composer) both FAIL, the way an older herdr's
+  #    `pane read --format ansi` does, so both fall back to the plain capture.
+  printf '1\n' > "$resp/4.exit"
+  printf '1\n' > "$resp/7.exit"
+  # 3: the rendered footer baseline - tokenless, so the cheaper rendered proof
+  #    can never fire. 5: the degraded pre-Enter composer baseline. 8: the
+  #    degraded post-Enter composer. All three carry our typed text.
+  for n in 3 5 8; do printf '%s' "$composer" > "$resp/$n.out"; done
+  # 9: agent get - the native transition: the turn really started.
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"working"}}}\n' > "$resp/9.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 2 0.01 0.01' "$ROOT" )
+  [ "$out" = empty ] \
+    || fail "a pane whose composer cannot be read at full fidelity must keep the native proof it had before the gate, got '$out'"
+  # Non-vacuousness, on the same bytes the run was fed: they read `pending`
+  # only at full fidelity. So the two capture modes really do disagree here,
+  # and an exact-pending gate on the degraded path would have deleted this
+  # pane's only confirmation route rather than narrowing it.
+  styled=$( bash -c '. "$0/bin/backends/herdr.sh"; fm_composer_classify_screen "$(printf "styled=1\ncursor=0\nidentity=1\nrows=%s" "$FM_COMPOSER_CAPTURE_LINES")" "$1"' "$ROOT" "$composer" )
+  plain=$( bash -c '. "$0/bin/backends/herdr.sh"; fm_composer_classify_screen "$(printf "styled=0\ncursor=0\nidentity=1\nrows=%s" "$FM_COMPOSER_CAPTURE_LINES")" "$1"' "$ROOT" "$composer" )
+  [ "$styled" = pending ] \
+    || fail "the fixture does not read pending at full fidelity, so this case is not about capture mode, got '$styled'"
+  [ "$plain" != pending ] \
+    || fail "the fixture reads pending on the degraded path too, so it no longer covers the skipped gate, got '$plain'"
+  # And the ANSI capture really was attempted and refused, so the plain
+  # descriptor is what classified the baseline.
+  [ "$(grep -c -- 'ansi' "$log")" -ge 2 ] \
+    || fail "the fixture never attempted the ANSI captures it is supposed to degrade"
+  pass "fm_backend_herdr_send_text_submit: the review-17 gate is skipped when the composer could not be read at full fidelity"
+}
+
+# --- the footer-transition branch's pi exclusion -----------------------------
+# That branch writes the same `pending + busy -> delivered` rule the
+# retries-exhausted queued-Enter path performs, just early, where the rendered
+# footer can already carry the proof. It must therefore honour the SAME harness
+# exclusions, and for pi the conversion's premise is false: pi 0.85.1 renders a
+# `Steering:` row and CLEARS its composer on an accepted mid-turn submit rather
+# than retaining and queueing the text the way opencode 1.18.4 does, so a pi
+# composer still holding our text after the Enter is evidence AGAINST delivery.
+# The two cases below are the same fixture shape with the harness identity
+# changed, so the refusal is attributable to that identity and cannot pass by
+# the branch simply having stopped converting for everyone.
+footer_transition_submit() {  # <agent-identity> -> the submit verdict
+  local agent=$1 dir log resp fb composer busy id
+  # A bordered composer holding text: `pending` for any harness, so the two
+  # runs below differ in the agent identity and in nothing else.
+  composer=$'\xe2\x95\xad\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x95\xae\n\xe2\x94\x82 half typed steer \xe2\x94\x82\n\xe2\x95\xb0\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x95\xaf\n'
+  busy="$composer"$'esc to interrupt\n'
+  id="{\"result\":{\"agent\":{\"agent\":\"$agent\",\"agent_status\":\"unknown\"}}}"
+  dir="$TMP_ROOT/footer-transition-$agent"; mkdir -p "$dir/responses"
+  log="$dir/log"; resp="$dir/responses"; : > "$log"
+  # 2: agent get - this identity, with a non-idle raw status so the submit
+  #    takes the composer-fallback branch rather than the idle-baseline path.
+  printf '%s\n' "$id" > "$resp/2.out"
+  # 3: the pre-Enter footer baseline - no busy token anywhere, so `idle`.
+  printf '%s' "$composer" > "$resp/3.out"
+  # 4: the pre-Enter composer baseline. 6: post-Enter the composer STILL holds
+  #    the text. 7: the footer now carries a busy token - the idle-to-busy
+  #    transition this branch converts on. 8: the queued-Enter native read.
+  printf '%s' "$composer" > "$resp/4.out"
+  printf '%s' "$composer" > "$resp/6.out"
+  printf '%s' "$busy" > "$resp/7.out"
+  printf '%s\n' "$id" > "$resp/8.out"
+  fb=$(make_herdr_fakebin "$dir")
+  PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "half typed steer" 1 0.01 0.01' "$ROOT"
+}
+
+test_send_text_submit_footer_transition_excludes_pi_only() {
+  local out
+  # REFUSED for pi: the busy transition is real, but for pi a still-occupied
+  # composer is not proof of a queued Enter.
+  out=$(footer_transition_submit pi)
+  [ "$out" != empty ] \
+    || fail "a pi composer that still holds our text must not be converted to delivered by the footer transition"
+  [ "$out" = pending ] \
+    || fail "a pi pane whose composer still holds the text should stay pending so the inbox re-rings, got '$out'"
+  # CONVERTED for a harness that really does queue a mid-turn Enter. Same
+  # fixture, same transition, only the identity differs - so the refusal above
+  # is attributable to the harness and cannot pass by the branch having simply
+  # stopped converting for everyone.
+  out=$(footer_transition_submit opencode)
+  [ "$out" = empty ] \
+    || fail "the footer-transition conversion must survive for a harness that queues a mid-turn Enter, got '$out'"
+  pass "fm_backend_herdr_send_text_submit: the footer-transition conversion excludes pi and still converts for another harness"
+}
+
+# herdr_classify_composer: the composer verdict for a screen, read through the
+# same capability descriptor fm_backend_herdr_composer_read builds, so a
+# fixture's classification is established by the real classifier rather than
+# asserted.
+herdr_classify_composer() {  # <screen> [identity]
+  bash -c '. "$0/bin/backends/herdr.sh"; fm_composer_classify_screen "$(printf "styled=1\ncursor=0\nidentity=1\nrows=%s" "$FM_COMPOSER_CAPTURE_LINES")" "$1" "" "$2"' "$ROOT" "$1" "${2:-}"
+}
+
+# The gate's admitted and refused tokens, driven apart in one case so neither
+# half can go quietly vacuous.
+# It admits EXACTLY `pending`. `pending-unproven` is refused even though it
+# also means the region holds content, because the ambiguity that produces it
+# is not only about geometry: the shared classifier marks a container
+# ambiguous when its top border carries a TITLE, and a titled border is the
+# shape of a MODAL. The committed pi capture cannot show this - pi's modal is
+# UNBOXED, which is why it reads `unknown` - so the boxed screen below is the
+# evidence, classified through the same descriptor the adapter uses.
+# Admitting the token would let a boxed prompt holding our typed filter text
+# satisfy the gate, eat the Enter, and have the turn started by answering it
+# read as our delivery (docs/verification/pi-composer-shapes.md).
+test_send_text_submit_gate_admits_only_a_proven_pending_composer() {
+  local dir log resp fb out plain titled modal v_plain v_titled v_modal
+  # Same box, one difference: a TITLE on the top border.
+  plain=$'\xe2\x95\xad\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x95\xae\n\xe2\x94\x82 hello captain    \xe2\x94\x82\n\xe2\x95\xb0\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x95\xaf\n'
+  titled=$'\xe2\x95\xad\xe2\x94\x80 Select a model \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x95\xae\n\xe2\x94\x82 hello captain    \xe2\x94\x82\n\xe2\x95\xb0\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x95\xaf\n'
+  modal="$ROOT/tests/assets/pi-0.85-composer/modal-eats-enter.ansi"
+  [ -f "$modal" ] || fail "the captured prompt-parked pane fixture is missing: $modal"
+  # The three fixtures really do classify the three tokens this case is about,
+  # through the same read the submit core takes.
+  v_plain=$(herdr_classify_composer "$plain")
+  v_titled=$(herdr_classify_composer "$titled")
+  v_modal=$(herdr_classify_composer "$(cat "$modal")")
+  [ "$v_plain" = pending ] \
+    || fail "the untitled box fixture does not classify pending, so the admitted case tests nothing: got '$v_plain'"
+  [ "$v_titled" = pending-unproven ] \
+    || fail "the titled-modal box fixture does not classify pending-unproven, so the refusal tests nothing: got '$v_titled'"
+  [ "$v_modal" = unknown ] \
+    || fail "the prompt-parked fixture does not classify unknown: got '$v_modal'"
+
+  # ADMITTED: a proven `pending` pre-Enter composer plus the native
+  # idle-to-busy transition confirms the submit.
+  dir="$TMP_ROOT/submit-gate-pending"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  printf '%s' "$plain" > "$resp/3.out"
+  printf '%s' "$plain" > "$resp/4.out"
+  printf '%s' "$plain" > "$resp/6.out"
+  # 7: the rendered footer transition read - tokenless, so only the native
+  #    proof below can confirm. 8: agent get - the native transition.
+  printf '%s' "$plain" > "$resp/7.out"
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"working"}}}\n' > "$resp/8.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 2 0.01 0.01' "$ROOT" )
+  [ "$out" = empty ] \
+    || fail "a proven pending pre-Enter composer plus the native transition must confirm the submit, got '$out'"
+
+  # REFUSED, same path, one TITLE added to the same box: a boxed prompt that
+  # took our keystrokes must not have the turn it starts read as delivery.
+  dir="$TMP_ROOT/submit-gate-titled-modal"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  printf '%s' "$titled" > "$resp/3.out"
+  printf '%s' "$titled" > "$resp/4.out"
+  printf '%s' "$titled" > "$resp/6.out"
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"working"}}}\n' > "$resp/7.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 1 0.01 0.01' "$ROOT" )
+  [ "$out" != empty ] \
+    || fail "a titled (modal-shaped) box must not satisfy the pre-Enter gate; an undelivered message was reported delivered"
+  grep -q 'working' "$resp/7.out" \
+    || fail "fixture did not supply the generating transition the refusal must refuse"
+
+  # REFUSED, the captured pi case, so the unboxed reading stays pinned too.
+  dir="$TMP_ROOT/submit-gate-unknown"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"blocked"}}}\n' > "$resp/2.out"
+  cat "$modal" > "$resp/3.out"
+  cat "$modal" > "$resp/4.out"
+  cat "$modal" > "$resp/6.out"
+  printf '{"result":{"agent":{"agent":"cursor","agent_status":"working"}}}\n' > "$resp/7.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 1 0.01 0.01' "$ROOT" )
+  [ "$out" = unknown ] \
+    || fail "a prompt-parked pane should still report the pane unreadable for submission, got '$out'"
+  pass "fm_backend_herdr_send_text_submit: the pre-Enter gate admits only a proven pending composer, refusing a titled modal box and an unreadable pane"
+}
+
+test_send_text_submit_fallback_refuses_native_transition_when_a_prompt_owns_the_keyboard
+test_send_text_submit_native_proof_survives_a_degraded_plain_capture
+test_send_text_submit_gate_admits_only_a_proven_pending_composer
+test_send_text_submit_footer_transition_excludes_pi_only
+test_send_text_submit_fallback_native_still_blocked_is_pending
 test_send_text_submit_confirms_blocked_after_enter
+test_classify_submit_baseline_is_harness_aware
+test_send_text_submit_pi_blocked_baseline_confirms_via_native_state
+test_send_text_submit_pi_blocked_baseline_confirms_when_still_blocked_after_enter
 test_send_text_submit_preexisting_working_pending_is_queued_enter
 test_send_text_submit_preexisting_working_does_not_confirm_failed_enter
 test_send_text_submit_idle_baseline_does_not_confirm_failed_enter

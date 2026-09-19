@@ -2338,7 +2338,7 @@ fm_backend_herdr_server_running_state() {  # <session>
 # whose state cannot itself be read, still yields `unreadable` here too: absence
 # is claimed only from positive evidence of it.
 fm_backend_herdr_agent_state() {  # <target>
-  local target=$1
+  local target=$1 label
   fm_backend_herdr_parse_target "$target" || { printf 'unreadable'; return 0; }
   case "$(fm_backend_herdr_pane_agent_state "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE")" in
     dead) printf 'missing' ;;
@@ -3069,15 +3069,25 @@ fm_backend_herdr_composer_identity() {  # <target> -> "<agent>\t<status>"
 # only when the classifier reports the verdict depends on it (a pi separator
 # pair below every other candidate), preserving this adapter's original
 # consult-only-when-needed behavior.
-fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unproven|unknown
-  local target=$1 cap caps verdict identity
-  fm_backend_herdr_parse_target "$target" || { printf 'unknown'; return 0; }
+# fm_backend_herdr_composer_read: the same read, echoing `<mode>\t<verdict>`
+# where mode is styled|plain|none - which of the two capture fidelities
+# produced the verdict. A caller that GATES on an exact verdict needs it,
+# because the two modes cannot answer the same questions: styled=0 has no way
+# to tell typed input from ghost text, so a composer that genuinely holds text
+# reads `unknown` there rather than `pending`. The mode travels in the echoed
+# value rather than a global because every caller reads this through a command
+# substitution, where a global assignment would be discarded with the subshell.
+fm_backend_herdr_composer_read() {  # <target> -> "<styled|plain|none>\t<verdict>"
+  local target=$1 cap caps mode verdict identity
+  fm_backend_herdr_parse_target "$target" || { printf 'none\tunknown'; return 0; }
   if cap=$(fm_backend_herdr_capture_ansi "$target" "$FM_COMPOSER_CAPTURE_LINES" 2>/dev/null); then
     caps=$(printf 'styled=1\ncursor=0\nidentity=1\nrows=%s' "$FM_COMPOSER_CAPTURE_LINES")
+    mode=styled
   elif cap=$(fm_backend_herdr_capture "$target" "$FM_COMPOSER_CAPTURE_LINES"); then
     caps=$(printf 'styled=0\ncursor=0\nidentity=1\nrows=%s' "$FM_COMPOSER_CAPTURE_LINES")
+    mode=plain
   else
-    printf 'unknown'
+    printf 'none\tunknown'
     return 0
   fi
   verdict=$(fm_composer_classify_screen "$caps" "$cap")
@@ -3088,7 +3098,13 @@ fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unprove
     verdict=$(fm_composer_classify_screen "$caps" "$cap" '' "$identity")
     [ "$verdict" != need-identity ] || verdict=unknown
   fi
-  printf '%s' "$verdict"
+  printf '%s\t%s' "$mode" "$verdict"
+}
+
+fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unproven|unknown
+  local read
+  read=$(fm_backend_herdr_composer_read "$1")
+  printf '%s' "${read#*$'\t'}"
 }
 
 # fm_backend_herdr_rendered_busy_state: busy|idle|unknown from the pane's
@@ -3100,12 +3116,25 @@ fm_backend_herdr_composer_state() {  # <target> -> empty|pending|pending-unprove
 # harness whose native state never transitions. Without a harness argument the
 # shared matcher uses its union of verified tokens, which is what the submit
 # core wants: it has no recorded harness for the pane.
+# It opts into FM_DELIVERY_PI_BUSY_SHAPES (`+pi-shapes`), the pi 0.85 working
+# shapes. The activation is scoped here rather than to the shared defaults
+# because of what a busy reading can be paired with in this adapter's submit
+# core: its NATIVE idle-to-busy transition proof also takes a pre-Enter
+# composer read proving the composer owned the keyboard. That narrowing is on
+# that branch alone - the footer-transition branch below and the queued-Enter
+# read consume this same reading with no composer pairing, gated instead on a
+# pre-Enter footer baseline these shapes make accurate for pi, and pi is
+# separately excluded from the queued-Enter conversion. The tmux submit core
+# has no equivalent narrowing on any branch, so authorizing the shapes there
+# needs both that narrowing and tmux busy captures
+# (docs/verification/pi-composer-shapes.md). The patterns themselves stay
+# owned by bin/fm-composer-lib.sh.
 fm_backend_herdr_rendered_busy_state() {  # <target> [harness] -> busy|idle|unknown
   local target=$1 harness=${2:-} cap visible
   cap=$(fm_backend_herdr_capture "$target" 40) || { printf 'unknown'; return 0; }
   visible=$(printf '%s' "$cap" | grep -v '^[[:space:]]*$' | tail -12)
   [ -n "$visible" ] || { printf 'unknown'; return 0; }
-  if printf '%s' "$visible" | fm_busy_lines_match "$harness"; then
+  if printf '%s' "$visible" | fm_busy_lines_match "$harness" +pi-shapes; then
     printf 'busy'
   else
     printf 'idle'
@@ -3167,11 +3196,20 @@ fm_backend_herdr_rendered_busy_state() {  # <target> [harness] -> busy|idle|unkn
 # right-aligned `ctrl+c to stop`, so the content verdict is `pending` on a
 # composer that holds no user text at all and every steer reported delivery
 # unconfirmed on a message that had actually landed.
-# The escape is the SAME semantic signal the idle-baseline path uses, read from
-# the pane's verified busy footer instead of native agent-state, and it is the
-# rendered-footer twin of the tmux submit core's turn-started confirmation
-# (bin/fm-tmux-lib.sh): an idle-to-busy transition ACROSS our Enter is proof the
-# harness accepted the submission. The baseline is taken before the first Enter
+# The escape is the SAME semantic signal the idle-baseline path uses - an
+# idle-to-busy transition ACROSS our Enter is proof the harness accepted the
+# submission, the twin of the tmux submit core's turn-started confirmation
+# (bin/fm-tmux-lib.sh). Two independent readings carry it, and either one is
+# sufficient: herdr's NATIVE agent-state going not-generating -> generating,
+# which no presentation setting can hide, and the pane's verified busy footer,
+# which still covers a harness whose native state never leaves `blocked`.
+# The native reading serves a harness that reaches this branch with a legible
+# native baseline of its own and later reports `working` - a Cursor-shaped
+# pane that reports `blocked` before the Enter and starts generating after it
+# (data/afk-inject-rca-s1/report.md, fix 3). A Calm-on pi never reaches here:
+# its `blocked` baseline classifies idle through the harness-aware carve-out
+# (fix 1) and it is confirmed on the idle-baseline path instead.
+# The footer baseline is taken before the first Enter
 # and only when the native baseline was not legibly idle, so the idle-baseline
 # path still never reads pane content until native stays idle. A pane already
 # mid-turn cannot use a rendered-footer transition as proof of this Enter;
@@ -3210,12 +3248,19 @@ fm_backend_herdr_queued_enter_busy() {  # <target> <allow-rendered>
 
 fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep> <settle>
   local target=$1 text=$2 retries=$3 sleep_s=$4 settle=$5 i=0 verdict baseline confirm_sleep
-  local raw_status footer_baseline='' allow_rendered=0 enter_sent=0
+  local raw_status footer_baseline='' native_baseline='' allow_rendered=0 enter_sent=0
+  local composer_baseline='' composer_baseline_mode=none identity agent_identity
   fm_backend_herdr_parse_target "$target" || { printf 'unknown'; return 0; }
   fm_backend_herdr_send_literal "$target" "$text" || { printf 'send-failed'; return 0; }
   sleep "$settle"
-  raw_status=$(fm_backend_herdr_agent_status_raw "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE")
-  baseline=$(fm_backend_herdr_classify_submit_agent_status "$raw_status")
+  # Single agent-get read supplies both the pre-Enter agent_status AND the
+  # native agent identity (fm_backend_herdr_agent_identity_raw), so the
+  # harness-aware baseline below costs no extra round trip and never depends
+  # on composer/pane rendering.
+  identity=$(fm_backend_herdr_agent_identity_raw "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE" 2>/dev/null) || identity=''
+  agent_identity=${identity%%$'\t'*}
+  raw_status=${identity#*$'\t'}
+  baseline=$(fm_backend_herdr_classify_submit_baseline "$raw_status" "$agent_identity")
   confirm_sleep=$(fm_backend_herdr_submit_confirm_budget "$sleep_s")
   # Typing never starts a turn, so a footer read taken after the literal send
   # and before the first Enter is still a pre-submission baseline.
@@ -3223,6 +3268,19 @@ fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep>
     allow_rendered=1
   else
     footer_baseline=$(fm_backend_herdr_rendered_busy_state "$target")
+    native_baseline=$(fm_backend_herdr_classify_agent_status "$raw_status")
+    # Our text was typed one step ago and no Enter has been sent, so this read
+    # answers one question the two busy baselines cannot: did those keystrokes
+    # reach the COMPOSER? A `pending` composer holds them and therefore owns
+    # the keyboard, so the Enter about to be sent submits this text. Anything
+    # else means something in front of the composer took them, which is the
+    # case the native proof below must refuse.
+    # It has to be taken here, before the first Enter, so this branch costs
+    # one more pane read than it did; the idle-baseline path above still
+    # reads no pane content at all.
+    composer_baseline=$(fm_backend_herdr_composer_read "$target")
+    composer_baseline_mode=${composer_baseline%%$'\t'*}
+    composer_baseline=${composer_baseline#*$'\t'}
   fi
   while :; do
     if fm_backend_herdr_send_key "$target" Enter; then
@@ -3254,11 +3312,90 @@ fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep>
     else
       sleep "$sleep_s"
       verdict=$(fm_backend_herdr_composer_state "$target")
-      if [ "$verdict" = pending ] && [ "$raw_status" != working ] \
-        && [ "$footer_baseline" = idle ] \
-        && [ "$(fm_backend_herdr_rendered_busy_state "$target")" = busy ]; then
-        verdict=busy
-      fi
+      case "$verdict" in
+        pending|pending-unproven|unknown)
+          if [ "$verdict" = pending ] && [ "$raw_status" != working ] \
+            && [ "$footer_baseline" = idle ] \
+            && [ "$(fm_backend_herdr_rendered_busy_state "$target")" = busy ] \
+            && [ "$(fm_composer_queued_enter_verdict "$verdict" busy "$agent_identity")" = empty ]; then
+            # This is the SAME `pending + busy -> delivered` conversion the
+            # retries-exhausted path below performs, written where the rendered
+            # footer can carry the proof early, so it asks the one owner of
+            # that policy rather than repeating it - which is what applies the
+            # harness exclusions at both sites instead of only one.
+            # It matters for pi: pi 0.85.1 renders a `Steering:` row and CLEARS
+            # its composer on an accepted mid-turn submit rather than
+            # retaining and queueing the text the way opencode 1.18.4 does, so
+            # for pi a composer that still holds our text after the Enter is
+            # evidence AGAINST delivery, not evidence of a queued one. The
+            # pre-Enter footer baseline above answers a different question -
+            # whether the pane was already mid-turn - and cannot substitute.
+            # The cost is a narrowing: a pi submit this branch used to confirm
+            # now stays unconfirmed and the durable steering inbox re-rings.
+            verdict=busy
+          elif [ "$footer_baseline" = idle ] && [ "$native_baseline" = idle ] \
+            && { [ "$composer_baseline_mode" = plain ] \
+              || [ "$composer_baseline" = pending ]; } \
+            && [ "$(fm_backend_herdr_queued_enter_busy "$target" 0)" = busy ]; then
+            # The rendered footer could not carry the proof (a harness that
+            # hides its busy token, or a composer this classifier cannot read).
+            # herdr's NATIVE agent-state carries the same idle-to-busy
+            # transition and no presentation setting can hide it, so a pane
+            # that reported `blocked` before the Enter and reports `working`
+            # after it is confirmed here (data/afk-inject-rca-s1/report.md,
+            # fix 3). Read second, so a confirmation the footer already proved
+            # costs no extra round trip.
+            # BOTH pre-Enter readings must be idle: a harness that reports
+            # `blocked` in every state (Cursor) has no native evidence of its
+            # own about whether the pane was already mid-turn, so the footer
+            # baseline remains the guard against borrowing someone else's turn
+            # as proof of this delivery.
+            # The pre-Enter COMPOSER read must additionally be `pending`. That
+            # transition alone proves only that the agent started generating,
+            # never that IT started generating because of our text: a pane
+            # parked on an interactive prompt takes our keystrokes and our
+            # Enter into that prompt, then answers it and starts a turn, which
+            # reads exactly like a delivered submission on a harness whose
+            # footer carries no busy token. Captured live on pi 0.85.1: with a
+            # modal in front of the composer, the typed text lands in the
+            # modal's own row, the composer reads `unknown` rather than
+            # `pending`, and the Enter selects in the modal while the message
+            # is never delivered (docs/verification/pi-composer-shapes.md).
+            # Requiring the typed text to be in the composer BEFORE the Enter
+            # keeps the Cursor pane this branch exists for - its mid-turn
+            # composer reads `pending` - and refuses the prompt-parked pane.
+            # EXACTLY `pending`. `pending-unproven` is refused even though it
+            # also means the region holds content, because the ambiguity that
+            # produces it is not only about geometry: the shared classifier
+            # marks a container ambiguous when its top border carries a TITLE,
+            # and a titled border is the shape of a MODAL. Executed against
+            # the classifier with the descriptor this adapter uses, a boxed
+            # `╭─ Select a model ─╮` holding typed filter text returns
+            # `pending-unproven` while the same box untitled returns
+            # `pending`. Admitting the token would therefore let a boxed
+            # prompt satisfy this gate, eat the Enter, and have the turn it
+            # starts read as our delivery - the exact review-17 failure. The
+            # committed pi capture refuses correctly only because pi's modal
+            # is UNBOXED (docs/verification/pi-composer-shapes.md).
+            # The cost is real and accepted: a composer whose geometry is
+            # genuinely ambiguous loses this proof entirely and its submit
+            # cannot be confirmed on this path. Unconfirmed is recoverable -
+            # the durable steering inbox re-rings - and a message reported
+            # delivered that never was is not. `unknown` is refused for the
+            # same reason, being the prompt-parked reading itself.
+            # The gate is SKIPPED when that baseline came from the degraded
+            # plain capture (an older herdr with no ANSI capture): styled=0
+            # cannot distinguish typed input from ghost text, so it reads
+            # `unknown` even for a composer that genuinely holds our text, and
+            # an exact-pending gate there would not narrow the proof - it
+            # would delete the only confirmation route this pane has, leaving
+            # every submit unconfirmed, which is the re-injection wedge the
+            # RCA diagnosed. That path keeps its pre-gate behavior until it
+            # can be read at full fidelity.
+            verdict=busy
+          fi
+          ;;
+      esac
       case "$verdict" in
         busy) printf 'empty'; return 0 ;;
         empty) printf 'empty'; return 0 ;;
@@ -3271,7 +3408,8 @@ fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep>
         printf 'send-failed'
       else
         fm_composer_queued_enter_verdict "$verdict" \
-          "$(fm_backend_herdr_queued_enter_busy "$target" "$allow_rendered")"
+          "$(fm_backend_herdr_queued_enter_busy "$target" "$allow_rendered")" \
+          "$agent_identity"
       fi
       return 0
     fi
@@ -3380,26 +3518,70 @@ fm_backend_herdr_endpoint_confirmed_gone() {  # <target>
 
 # fm_backend_herdr_classify_agent_status: map a raw `agent get` agent_status
 # value to the adapter's watcher busy|idle|unknown vocabulary. working ->
-# busy (actively generating); idle/done -> idle; blocked -> idle (a blocked
-# agent is stuck waiting on the human, not grinding - the watcher should
-# treat it like a stale pane needing attention, not suppress it as busy);
-# unknown/unparseable/empty -> unknown, the caller's cue to fall back to
-# pane-regex detection.
+# busy (actively generating); done -> idle (terminal); blocked -> idle (a
+# blocked agent is stuck waiting on the human, not grinding - the watcher
+# should treat it like a stale pane needing attention, not suppress it as
+# busy). Herdr's native idle is NOT positive idle evidence: `agent get`
+# reads idle while a harness waits on its own long foreground tool call, so
+# mapping it to idle would misread a busy worker as idle. idle and
+# unknown/unparseable/empty therefore map to unknown, the caller's cue to
+# defer to the task's semantic lifecycle record (bin/fm-busy-lib.sh,
+# agent_start/agent_settled), never to a rendered busy footer.
 fm_backend_herdr_classify_agent_status() {  # <raw-agent_status>
   case "$1" in
     working) printf 'busy' ;;
-    idle|done) printf 'idle' ;;
-    blocked) printf 'idle' ;;
+    done|blocked) printf 'idle' ;;
     *) printf 'unknown' ;;
   esac
 }
 
+# fm_backend_herdr_classify_submit_agent_status: map a raw `agent get`
+# agent_status value to submit-confirmation busy|idle|unknown. Used for the
+# POST-ENTER poll only (fm_backend_herdr_wait_for_working): once Enter has
+# been sent, blocked means a landed submit is now waiting on the human, so it
+# reads as submit-active ("busy") here, unlike the watcher's idle-equivalent
+# mapping above. This function's post-Enter meaning does not change with
+# c16d351/this fix; only the separate PRE-ENTER baseline below does.
 fm_backend_herdr_classify_submit_agent_status() {  # <raw-agent_status>
   case "$1" in
     working|blocked) printf 'busy' ;;
     idle|done) printf 'idle' ;;
     *) printf 'unknown' ;;
   esac
+}
+
+# fm_backend_herdr_classify_submit_baseline: the harness-aware PRE-ENTER
+# baseline classifier used only by fm_backend_herdr_send_text_submit before
+# its first Enter. herdr's `blocked` covers two structurally different
+# situations, and no single mapping is safe for both:
+#   - Cursor (and any harness not explicitly recognized below) reports
+#     `blocked` in EVERY native state - idle, mid-turn, and after - so a
+#     blocked baseline must keep mapping to `busy` here, routing submit
+#     confirmation to the composer/rendered-footer fallback. Mapping it to
+#     `idle` would send Cursor down the native-only wait_for_working path,
+#     where the UNCHANGED post-Enter classifier above still maps
+#     blocked -> busy: a swallowed Enter would false-confirm on Cursor's very
+#     next (still blocked) poll (c16d351).
+#   - Pi reports `blocked` only when genuinely idle at its prompt waiting on
+#     the human - the same state bin/fm-composer-lib.sh's
+#     `_fm_composer_pi_verdict` already treats as idle-equivalent, admitted
+#     only when the native identity is exactly `pi`. Keeping Cursor's busy
+#     mapping for Pi instead routes it to the composer fallback, which cannot
+#     confirm a Pi submit under Calm (docs/calm.md: the rendered `Working...`
+#     footer is hidden) - the away-supervisor inject-wedge
+#     (data/afk-inject-rca-s1/report.md; c0bf848 fixed this once and
+#     c16d351 had to revert it because it broke Cursor the same way).
+# The distinguishing signal is herdr's native agent IDENTITY
+# (fm_backend_herdr_agent_identity_raw), never composer or pane rendering, so
+# this mapping never depends on Calm or any other presentation setting. An
+# absent or unrecognized identity keeps the Cursor-safe default.
+fm_backend_herdr_classify_submit_baseline() {  # <raw-agent_status> <agent-identity>
+  local raw=$1 agent=$2
+  if [ "$agent" = pi ] && [ "$raw" = blocked ]; then
+    printf 'idle'
+    return 0
+  fi
+  fm_backend_herdr_classify_submit_agent_status "$raw"
 }
 
 # fm_backend_herdr_agent_status_raw: one `agent get` read, echoing the raw

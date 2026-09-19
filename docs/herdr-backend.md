@@ -231,18 +231,39 @@ Enter, Escape, and Ctrl-C are supported.
 Typed-plane slash input, and dollar-prefixed skill input for Codex, uses the shared harness-aware settle before the first Enter so a completion popup cannot consume it.
 Typed-plane text is typed once; only Enter is retried.
 
+The pre-Enter baseline is harness-aware: Pi's `blocked` genuinely means idle at the prompt and is mapped to idle here, while every other harness's `blocked` keeps the busy mapping below (`fm_backend_herdr_classify_submit_baseline`, `bin/backends/herdr.sh`).
+That distinction is read from Herdr's native agent identity (`agent get`), never from composer or footer rendering, so it stays correct regardless of presentation settings such as Calm.
 On an idle or done native baseline, submit confirmation first waits for `working` or `blocked` across a bounded polling window.
 If native status stays idle, the shared composer verdict is the next positive signal: a cleared composer is delivery, and proven pending text retries Enter.
 After the retry budget, `fm_composer_queued_enter_verdict` treats proven pending text plus a generating busy signal as a queued delivered Enter, and keeps an idle pending composer as a genuine swallow.
-On an already active or unreadable baseline, the adapter falls back to conservative composer clearance, with a pre-Enter rendered-footer transition when that baseline is unavailable.
+On an already active or unreadable baseline, the adapter falls back to conservative composer clearance, with a pre-Enter idle-to-busy transition - read from the rendered busy footer or from native agent-state - when that baseline is unavailable.
 A fully unreadable target stops retrying and reports unknown.
 blocked is not treated as a queued-Enter busy signal, so a Cursor pane that reports blocked in every state does not receive that conversion.
 
 Some harnesses never present a legibly idle native baseline at all, so the composer fallback is their only path.
 Herdr reports a Cursor pane `blocked` in every state, and Cursor's mid-turn composer renders its placeholder beside a right-aligned busy token, which is composer content and therefore `pending` on a composer that holds no user text.
-That fallback alone reported every delivered steer as unconfirmed, so it is paired with a rendered-footer transition: the pane's verified busy footer is read once before the first Enter, and an idle-to-busy transition across that Enter confirms the submit.
+That fallback alone reported every delivered steer as unconfirmed, so it is paired with an idle-to-busy transition across our Enter, read once before the first Enter and again after it.
 It is the same semantic signal the native path uses and the same one the tmux submit core reads.
-A pane already mid-turn cannot borrow a rendered-footer transition as proof of this delivery; after retries, only proven pending text plus native `working` can establish that its Enter was accepted and queued.
+Two readings can carry it, and they cover different composers: the pane's verified busy footer, and Herdr's native agent-state going from not generating to generating, which no presentation setting can hide.
+The footer reading is accepted only for a composer that proves it still holds pending text, and it is read first, so a submit it already confirms costs no extra round trip.
+That footer confirmation is the same `pending + busy` conversion the retries-exhausted path performs, so it asks the one owner of that policy (`fm_composer_queued_enter_verdict`) rather than repeating it, and every harness exclusion the policy carries applies here too - including Pi, whose mid-turn composer is cleared rather than retained ([`verification/pi-composer-shapes.md`](verification/pi-composer-shapes.md)).
+The native reading is consulted when the footer did not confirm, and it is accepted for every verdict this fallback admits - proven pending text, unproven pending text, and a composer this classifier cannot read at all.
+A footer-visible pane whose composer reads unknown is therefore confirmed by the native reading or not at all.
+It serves a pane that arrives here with a legible native baseline of its own and later starts generating, such as a Cursor-shaped harness that reports `blocked` before the Enter and `working` after it.
+A Pi pane under Calm is not confirmed here at all: its `blocked` baseline maps to idle through the harness-aware carve-out above, so it takes the idle-baseline path instead.
+Neither proof is accepted on a pane that was already mid-turn: the footer proof requires an idle footer baseline and a native state that was not already generating, and the native proof requires both pre-Enter readings to be legibly idle.
+A harness that reports `blocked` in every state has no native evidence of its own about whether the pane was already mid-turn, so the footer baseline remains the guard against borrowing someone else's turn as proof of this delivery.
+The native proof additionally requires the pre-Enter composer to hold the typed text, which is what proves the composer owns the keyboard.
+The baseline must read exactly `pending`.
+An ambiguous container holding content (`pending-unproven`) is refused too, because the shared classifier marks a container ambiguous when its top border carries a title, which is the shape of a modal: a boxed prompt holding typed filter text reads `pending-unproven`, and admitting it would let that prompt satisfy the gate, eat the Enter, and have the turn it starts read as delivery.
+The cost is that a composer whose geometry is genuinely ambiguous loses this proof entirely and its submit cannot be confirmed on this path - unconfirmed and re-rung, which is recoverable, rather than falsely delivered, which is not.
+A transition alone proves only that the agent started generating, never that it started because of our text: a pane parked on an interactive prompt takes both the keystrokes and the Enter into that prompt, answers it, and starts a turn that a tokenless footer cannot tell from a delivered submission.
+[`verification/pi-composer-shapes.md`](verification/pi-composer-shapes.md) records that hazard captured live, and the Cursor pane this proof exists for keeps it because its mid-turn composer does read pending.
+That requirement is waived on one path, deliberately: when the pane's `pane read --format ansi` fails on an older Herdr, the composer is classified from the plain capture instead, and a `styled=0` descriptor cannot tell typed input from ghost text, so a composer that genuinely holds the text reads `unknown` there rather than `pending`.
+Enforcing the requirement on that path would delete this pane's only confirmation route rather than narrow it, so the pre-Enter composer check is skipped whenever the baseline came from a plain capture, and the native transition alone confirms as it did before.
+The consequence is that the captured prompt hazard remains reachable on exactly that path: a pane parked on a prompt, read through a plain capture, skips the check, and the turn started by answering the prompt is reported as delivery of our text.
+Restoring the guarantee there needs a composer read at full fidelity, not a different verdict.
+After retries, only proven pending text plus native `working` can establish that an already-active pane's Enter was accepted and queued.
 The composer verdict itself is deliberately unchanged: a right-aligned status token on the composer row stays content for every other caller, including the away-mode pre-injection guard.
 The poll density bounds the residual possibility of an extremely fast complete turn; a missed native transition falls through to the composer verdict rather than reporting a false swallow.
 
@@ -297,9 +318,6 @@ A structurally gone pane or a pane read from a session positively reported as ha
 Neither the stopped-server exception nor the stale-registration verdict widens husk detection or any close authority; those paths still refuse an unreadable pane, and a `stale-agent` pane is reused by recovery, never closed as a husk, because the shell it holds may be a nested worktree shell.
 Native registration still identifies Pi by name where tmux would see a generic interpreter; the process-level proof only decides whether that registration is backed by a running process.
 `tests/fm-backend-herdr-agent-exit-shell-e2e.test.sh` pins the live-Pi versus leftover-shell distinction; [`verification/runtime-backends.md`](verification/runtime-backends.md#agent-lifecycle-control) owns the versioned evidence.
-
-The session-start sweep uses this probe.
-Mid-session secondmate agent-process liveness is not implemented because idle secondmates are deliberately exempt from stale-pane escalation and need a separate periodic identity signal.
 
 ## Push events and polling fallback
 
@@ -360,6 +378,7 @@ tests/fm-composer-lib.test.sh
 tests/fm-herdr-submit-confirm-live-e2e.test.sh
 tests/fm-backend-herdr-smoke.test.sh
 tests/fm-backend-herdr-prune-safety-e2e.test.sh
+tests/fm-backend-herdr-exited-agent-e2e.test.sh
 tests/fm-backend-herdr-respawn-idem-e2e.test.sh
 tests/fm-backend-herdr-workspace-per-home-e2e.test.sh
 tests/fm-backend-herdr-launcher-workspace-e2e.test.sh
