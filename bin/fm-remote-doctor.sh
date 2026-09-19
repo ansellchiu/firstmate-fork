@@ -271,7 +271,7 @@ launch_agent_exec_command() { # <resolved-herdr-path>
 render_launch_agent() { # <resolved-herdr-path> <resolved-login-shell>
   local herdr_bin=$1 shell=$2 exec_cmd shell_xml
   shell_xml=$(launch_agent_xml_escape "$shell")
-  exec_cmd=$(launch_agent_exec_command "$herdr_bin")
+  exec_cmd=$(launch_agent_xml_escape "$(launch_agent_exec_command "$herdr_bin")")
   cat <<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

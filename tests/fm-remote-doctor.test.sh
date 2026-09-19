@@ -37,14 +37,26 @@ ln -sf "$(command -v git)" "$TOOLS/git"
 ln -sf "$(command -v jq)" "$TOOLS/jq"
 BASE_PATH="$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# Real socket-owner holders for the Darwin birth check: jq blocked on a fifo
-# this test keeps open, with exactly the marker environment each birth needs.
+# Real socket-owner holders for the Darwin birth check block on a fifo this test
+# keeps open, with exactly the marker environment each birth needs.
 JQ=$(command -v jq)
+HOLDER_BIN=$JQ
+HOLDER_KIND=jq
+if [ "$(uname -s)" = Darwin ] && [ "$JQ" = /usr/bin/jq ]; then
+  command -v node >/dev/null 2>&1 \
+    || { echo "skip: node not found (macOS hides platform-binary holder environments)"; exit 0; }
+  HOLDER_BIN=$(command -v node)
+  HOLDER_KIND=node
+fi
 HOLDER_FD=5
 hold() { # <marker-env...> -> HOLDER_PID
   local fifo="$TMP_ROOT/holder-$HOLDER_FD.fifo"
   mkfifo "$fifo"
-  env -i "$@" "$JQ" . "$fifo" &
+  if [ "$HOLDER_KIND" = node ]; then
+    env -i "$@" "$HOLDER_BIN" -e 'require("fs").readFileSync(process.argv[1])' "$fifo" &
+  else
+    env -i "$@" "$HOLDER_BIN" . "$fifo" &
+  fi
   HOLDER_PID=$!
   HOLDER_PIDS+=("$HOLDER_PID")
   eval "exec ${HOLDER_FD}>\"\$fifo\""
@@ -887,3 +899,24 @@ assert_contains "$DOCTOR_OUT" 'check entrypoint-link=human:' "an operator-owned 
 unset FM_ROOT_OVERRIDE
 pass "the entrypoint symlink is recreated when absent and never overwritten when operator-owned"
 
+# --- a code root carrying XML metacharacters still renders a valid plist -----
+# macOS paths may legally contain & < >, and those characters land inside the
+# ProgramArguments exec command of the herdr launch agent. The plist is
+# Firstmate's own serialized output, so it is parsed here with plistlib rather
+# than matched as text.
+
+new_case Darwin with-herdr gui
+XML_ROOT="$CASE_DIR/code & <root>"
+mkdir -p "$XML_ROOT"
+ln -s "$ROOT/bin" "$XML_ROOT/bin"
+export FM_ROOT_OVERRIDE="$XML_ROOT"
+doctor --fix
+unset FM_ROOT_OVERRIDE
+assert_contains "$DOCTOR_OUT" 'fix launchagent=applied:' "--fix did not install the launch agent from an XML-metacharacter code root"
+assert_contains "$DOCTOR_OUT" 'check launchagent=ok:' "the launch agent written from an XML-metacharacter code root was not confirmed"
+assert_present "$CASE_PLIST" "--fix reported writing the launch agent but no plist exists"
+XML_CMD=$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1], "rb"))["ProgramArguments"][3])' "$CASE_PLIST") \
+  || fail "the launch agent written from a code root containing & and <> is not a parseable plist"
+[ "$XML_CMD" = "exec '$XML_ROOT/bin/fm-remote-herdr-guard.sh' '$CASE_BIN/herdr' 'fm-remote'" ] \
+  || fail "ProgramArguments[3] does not carry the literal guard path from the code root: $XML_CMD"
+pass "a code root containing XML metacharacters still installs a parseable launch agent"
