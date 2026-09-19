@@ -140,8 +140,13 @@ test_return_gate_owns_remediation_and_reports_catchup_to_bearings() {
   # catch-up posture as content rather than refusing. The blocked worker still
   # projects as its own Underway row, and the catch-up posture is a separate
   # action-free Charted Next gate row that never becomes a Captain's Call entry.
-  out=$(FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" "$ROOT/bin/fm-bearings-snapshot.sh" --json 2>&1) \
-    || fail "Bearings should render behind the return catch-up gate: $out"
+  # The snapshot classifies the portfolio from the project registry and says so
+  # on stderr when it cannot, so this fixture carries one and the read below
+  # stays a clean JSON capture (bin/fm-attention-lib.sh owns the classification).
+  printf -- '- sample [no-mistakes] - fixture project (added 2026-06-01)\n' \
+    > "$dir/home/data/projects.md"
+  out=$(FM_HOME="$dir/home" FM_STATE_OVERRIDE="$dir/home/state" "$ROOT/bin/fm-bearings-snapshot.sh" --json 2> "$dir/bearings.err") \
+    || fail "Bearings should render behind the return catch-up gate: $(cat "$dir/bearings.err")"
   # The live projected state of the blocked worker follows its endpoint, which
   # this fixture deliberately does not stand up; what the gate must no longer
   # do is stop the fleet read, so the worker has to reach Underway at all.

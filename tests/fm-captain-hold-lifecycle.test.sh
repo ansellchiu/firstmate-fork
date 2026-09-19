@@ -74,6 +74,17 @@ run_teardown() {  # <home> <id>
     FM_CONFIG_OVERRIDE="$home/config" "$TEARDOWN" "$id"
 }
 
+# A fixture that stamps a merged or merge-ready ship task by hand never goes
+# through the merge path that records its landing receipt, and cleanup refuses
+# a landed ship task without one (bin/fm-receipt.sh, bin/fm-teardown.sh's
+# receipt gate). Record the receipt that path would have written.
+seed_landing_receipt() {  # <home> <id> <pr-url>
+  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$1" FM_STATE_OVERRIDE="$1/state" \
+    FM_DATA_OVERRIDE="$1/data" "$ROOT/bin/fm-receipt.sh" upgrade-landing \
+    --task "$2" --pr-url "$3" >/dev/null \
+    || fail "could not record the landing receipt for $2"
+}
+
 tasks_in() {  # <home> <tasks-axi args...>
   local home=$1
   shift
@@ -1281,9 +1292,11 @@ test_terminal_single_owner_status_decision_does_not_block_empty_inventory() {
   printf 'blocked [key=access]: waiting\ndone: report complete\nnote: cleanup complete\n' \
     > "$home/state/$id.status"
   printf '# Terminal sample review\n\nNo unresolved captain choice remains.\n' > "$home/data/$id/report.md"
-  open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
-    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
-  assert_contains "$open" "default" "fixture must retain the raw stale status decision"
+  # The fold takes the row's kind, and for a scout a terminal declaration
+  # retires the earlier blocker, so the raw read is already empty here.
+  open=$(bash -c '. "$1"; status_open_decisions "$2" "$3"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status" scout)
+  [ -z "$open" ] || fail "the shared fold retained a pre-terminal blocker"
   run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null \
     || fail "terminal single-owner stale status decision blocked empty inventory completion"
   run_captain "$home" verify "$id" >/dev/null \
@@ -1296,7 +1309,7 @@ test_terminal_single_owner_status_decision_does_not_block_empty_inventory() {
     fail "verification accepted a genuinely reopened post-terminal decision"
   fi
   printf 'resolved [key=access]: answered\nfailed: investigation ended\nnote: final cleanup\n' >> "$home/state/$id.status"
-  run_captain "$home" complete "$id" --none >/dev/null || fail "resolved reopening blocked completion"
+  run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null || fail "resolved reopening blocked completion"
   run_captain "$home" verify "$id" >/dev/null || fail "resolved reopening blocked verification"
   run_teardown "$home" "$id" >/dev/null 2> "$home/terminal-teardown.err" \
     || fail "terminal single-owner stale status decision blocked teardown: $(cat "$home/terminal-teardown.err")"
@@ -2985,6 +2998,7 @@ test_retained_row_artifacts_survive_captain_answers() {
     || fail "could not release the approved merge"
   show=$(tasks_in "$home" show "$approved_id" --full) || fail "the approved merge disappeared"
   assert_not_contains "$show" "hold_kind: captain" "merge approval retained its captain hold kind"
+  seed_landing_receipt "$home" "$approved_id" "$approved_pr"
   run_teardown "$home" "$approved_id" > "$home/approved-teardown.out" \
     2> "$home/approved-teardown.err" \
     || fail "approved merge cleanup failed: $(cat "$home/approved-teardown.err")"
@@ -3430,6 +3444,7 @@ test_merge_approval_releases_before_zero_done_retention() {
     "window=firstmate:fm-$id" "endpoint_task_id=$id" "worktree=$wt" \
     "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
     "pr=$pr" "spawn_gen=fixture-$id"
+  seed_landing_receipt "$home" "$id" "$pr"
   printf 'done: merge ready\n' > "$home/state/$id.status"
   run_captain "$home" hold "$id" --reason "captain merge approval pending" >/dev/null \
     || fail "could not hold the zero-retention merge"
@@ -3472,6 +3487,7 @@ test_pr_merge_entrypoint_refuses_a_captain_held_task() {
     "window=firstmate:fm-$pr_id" "endpoint_task_id=$pr_id" "worktree=$wt" \
     "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
     "pr=$pr" "spawn_gen=fixture-$pr_id"
+  seed_landing_receipt "$home" "$pr_id" "$pr"
   run_captain "$home" hold "$pr_id" --reason "captain merge approval pending" >/dev/null \
     || fail "could not hold the PR entrypoint fixture"
 
@@ -4052,6 +4068,7 @@ test_released_merge_passes_the_entrypoint_and_lands() {
     "window=firstmate:fm-$id" "endpoint_task_id=$id" "worktree=$wt" \
     "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
     "pr=$pr" "spawn_gen=fixture-$id"
+  seed_landing_receipt "$home" "$id" "$pr"
   printf 'done: merge ready\n' > "$home/state/$id.status"
   run_captain "$home" hold "$id" --reason "captain merge approval pending" >/dev/null \
     || fail "could not hold the released merge fixture"
@@ -4175,7 +4192,8 @@ PM
     > "$home/data/$scout/report.md"
   run_captain "$home" hold "$scout" --reason "captain must choose" >/dev/null \
     || fail "could not hold the investigation for the captain"
-  run_captain "$home" complete "$scout" "$scout" >/dev/null \
+  # The claims audit gate applies here too: this origin has a filed report.
+  run_captain "$home" complete "$scout" --claims-checked 1 "$scout" >/dev/null \
     || fail "the completion gate failed with the origin as its own captain call"
   PERL5LIB="$shim" PERL5OPT=-MFmNoNonrefDefault \
     run_teardown "$home" "$scout" > "$home/nonref.out" 2> "$home/nonref.err" \
@@ -4213,7 +4231,7 @@ retain_row_with_body() {  # <home> <id> <body>
     || fail "could not give $id a body carrying non-ASCII characters"
   run_captain "$home" hold "$id" --reason "captain must choose" >/dev/null \
     || fail "could not hold $id for the captain"
-  run_captain "$home" complete "$id" "$id" >/dev/null \
+  run_captain "$home" complete "$id" --claims-checked 1 "$id" >/dev/null \
     || fail "the completion gate failed for $id"
   run_teardown "$home" "$id" > "$home/$id.out" 2> "$home/$id.err" \
     || fail "cleanup of captain-held $id failed: $(cat "$home/$id.err")"
