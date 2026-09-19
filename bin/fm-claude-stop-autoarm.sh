@@ -59,11 +59,18 @@
 #     until the synchronous guard has consumed its attended fail-open.
 #
 # The epoch ledger state/.claude-autoarm-epoch records the latest claim
-# generation and outcome, and binds rewake outcomes to the session-lock pid and
-# watcher recovery generation, so the synchronous Stop guard
-# (bin/fm-turnend-guard.sh --claude) can allow a stop whose recovery this hook
-# already owns, instead of forcing a duplicate continuation for the same event
-# epoch. The failure marker
+# generation and outcome, and binds a rewake outcome to the session-lock pid and,
+# when the recovery marker names one, the watcher recovery generation, so the
+# synchronous Stop guard (bin/fm-turnend-guard.sh --claude) can allow a stop
+# whose recovery this hook already owns, instead of forcing a duplicate
+# continuation for the same event epoch. An actionable wake can also arrive with
+# no recovery generation to bind - the marker is acked or absent, which is the
+# ordinary steady state for a wake delivered without a queue append - and that
+# rewake commits UNBOUND rather than being refused: the continuation is what the
+# banner promised, and an unbound ledger entry simply never claims mid-turn
+# health from fm_autoarm_midturn_healthy, which requires a matching generation.
+#
+# The failure marker
 # state/.claude-autoarm-failure-notified deduplicates the last-resort notice,
 # and state/.claude-autoarm-failure-alarmed bounds the attended fail-open and
 # suppresses any later automatic continuation in that unresolved episode.
@@ -196,7 +203,9 @@ autoarm_commit() {  # <outcome> [marker-file]
     session_pid=$(sed -n '1p' "$STATE/.lock" 2>/dev/null || true)
     fm_recovery_marker_snapshot "$STATE/.watcher-down" || return 2
     case "$FM_RECOVERY_MARKER_TOKEN" in
-      pending:downtime:*|announced:downtime:*) recovery=${FM_RECOVERY_MARKER_TOKEN##*:} ;;
+      pending:downtime:*|pending:handling:*|announced:downtime:*|announced:handling:*)
+        recovery=${FM_RECOVERY_MARKER_TOKEN##*:} ;;
+      acked:*|'') recovery= ;;
       *) return 2 ;;
     esac
     fm_autoarm_write_owned "$STATE" "$MY_GEN" "$outcome" "$marker" "$session_pid" "$recovery"

@@ -94,6 +94,39 @@ printf 'stale: fixture-win actionable\n'
 exit 0
 SH
       ;;
+    handling-actionable)
+      cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+echo "$$" >> "$FM_HOME/state/arm-ran"
+printf 'pending:handling:fixture-generation\n' > "$FM_HOME/state/.watcher-down"
+touch "$FM_HOME/state/.last-watcher-beat"
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+printf 'stale: fixture-win actionable\n'
+exit 0
+SH
+      ;;
+    acked-actionable)
+      cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+echo "$$" >> "$FM_HOME/state/arm-ran"
+printf 'acked:downtime:fixture-generation\n' > "$FM_HOME/state/.watcher-down"
+touch "$FM_HOME/state/.last-watcher-beat"
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+printf 'check: inactive-outcome\n'
+exit 0
+SH
+      ;;
+    markerless-actionable)
+      cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+echo "$$" >> "$FM_HOME/state/arm-ran"
+rm -f "$FM_HOME/state/.watcher-down"
+touch "$FM_HOME/state/.last-watcher-beat"
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+printf 'check: inactive-outcome\n'
+exit 0
+SH
+      ;;
     failed)
       cat > "$dir/bin/fm-watch-arm.sh" <<'SH'
 #!/usr/bin/env bash
@@ -412,6 +445,41 @@ test_actionable_close_rewakes_with_reason() {
   [ ! -e "$dir/state/.claude-autoarm.lock" ] || fail "owner lock must be released after the cycle"
   [ -e "$dir/state/arm-ran" ] || fail "hook never foregrounded the arm wrapper"
   pass "auto-arm: actionable close translates to exactly one exit-2 rewake with reason"
+}
+
+test_unacked_handling_wake_still_rewakes() {
+  local dir out status
+  dir=$(make_primary_dir "$TMP_ROOT/actionable-handling")
+  : > "$dir/state/task.meta"
+  write_arm_fixture "$dir" handling-actionable
+  out=$(run_autoarm "$dir" 2>/dev/null); status=$?
+  expect_code 2 "$status" "a re-presented unacked handling wake must still exit 2 so Claude rewakes"
+  assert_contains "$out" "firstmate watcher wake" "the handling rewake must carry the wake banner"
+  assert_contains "$out" "stale: fixture-win actionable" "the handling rewake must carry the arm's reason line"
+  [ "$(epoch_outcome "$dir")" = rewake ] || fail "handling marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
+  [ "$(epoch_field "$dir" recovery_generation)" = fixture-generation ] \
+    || fail "handling rewake epoch must bind the watcher recovery generation"
+  pass "auto-arm: an unacked handling-phase wake is still rewake-eligible"
+}
+
+test_queueless_wake_rewakes_unbound() {
+  local dir out status kind
+  for kind in acked-actionable markerless-actionable; do
+    dir=$(make_primary_dir "$TMP_ROOT/actionable-$kind")
+    : > "$dir/state/task.meta"
+    write_arm_fixture "$dir" "$kind"
+    out=$(run_autoarm "$dir" 2>/dev/null); status=$?
+    expect_code 2 "$status" "an actionable wake with a $kind marker must still exit 2 so Claude rewakes"
+    assert_contains "$out" "firstmate watcher wake" "the $kind rewake must carry the wake banner"
+    assert_contains "$out" "check: inactive-outcome" "the $kind rewake must carry the arm's reason line"
+    [ "$(epoch_outcome "$dir")" = rewake ] \
+      || fail "$kind marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
+    [ "$(epoch_field "$dir" session_pid)" = "$(cat "$dir/state/.lock")" ] \
+      || fail "the $kind rewake must still bind the lock-owning Claude session"
+    [ -z "$(epoch_field "$dir" recovery_generation)" ] \
+      || fail "a $kind marker publishes no recovery generation, so none may be recorded"
+  done
+  pass "auto-arm: a wake with no published recovery generation still rewakes, unbound"
 }
 
 test_actionable_close_with_live_successor_rewakes_once() {
@@ -1243,6 +1311,8 @@ test_resolves_outermost_claude_pid_in_nested_bgspare_chain
 test_inert_when_fleet_idle
 test_actionable_close_rewakes_with_reason
 test_actionable_close_with_live_successor_rewakes_once
+test_unacked_handling_wake_still_rewakes
+test_queueless_wake_rewakes_unbound
 test_failed_close_rewakes_with_failure_banner
 test_failed_cycles_notify_once_and_keep_retrying
 test_failure_notice_marker_write_refuses_delivery_and_retries
