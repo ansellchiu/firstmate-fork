@@ -135,6 +135,27 @@ SH
   printf '%s\n' "$fakebin"
 }
 
+# Records every gh-axi invocation to FM_FAKE_GH_AXI_LOG and answers the two
+# calls a GitHub PR registration makes: the authenticated-login lookup, returned
+# in gh-axi's own api_response envelope, and the assignment edit. Nothing
+# reaches the network.
+make_recording_gh_axi() {
+  local dir=$1 fakebin
+  fakebin=$(fm_fakebin "$dir")
+  cat > "$fakebin/gh-axi" <<'SH'
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$*" >> "${FM_FAKE_GH_AXI_LOG:-/dev/null}"
+case "${1:-} ${2:-}" in
+  "api user") printf 'api_response:\n  body: %s\n  truncated: false\n' "${FM_FAKE_GH_AXI_LOGIN:-ansellchiu}" ;;
+  "pr edit") ;;
+  *) exit 2 ;;
+esac
+SH
+  chmod +x "$fakebin/gh-axi"
+  printf '%s\n' "$fakebin"
+}
+
 # A fake no-mistakes that records each "<pwd>\t<verb>" call to
 # FM_FAKE_NO_MISTAKES_LOG and fails for the project named FM_FAKE_NO_MISTAKES_FAIL_PROJECT.
 make_recording_no_mistakes() {

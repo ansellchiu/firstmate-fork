@@ -2,6 +2,7 @@
 
 Maintainer-verification record for the guarantee in [`secondmate-parent-channel.md`](../secondmate-parent-channel.md): a captain-facing outcome recorded inside a secondmate home reaches the parent channel without the mate model writing it.
 Refresh it by rerunning the fixture below after changing any publisher named in `bin/fm-parent-channel-lib.sh`.
+Run step 2 with `FM_PR_ASSIGN_CAPTAIN=0` when refreshing: registration now assigns the GitHub PR to the authenticated account, and the fixture's PR URL names a real repository that no evidence run should write to.
 
 ## What was run
 

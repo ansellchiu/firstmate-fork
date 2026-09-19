@@ -48,7 +48,7 @@ SH
 }
 
 test_fm_home_parameterization() {
-  local brief home_one home_two out
+  local brief home_one home_two out gh_axi_fake gh_axi_log
   home_one="$TMP_ROOT/home one"
   home_two="$TMP_ROOT/home-two"
   mkdir -p "$home_one/data" "$home_one/state" "$home_two/data" "$home_two/state"
@@ -74,8 +74,18 @@ test_fm_home_parameterization() {
   grep -F ">> '$home_one/state/task-c.status'" "$brief" >/dev/null || fail "secondmate brief did not shell-quote FM_HOME state path"
 
   printf 'project=x\n' > "$home_one/state/task-a.meta"
-  FM_HOME="$home_one" FM_GUARD_GRACE=999999 "$ROOT/bin/fm-pr-check.sh" task-a https://github.com/example/repo/pull/1 >/dev/null 2>/dev/null \
+  # Registering a GitHub PR reaches gh-axi to assign the captain, and this
+  # fixture URL is not a repository anyone may touch: the stub keeps that call
+  # inside the test and records it, so a fixture slug can never become a live
+  # authenticated write against a real repository.
+  gh_axi_fake=$(make_recording_gh_axi "$TMP_ROOT/pr-check-fake")
+  gh_axi_log="$TMP_ROOT/pr-check-fake/gh-axi.log"
+  : > "$gh_axi_log"
+  PATH="$gh_axi_fake:$PATH" FM_FAKE_GH_AXI_LOG="$gh_axi_log" \
+    FM_HOME="$home_one" FM_GUARD_GRACE=999999 "$ROOT/bin/fm-pr-check.sh" task-a https://github.com/example/repo/pull/1 >/dev/null 2>/dev/null \
     || fail "fm-pr-check failed under FM_HOME"
+  grep -qxF 'pr edit 1 --repo example/repo --add-assignee ansellchiu' "$gh_axi_log" \
+    || fail "the fixture PR registration did not reach the stubbed gh-axi: $(cat "$gh_axi_log")"
   [ -f "$home_one/state/task-a.check.sh" ] || fail "pr check was not written under FM_HOME/state"
   [ ! -e "$home_two/state/task-a.check.sh" ] || fail "pr check leaked into another home"
   pass "FM_HOME parameterizes data and state paths"
@@ -3031,3 +3041,58 @@ test_secondmate_idle_pane_is_not_stale
 test_secondmate_charter_brief_is_idle_by_default
 test_backlog_handoff_aborts_safely
 test_backlog_handoff_refuses_done_items_and_non_secondmate_homes
+
+# A mistyped +annotation makes the delivery-posture read exit non-zero. Seeding
+# must refuse the whole seed - never guess a posture - and leave no partial
+# state: no secondmate home, no registry line, no clone.
+test_home_seed_refuses_an_unreadable_registered_posture() {
+  local home sub out status
+  home="$TMP_ROOT/seed-pmode-main"
+  sub="$TMP_ROOT/seed-pmode-sub"
+  mkdir -p "$home/projects" "$home/data" "$home/state"
+  fm_git_init_commit "$home/projects/alpha"
+  fm_git_add_origin "$home/projects/alpha" "$TMP_ROOT/remotes/seed-pmode-alpha.git"
+  printf '%s\n' '- alpha [direct-PR +parkd] - alpha project (added 2026-06-22)' > "$home/data/projects.md"
+
+  status=0
+  out=$(FM_HOME="$home" FM_SECONDMATE_CHARTER='ops domain' FM_SECONDMATE_SCOPE='ops domain' \
+    "$ROOT/bin/fm-home-seed.sh" pmsm1 "$sub" alpha 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "seed did not refuse an unreadable registered posture"
+  assert_contains "$out" "cannot read the registered delivery posture for alpha" \
+    "seed refusal did not name the caller and the project"
+  assert_contains "$out" 'unknown flag "+parkd"' \
+    "seed refusal did not surface the reader's annotation error"
+  assert_absent "$sub" "a refused seed left the secondmate home behind"
+  if [ -f "$home/data/secondmates.md" ] && grep -q 'pmsm1' "$home/data/secondmates.md"; then
+    fail "a refused seed wrote the secondmate registry line"
+  fi
+  pass "fm-home-seed: an unreadable registered posture refuses the seed with no partial state"
+}
+
+# Remote seeding consumes the same read; its refusal must land before any
+# manifest, registry write, or remote call, so a mistyped annotation never
+# provisions a home whose project posture could not be verified.
+test_remote_seed_refuses_an_unreadable_registered_posture() {
+  local home out status
+  home="$TMP_ROOT/rseed-pmode-main"
+  mkdir -p "$home/data" "$home/state"
+  printf '%s\n' '- alpha [no-mistakes +parkd] - alpha project (added 2026-06-22)' > "$home/data/projects.md"
+  scaffold_secondmate_charter "$home" pmsm2 'ops domain charter' alpha \
+    || fail "remote-seed charter scaffold failed"
+
+  status=0
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-remote-home-seed.sh" pmsm2 remote-mac /srv/fm-root /srv/fm-home \
+    "alpha=https://example.com/alpha.git" 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "remote seed did not refuse an unreadable registered posture"
+  assert_contains "$out" "cannot read the registered delivery posture for alpha" \
+    "remote seed refusal did not name the caller and the project"
+  assert_contains "$out" 'unknown flag "+parkd"' \
+    "remote seed refusal did not surface the reader's annotation error"
+  if [ -f "$home/data/secondmates.md" ] && grep -q 'pmsm2' "$home/data/secondmates.md"; then
+    fail "a refused remote seed wrote the secondmate registry line"
+  fi
+  pass "fm-remote-home-seed: an unreadable registered posture refuses before any remote call"
+}
+
+test_home_seed_refuses_an_unreadable_registered_posture
+test_remote_seed_refuses_an_unreadable_registered_posture

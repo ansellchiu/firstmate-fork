@@ -410,6 +410,57 @@ test_local_only_skipped() {
   pass "local-only clone is skipped (benign), not flagged STUCK"
 }
 
+# A mistyped +annotation makes the posture read exit non-zero. The sync must
+# refuse the affected project loudly (the STUCK shape, so a stdout-only
+# session-start relay still carries it), name the registry file and annotation,
+# leave the clone untouched, and exit non-zero - never default to a mode that
+# would silently void the local-only guard. Project names are unique within the
+# file because every test shares one fixture home.
+test_mistyped_annotation_refuses_sync() {
+  local home clone_iota clone_theta out status
+  home=$(new_home)
+  clone_iota=$(build_pair "$home" pm-iota)
+  advance_origin "$home" pm-iota C1
+  clone_theta=$(build_pair "$home" pm-theta)
+  advance_origin "$home" pm-theta C1
+  mkdir -p "$home/data"
+  printf -- '- pm-iota [local-only +parkd] (added 2026-06-27) - test project\n- pm-theta [no-mistakes] (added 2026-06-27) - test project\n' > "$home/data/projects.md"
+
+  out=$(run_sync "$home" pm-iota)
+  status=$?
+  assert_contains "$out" "pm-iota: STUCK: cannot read the registered delivery posture" \
+    "a mistyped annotation refuses the single-project sync instead of guessing"
+  assert_contains "$out" 'unknown flag "+parkd"' \
+    "the refusal surfaces the reader's annotation error"
+  assert_contains "$out" "$home/data/projects.md" \
+    "the refusal names the registry file"
+  # The session-start relay forwards only lines carrying a recognized marker, so
+  # the annotation detail has to carry the STUCK marker itself or it is dropped
+  # before the captain sees it.
+  assert_contains "$(printf '%s\n' "$out" | grep ': STUCK:' || true)" 'unknown flag "+parkd"' \
+    "every refusal detail line must carry the STUCK marker the relay filters on"
+  [ "$status" -ne 0 ] || fail "the single-project sync must exit non-zero on an unreadable posture"
+  [ "$(head_sha "$clone_iota")" = "$(git -C "$home/work-pm-iota" rev-parse main^)" ] \
+    || fail "the refused clone was still fast-forwarded"
+  pass "a mistyped annotation refuses the single-project sync and leaves the clone untouched"
+
+  # The whole-fleet form still refreshes healthy projects in the same home,
+  # refuses only the unreadable one, and exits non-zero for scripted callers.
+  out=$(run_sync "$home")
+  status=$?
+  assert_contains "$out" "pm-iota: STUCK: cannot read the registered delivery posture" \
+    "the whole-fleet form refuses the unreadable project"
+  assert_contains "$out" "pm-theta: synced" \
+    "the whole-fleet form still refreshes projects whose posture reads fine"
+  [ "$status" -ne 0 ] || fail "the whole-fleet sync must exit non-zero when a project's posture cannot be read"
+  pass "the whole-fleet form refuses the unreadable project, refreshes the rest, and exits non-zero"
+
+  # Defensive: neutralize this test's registry before leaving, so no later
+  # whole-fleet run over the shared fixture home inherits the refusal (and its
+  # non-zero exit) from these clones.
+  printf -- '- pm-iota [local-only] (added 2026-06-27) - test project\n- pm-theta [no-mistakes] (added 2026-06-27) - test project\n' > "$home/data/projects.md"
+}
+
 test_single_project_by_bare_name_resolves() {
   local home out
   home=$(new_home)
@@ -704,6 +755,7 @@ test_on_default_clean_behind_fast_forwards
 test_already_current_unchanged
 test_no_origin_skipped
 test_local_only_skipped
+test_mistyped_annotation_refuses_sync
 test_single_project_by_bare_name_resolves
 test_single_project_by_bare_name_ignores_cwd_shadow
 test_single_project_by_projects_relative_name_resolves

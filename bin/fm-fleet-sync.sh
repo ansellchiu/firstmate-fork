@@ -13,6 +13,10 @@
 # stashed, or discarded.
 # Still skips (benignly) local-only/no-origin projects, missing remotes/branches,
 # and fetch failures.
+# A project whose registered delivery posture cannot be read (a mistyped
+# +annotation, an unreadable registry) is never synced on a guessed posture: it
+# is reported as a "STUCK:" refusal naming the registry line to fix, and the run
+# exits non-zero - in both the single-project and whole-fleet forms.
 # A candidate under projects/ must be the root of its own work tree: git discovery
 # walks up, so a plain nested directory would otherwise resolve to the enclosing
 # repository (the firstmate checkout) and be synced under that directory's label.
@@ -324,7 +328,27 @@ sync_project() {
     echo "$label: skipped: not a clone root (git would act on $proj_top)"
     return 0
   fi
-  mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$label" 2>/dev/null || echo "no-mistakes off")
+  # A delivery-posture read that exits non-zero - a mistyped +annotation, say -
+  # must refuse the sync, never guess: defaulting here would silently void the
+  # local-only guard and pull a project the captain registered as private. The
+  # STUCK shape keeps the refusal on the session-start FLEET_SYNC relay, which
+  # relays only lines carrying the STUCK marker - so every reader-error detail
+  # line repeats the marker and reaches the captain with the offending
+  # annotation, instead of leaving a headline ending in a bare colon.
+  mode_err=$(mktemp "${TMPDIR:-/tmp}/fm-fleet-sync-pmode.XXXXXX")
+  if mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$label" 2>"$mode_err") && [ -n "$mode_line" ]; then
+    rm -f "$mode_err"
+  else
+    {
+      echo "$label: STUCK: cannot read the registered delivery posture from ${FM_DATA_OVERRIDE:-$FM_HOME/data}/projects.md; sync refused until the registry line is fixed:"
+      while IFS= read -r detail; do
+        [ -n "$detail" ] || continue
+        echo "$label: STUCK:   $detail"
+      done < "$mode_err"
+    }
+    rm -f "$mode_err"
+    return 1
+  fi
   mode=${mode_line%% *}
   if [ "$mode" = "local-only" ]; then
     echo "$label: skipped: local-only project"
@@ -441,11 +465,15 @@ sync_project() {
 }
 
 if [ $# -eq 1 ]; then
-  sync_project "$(resolve_project_arg "$1")"
+  sync_project "$(resolve_project_arg "$1")" || exit 1
   exit 0
 fi
 
 [ -d "$PROJECTS" ] || exit 0
+# One project's unreadable posture refuses that project's sync but must not
+# stop refreshing every other clone; the run still exits non-zero so a scripted
+# caller sees the failure and the STUCK lines name each refused project.
+SYNC_FAILED=0
 for proj in "$PROJECTS"/*; do
   [ -e "$proj" ] || continue
   [ -d "$proj" ] || continue
@@ -453,6 +481,7 @@ for proj in "$PROJECTS"/*; do
   # the time instead of only its total. Recording is a no-op unless the deferred
   # network stage asked for it.
   __fm_timing_stamp=$(fm_timing_now_ms)
-  sync_project "$proj"
+  sync_project "$proj" || SYNC_FAILED=1
   fm_timing_record clone sync "$__fm_timing_stamp" "$(basename "$proj")"
 done
+[ "$SYNC_FAILED" -eq 0 ] || exit 1

@@ -160,7 +160,18 @@ PROJECT_INDEX=0
 for project in "${PROJECT_NAMES[@]+"${PROJECT_NAMES[@]}"}"; do
   ORIGIN=${PROJECT_ORIGINS[$PROJECT_INDEX]}
   PROJECT_INDEX=$((PROJECT_INDEX + 1))
-  MODE_LINE=$(FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$SCRIPT_DIR/fm-project-mode.sh" "$project")
+  MODE_LINE=
+  pmode_err=$(mktemp "${TMPDIR:-/tmp}/fm-remote-home-seed-pmode.XXXXXX")
+  if MODE_LINE=$(FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$SCRIPT_DIR/fm-project-mode.sh" "$project" 2>"$pmode_err") && [ -n "$MODE_LINE" ]; then
+    rm -f "$pmode_err"
+  else
+    {
+      echo "error: remote home seeding cannot read the registered delivery posture for $project from $DATA/projects.md; refusing until the registry line is fixed:"
+      sed 's/^/  /' "$pmode_err"
+    } >&2
+    rm -f "$pmode_err"
+    exit 1
+  fi
   read -r MODE _ <<EOF
 $MODE_LINE
 EOF
