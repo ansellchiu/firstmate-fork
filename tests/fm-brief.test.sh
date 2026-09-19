@@ -902,6 +902,78 @@ test_scout_and_secondmate_scaffold() {
   pass "fm-brief: scout and secondmate code paths still scaffold well-formed briefs"
 }
 
+# Postmortem data/scout-research-postmortem-r1 REC-1: every scout brief must carry
+# a standing, task-agnostic research contract (retrieval + existence-surface
+# checks + explicit could-not-check statement), and it must not leak into ship or
+# secondmate scaffolds where it does not apply.
+test_scout_research_standards_contract() {
+  local home brief
+  home="$TMP_ROOT/research-standards-home"
+  mkdir -p "$home/data"
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-research-r1 alpha --scout >/dev/null 2>&1 \
+    || fail "fm-brief.sh scout scaffold exited non-zero"
+  brief="$home/data/brief-research-r1/brief.md"
+  assert_present "$brief" "scout brief was not scaffolded"
+  assert_grep "# Research standards" "$brief" \
+    "scout brief missing the standing Research standards section"
+  assert_grep "at least one live web-search provider" "$brief" \
+    "scout brief did not mandate live web-search retrieval"
+  assert_grep "fm-av-run.sh KEY_NAME -- tool" "$brief" \
+    "scout brief did not name the point-of-use key-injection call"
+  assert_grep "cite in the report exactly what you queried and what it returned" "$brief" \
+    "scout brief did not require cited queries"
+  assert_grep "authoritative existence surface" "$brief" \
+    "scout brief did not require an authoritative existence-surface check for negative claims"
+  assert_grep "absence of a check is never evidence of absence of the thing" "$brief" \
+    "scout brief did not require an explicit could-not-check statement"
+  assert_grep "Firstmate runs its own cheap falsification check" "$brief" \
+    "scout brief lost the firstmate falsification-pass reminder"
+
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-research-r2 some-proj --mode local-only >/dev/null 2>&1 \
+    || fail "fm-brief.sh ship scaffold exited non-zero"
+  brief="$home/data/brief-research-r2/brief.md"
+  assert_no_grep "# Research standards" "$brief" \
+    "ship brief must not carry the scout-only research contract"
+
+  FM_HOME="$home" FM_SECONDMATE_CHARTER='x' \
+    "$ROOT/bin/fm-brief.sh" brief-research-r3 --secondmate --no-projects >/dev/null 2>&1 \
+    || fail "fm-brief.sh secondmate scaffold exited non-zero"
+  brief="$home/data/brief-research-r3/brief.md"
+  assert_no_grep "# Research standards" "$brief" \
+    "secondmate charter must not carry the scout-only research contract"
+  pass "fm-brief.sh: scout briefs carry the standing research-standards contract"
+}
+
+test_secret_variable_interpolation_guard() {
+  local home id brief
+  home="$TMP_ROOT/secret-guard-home"
+  mkdir -p "$home/data"
+
+  for kind in ship scout; do
+    id="brief-secret-guard-$kind"
+    if [ "$kind" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --scout >/dev/null 2>&1
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_present "$brief" "$kind brief was not scaffolded"
+    assert_grep "Never interpolate a secret-named variable into output" "$brief" \
+      "$kind brief missing secret-variable output interpolation guard"
+    # shellcheck disable=SC2016 # Literal shell expressions must remain unexpanded.
+    assert_grep '${VAR:-fallback}' "$brief" \
+      "$kind brief missing \${VAR:-fallback} trap example"
+    # shellcheck disable=SC2016 # Literal shell expressions must remain unexpanded.
+    assert_grep 'echo "${VAR:-no}"' "$brief" \
+      "$kind brief missing echo \"\${VAR:-no}\" trap example"
+    # shellcheck disable=SC2016 # Literal shell expressions must remain unexpanded.
+    assert_grep '[ -n "${VAR:-}" ] && echo set || echo unset' "$brief" \
+      "$kind brief missing safe presence check example"
+  done
+  pass "fm-brief.sh: ship and scout briefs carry the secret-variable output interpolation guard rule"
+}
+
 test_worker_role_scope() {
   local kind home brief
   home="$TMP_ROOT/worker-role"
@@ -924,7 +996,6 @@ test_worker_role_scope() {
   pass "fm-brief: scaffolds leave the worker role scope to the launch boundary and keep the secondmate contract"
 }
 
-test_worker_role_scope
 test_script_parses
 test_no_heredoc_in_command_substitution
 test_help_includes_entire_header
@@ -949,3 +1020,6 @@ test_ship_and_scout_teach_validation_round_pause
 test_scout_and_secondmate_load_decision_hold_policy
 test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor
+test_scout_research_standards_contract
+test_secret_variable_interpolation_guard
+test_worker_role_scope

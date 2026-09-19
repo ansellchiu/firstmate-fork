@@ -14,13 +14,19 @@
 # charters still use a single `{TASK}` charter fill. Firstmate may adjust other
 # sections when the task genuinely deviates (e.g. working an existing external
 # PR instead of shipping a new one).
-# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--herdr-lab]
-#        fm-brief.sh <task-id> <repo-name> --scout [--herdr-lab]
+# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--packet <ordinary|flagged|prohibited>] [--herdr-lab]
+#        fm-brief.sh <task-id> <repo-name> --scout [--packet <ordinary|flagged|prohibited>] [--herdr-lab]
 #        fm-brief.sh <task-id> --secondmate {<project>...|--no-projects}
 #   --scout writes the scout contract instead: the deliverable is a report at
 #   data/<task-id>/report.md (no branch, no push, no PR) and the worktree is scratch.
 #   It offers the Lavish review loop only when `fm-bootstrap.sh lavish-compatible`
 #   confirms the supported lavish-axi floor; otherwise it asks for a text report.
+#   Every scout brief also carries a standing, task-agnostic "Research standards"
+#   section (postmortem data/scout-research-postmortem-r1: REC-1) mandating live
+#   web-search retrieval with cited queries, an authoritative existence-surface
+#   check for every negative claim quoted in the report, and an explicit
+#   could-not-check statement when a surface is unreachable. This script's scout
+#   heredoc is that contract's single owner; AGENTS.md section 7 only points here.
 #   --secondmate writes a persistent secondmate charter. The project list
 #   is cloned into the secondmate home, while the natural-language scope
 #   tells the main firstmate when to route work there; routine churn stays in its own home;
@@ -51,6 +57,19 @@
 # "Delivery contract: mode=<mode>" line. bin/fm-spawn.sh reads that line and refuses
 # to launch a ship task whose explicit --mode disagrees, so an adjusted brief and the
 # recorded task metadata cannot drift apart.
+# --packet <ordinary|flagged|prohibited> records the dispatch packet class on
+# ship and scout briefs as a fixed machine-readable "Packet: class=<class>"
+# line (default ordinary) in the brief's header field block above the first
+# '#' heading, which is the only region the dispatch boundary reads - a Packet
+# line written anywhere below that block is inert prose. It is firstmate's classification, at intake, of the
+# smallest packet the worker will see under the captain's balanced-lane data
+# policy: ordinary and flagged (conflict-level) packets dispatch normally,
+# with the flagged China-usage warning recorded in the task record, while a
+# prohibited packet is a hard stop until the captain has answered it once.
+# bin/fm-spawn.sh reads the same line at the dispatch boundary and enforces
+# the class; the harness, model, and backend never influence it and no
+# provider name implies a jurisdiction. Refused on --secondmate: charters are
+# provisioning, not task dispatch.
 # Ship briefs begin with a worktree-isolation assertion before the branch step.
 # --mode is refused on scout and secondmate scaffolds: a scout's deliverable is a
 # report rather than a merge, and a charter is not a delivery contract.
@@ -126,6 +145,8 @@ HERDR_LAB=0
 NO_PROJECTS=0
 MODE=
 MODE_SET=0
+PACKET=ordinary
+PACKET_SET=0
 POS=()
 want_value=
 for a in "$@"; do
@@ -135,6 +156,7 @@ for a in "$@"; do
     esac
     case "$want_value" in
       mode) MODE=$a; MODE_SET=1 ;;
+      packet) PACKET=$a; PACKET_SET=1 ;;
       *) echo "error: internal parser state for --$want_value" >&2; exit 1 ;;
     esac
     want_value=
@@ -147,6 +169,8 @@ for a in "$@"; do
     --no-projects) NO_PROJECTS=1 ;;
     --mode) want_value=mode ;;
     --mode=*) MODE=${a#--mode=}; MODE_SET=1 ;;
+    --packet) want_value=packet ;;
+    --packet=*) PACKET=${a#--packet=}; PACKET_SET=1 ;;
     # yolo never reaches the worker: it is firstmate's merge authority, not a
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
@@ -174,6 +198,18 @@ elif [ "$MODE_SET" -eq 1 ]; then
   echo "error: --mode applies only to ship briefs; a scout delivers a report and a secondmate charter is not a delivery contract" >&2
   exit 1
 fi
+# Packet class is an explicit closed set on every ship and scout brief so the
+# dispatch boundary can rely on it; an invalid value stops the scaffold rather
+# than becoming an unclassifiable packet.
+case "$KIND" in
+  secondmate)
+    [ "$PACKET_SET" -eq 0 ] || { echo "error: --packet applies only to ship and scout briefs; a secondmate charter is provisioning, not a task packet" >&2; exit 1; } ;;
+  *)
+    case "$PACKET" in
+      ordinary|flagged|prohibited) ;;
+      *) echo "error: --packet must be one of ordinary, flagged, prohibited (got '$PACKET')" >&2; exit 1 ;;
+    esac ;;
+esac
 ID=${POS[0]}
 
 if [ "$KIND" = secondmate ] && [ "$HERDR_LAB" -eq 1 ]; then
@@ -216,6 +252,27 @@ When a terminal message says an instruction is waiting there - and at any natura
 The move IS the acknowledgement: without it firstmate rings again and eventually treats you as stuck. An empty or absent inbox needs no action.
 EOF
 INBOX_SECTION=${INBOX_SECTION%$'\n'}
+
+# The incidental-findings channel for ship crews. The entry format, dedup,
+# and retention guarantees are owned by bin/fm-findings-lib.sh's header; this
+# section is a cross-reference telling the worker when and how to record, not
+# a restatement. Ship briefs only: a scout's report is already its durable
+# channel, and a secondmate charter is a firstmate with its own crews.
+FINDINGS_FILE=$(shell_quote "$DATA/$ID/findings.md")
+# The data and state dirs are bound here, at scaffold time, exactly like the
+# absolute status file and inbox above: the worker's pane does not inherit
+# this firstmate's FM_HOME, so an unbound command would write the finding into
+# whichever home the ambient environment resolves, and would create that
+# home's state dir for the record's lock.
+FINDINGS_CMD="FM_DATA_OVERRIDE=$(shell_quote "$DATA") FM_STATE_OVERRIDE=$(shell_quote "$STATE") $(shell_quote "$FM_ROOT/bin/fm-findings.sh")"
+IFS= read -r -d '' FINDINGS_SECTION <<EOF || true
+# Incidental findings
+If you notice a concrete defect clearly OUTSIDE this task's scope (an adjacent bug, a failing test you did not touch, a docs error), do not fix it and do not expand this task: record it so it survives your cleanup.
+Run: \`$FINDINGS_CMD record $ID --title "<short title>" --evidence "<file:line, command, or observation>" --disposition "<the follow-up you suggest>"\`
+The command appends one entry to $FINDINGS_FILE in the firstmate home; that one write outside your worktree is allowed exactly like the status file above.
+Keep it rare and concrete: reproducible observations only, a few findings at most; this is not an issue tracker, a progress channel, or a place for design ideas, and firstmate triages recorded findings later.
+EOF
+FINDINGS_SECTION=${FINDINGS_SECTION%$'\n'}
 
 if [ "$KIND" = secondmate ]; then
 SECONDMATE_PROJECTS=""
@@ -367,6 +424,8 @@ fi
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
 
+Packet: class=$PACKET
+
 $TASK_SECTION
 
 $HERDR_SECTION
@@ -376,6 +435,14 @@ You are in a disposable git worktree of $REPO, at a detached HEAD on a clean def
 This is a SCOUT task: the deliverable is a written report, not a PR.
 The worktree is your laboratory - install, run, edit, and make scratch commits freely; all of it is discarded at teardown.
 The report is the only thing that survives, so anything worth keeping must be in it.
+
+# Research standards
+Retrieval and an existence-surface check are mandatory whenever this task's findings include a claim that something exists, is available, or is supported.
+1. Use at least one live web-search provider for any such claim, and cite in the report exactly what you queried and what it returned.
+   A provider needing a stored API key is called as: bin/fm-av-run.sh KEY_NAME -- tool [args]. That applies the key to that one call only; the key is never in your environment.
+2. Check every negative claim ("does not exist", "no support", "not available", "not live") against the authoritative existence surface for that thing - an App Store search/lookup API, TestFlight, DNS, a package registry, or GitHub releases, whichever actually governs it - and quote the exact check in the report.
+3. If an authoritative surface cannot be checked, say so explicitly in the report; absence of a check is never evidence of absence of the thing.
+4. Firstmate runs its own cheap falsification check on this report's most checkable existence claim before relaying it to the captain, so do not let a claim stand unqualified if it would not survive that check.
 
 # Rules
 1. Never push to any remote and never open a PR.
@@ -413,6 +480,7 @@ The report is the only thing that survives, so anything worth keeping must be in
    going. A drive-call error, timeout, slow read, or generic unreachability is NOT a daemon error:
    the daemon accepts \`respond\` immediately and runs the round in the background, so a killed or
    timed-out call was only waiting for a read while the run kept working.
+8. Never interpolate a secret-named variable into output; test presence without printing the value (for example \`[ -n "\${VAR:-}" ] && echo set || echo unset\`, never \`\${VAR:-fallback}\` or \`echo "\${VAR:-no}"\`).
 
 $INBOX_SECTION
 
@@ -450,6 +518,8 @@ DOD=$(fm_dod_block "$MODE" "$ID") || exit 1
 
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
+
+Packet: class=$PACKET
 
 $TASK_SECTION
 
@@ -502,8 +572,11 @@ $ASK_USER_BLOCK
    going. A drive-call error, timeout, slow read, or generic unreachability is NOT a daemon error:
    the daemon accepts \`respond\` immediately and runs the round in the background, so a killed or
    timed-out call was only waiting for a read while the run kept working.
+8. Never interpolate a secret-named variable into output; test presence without printing the value (for example \`[ -n "\${VAR:-}" ] && echo set || echo unset\`, never \`\${VAR:-fallback}\` or \`echo "\${VAR:-no}"\`).
 
 $INBOX_SECTION
+
+$FINDINGS_SECTION
 
 # Project memory
 If \`AGENTS.md\` or \`CLAUDE.md\` already exists, or if this task produced durable project-intrinsic knowledge, run \`$FM_ROOT/bin/fm-ensure-agents-md.sh .\` in the worktree.
