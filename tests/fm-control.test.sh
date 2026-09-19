@@ -53,7 +53,7 @@ verified_adapter_contract() {  # <harness> -> exit command, interrupt key, repea
     kimi) printf '/exit\tEscape\t1\t\n' ;;
     cursor) printf '/exit\tEscape\t1\t\n' ;;
     muse) printf '/exit\tEscape\t1\tC-u\n' ;;
-    agy) printf '/exit\tEscape\t1\t\n' ;;
+    agy) printf '/quit\tEscape\t1\t\n' ;;
     *) return 1 ;;
   esac
 }
@@ -675,22 +675,6 @@ test_ambiguous_endpoint_refuses() {
   pass "fm-control exit: an endpoint whose process cannot be attributed refuses"
 }
 
-test_agy_on_tmux_refuses_both_stop_verbs() {
-  local dir out rc verb
-  for verb in interrupt exit; do
-    dir=$(new_case "agy-tmux-$verb")
-    add_task "$dir" t1 agy
-    alive_as "$dir" agy
-    out=$(run_control "$dir" t1 "$verb"); rc=$?
-    expect_code 1 "$rc" "$verb on an agy tmux pane should refuse"$'\n'"$out"
-    assert_contains "$out" "positively classified" \
-      "the refusal should name the missing tmux attribution"
-    [ -z "$(literals "$dir")" ] || fail "an agy tmux pane must receive no bytes on $verb"
-    [ -z "$(keys_sent "$dir")" ] || fail "an agy tmux pane must receive no key on $verb"
-  done
-  pass "fm-control: agy on tmux refuses interrupt and exit without touching the pane"
-}
-
 test_busy_agent_is_interrupted_before_the_exit_command() {
   local dir out rc
   dir=$(new_case busy)
@@ -925,7 +909,6 @@ test_already_stopped_exit_is_idempotent
 test_missing_endpoint_refuses
 test_interrupt_refuses_when_no_agent_runs
 test_ambiguous_endpoint_refuses
-test_agy_on_tmux_refuses_both_stop_verbs
 test_busy_agent_is_interrupted_before_the_exit_command
 test_idle_agent_is_not_interrupted
 test_interrupt_without_acknowledgement_preserves_busy_state

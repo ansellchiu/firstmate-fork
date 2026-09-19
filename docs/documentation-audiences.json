@@ -281,6 +281,10 @@
       "audience": "public-product"
     },
     {
+      "path": "RECONCILIATION-INVENTORY.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "VISION.md",
       "audience": "public-product"
     },

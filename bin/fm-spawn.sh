@@ -368,11 +368,10 @@
 # uses. `--print`/`-p` is deliberately never used by this template: it is
 # BROKEN combined with `--model` or `--dangerously-skip-permissions`
 # (reproducibly ignores the real prompt and emits a canned self-description
-# instead). agy has NO verified turn-end hook or busy-state semantic source
-# (see the harness-adapters skill and bin/fm-busy-lib.sh's
-# fm_busy_agy_verified gate, which stays closed), so a spawned agy task
-# classifies unknown agy-unverified until a real semantic source is found and
-# live-verified; agy is refused for --secondmate below for the same reason
+# instead). agy has NO verified turn-end hook; its busy state comes from
+# the rendered-tail fallback verified on 1.2.0 (bin/fm-busy-lib.sh's
+# agy-regex path), which is a pane read rather than a semantic source, so agy
+# is refused for --secondmate below for the same reason
 # muse is - no primary supervision protocol exists for it yet. The binary is
 # resolved through resolve_agy_binary rather than a bare `agy` name because
 # PATH resolution was not probed against a fallback location before this pass.
@@ -2150,6 +2149,15 @@ agy)
     echo "error: agy executable not found on PATH; install Antigravity CLI or select a different verified harness" >&2
     exit 1
   }
+  # Authentication preflight, deliberately placed here: this runs before any
+  # endpoint, worktree, or metadata exists, so a down Gemini lane costs one
+  # bounded probe instead of a worker parked on an interactive OAuth prompt
+  # that only stale escalation eventually notices. It covers a fresh spawn and
+  # --relaunch identically, which also covers every fm-control relaunch that
+  # resolves to agy, since those delegate here. A refusal is final: no other
+  # harness is substituted, because silently swapping the adapter would hide
+  # the credential problem the captain has to fix (bin/fm-agy-lib.sh).
+  fm_agy_preflight "$AGY_BIN" || exit 1
   ;;
 esac
 
@@ -2420,10 +2428,9 @@ effort_flag_for_harness() {
     # stays in task metadata but never reaches the launch command. Cursor encodes
     # effort in model ids such as cursor-grok-4.5-high, so it also receives no
     # separate effort flag.
-    # effort flag. agy has an --effort flag in --help but it was not verified
-    # to do anything for a Gemini model id, and effort is already baked into
-    # the id (gemini-3.7-flash-medium/high), so agy also receives no separate
-    # effort flag; select the desired class through --model instead.
+    # agy is not in that set: its --effort flag was verified on 1.2.0 to accept
+    # exactly low, medium and high, which the agy arm above passes through while
+    # omitting xhigh and max.
   esac
 }
 
@@ -2468,19 +2475,6 @@ case "$LAUNCH" in
   *__ROVOBIN__*)
     ROVO_BIN=$(resolve_rovo_binary) || exit 1
     LAUNCH=${LAUNCH//__ROVOBIN__/$(shell_quote "$ROVO_BIN")}
-    ;;
-  *__AGYBIN__*)
-    AGY_BIN=$(resolve_agy_binary) || exit 1
-    # Authentication preflight, deliberately placed here: this runs before any
-    # endpoint, worktree, or metadata exists, so a down Gemini lane costs one
-    # bounded probe instead of a worker parked on an interactive OAuth prompt
-    # that only stale escalation eventually notices. It covers a fresh spawn
-    # and --relaunch identically, which also covers every fm-control relaunch
-    # that resolves to agy, since those delegate here. A refusal is final: no
-    # other harness is substituted, because silently swapping the adapter would
-    # hide the credential problem the captain has to fix (bin/fm-agy-lib.sh).
-    fm_agy_preflight "$AGY_BIN" || exit 1
-    LAUNCH=${LAUNCH//__AGYBIN__/$(shell_quote "$AGY_BIN")}
     ;;
 esac
 

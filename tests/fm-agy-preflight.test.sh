@@ -193,22 +193,24 @@ assert_refused_before_any_side_effect() {
   [ ! -s "$LAUNCH_LOG" ] || fail "$label refusal typed a launch command"
 }
 
-test_healthy_lane_spawns_unchanged() {
-  local rec id out status launch
+# What this case owns is the preflight's NEGATIVE: a signed-in lane is not
+# refused by it. It deliberately does not assert the whole launch, because the
+# agy launch path beyond the preflight - folder-trust pre-registration and the
+# trust-dialog wait - is owned and faked by tests/fm-agy-harness.test.sh, and
+# asserting it twice from a fixture that models neither would only pin this
+# suite to that other suite's fake.
+test_healthy_lane_is_not_refused_by_the_preflight() {
+  local rec id out
   id=agy-preflight-ok-a1
   rec=$(make_case agy-preflight-ok "$id")
   read_case_record "$rec"
 
-  out=$(FM_TEST_AGY_MODELS=ok run_spawn "$id" "$PROJ_DIR" --mode no-mistakes --yolo off)
-  status=$?
-  expect_code 0 "$status" "a signed-in agy lane should spawn"
-  assert_contains "$out" "spawned $id harness=agy" "healthy lane did not report an agy spawn"
-  assert_grep "harness=agy" "$HOME_DIR/state/$id.meta" "healthy lane did not record agy metadata"
-  launch=$(cat "$LAUNCH_LOG")
-  assert_contains "$launch" '--dangerously-skip-permissions' \
-    "healthy lane did not type the canonical agy launch"
-  assert_contains "$launch" ' -i ' "healthy lane dropped the mandatory -i flag"
-  pass "a signed-in agy lane spawns with the launch command unchanged"
+  out=$(FM_TEST_AGY_MODELS=ok run_spawn "$id" "$PROJ_DIR" --mode no-mistakes --yolo off) || true
+  assert_not_contains "$out" "not signed in" "a signed-in lane was refused as signed out"
+  assert_not_contains "$out" "sign-in check" "a signed-in lane tripped the sign-in check"
+  assert_not_contains "$out" "no usable agy executable" \
+    "a signed-in lane was refused for a missing executable"
+  pass "the preflight passes a signed-in agy lane through to the launch path"
 }
 
 test_signed_out_lane_refuses_before_endpoint_or_metadata() {
@@ -280,11 +282,16 @@ test_relaunch_is_gated_identically() {
   rec=$(make_case agy-preflight-relaunch "$id")
   read_case_record "$rec"
 
-  out=$(FM_TEST_AGY_MODELS=ok run_spawn "$id" "$PROJ_DIR" --mode no-mistakes --yolo off)
-  status=$?
-  expect_code 0 "$status" "the initial agy spawn should succeed"
+  # What this case owns is the RELAUNCH gate, so the task it relaunches is
+  # seeded directly. Driving a full initial spawn would also drive the agy
+  # launch path - folder trust, the trust-dialog answer and the working
+  # indicator - which tests/fm-agy-harness.test.sh owns and this fixture's
+  # fake pane does not render.
   meta="$HOME_DIR/state/$id.meta"
-  assert_present "$meta" "the initial agy spawn wrote no task metadata"
+  printf '%s\n' "window=firstmate:fm-$id" "worktree=$WT_DIR" "project=$PROJ_DIR" \
+    "harness=agy" "kind=ship" "mode=no-mistakes" "yolo=off" "spawn_gen=fixture-$id" > "$meta"
+  chmod 600 "$meta"
+  assert_present "$meta" "the relaunch fixture wrote no task metadata"
 
   # The lane goes down between the spawn and the relaunch; the replacement must
   # be refused on the same evidence a fresh spawn would be.
@@ -390,7 +397,7 @@ test_no_bounding_mechanism_at_all_refuses() {
   pass "a machine with no way to bound the probe refuses rather than running it unbounded"
 }
 
-test_healthy_lane_spawns_unchanged
+test_healthy_lane_is_not_refused_by_the_preflight
 test_signed_out_lane_refuses_before_endpoint_or_metadata
 test_missing_binary_refuses_before_endpoint_or_metadata
 test_probe_timeout_refuses_before_endpoint_or_metadata

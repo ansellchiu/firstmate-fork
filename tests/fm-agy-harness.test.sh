@@ -668,7 +668,14 @@ test_agy_unlisted_model_refuses_before_pane_creation() {
   pass "fm-spawn: an unlisted agy model refuses before pane creation"
 }
 
-test_agy_unreachable_listing_launches_unvalidated() {
+# This home carries an agy authentication preflight (bin/fm-agy-lib.sh), kept
+# because agy picks its credential store per process and a worker launched into
+# an unauthenticated lane parks forever on an interactive OAuth prompt. The
+# preflight probes the same `agy models` call the model check uses, so a
+# listing this host cannot reach REFUSES here rather than launching unvalidated:
+# the two answers are indistinguishable from an exit status, and parking a
+# worker is the worse of the two failures.
+test_agy_unreachable_listing_refuses_before_any_endpoint() {
   local id rec out rc
   id="agy-nolisting-z4-$$"
   rec=$(make_agy_spawn_case nolisting "$id")
@@ -676,13 +683,13 @@ test_agy_unreachable_listing_launches_unvalidated() {
   rc=0
   out=$(FM_FAKE_AGY_MODELS_FAIL=1 run_agy_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" \
     "$FAKEBIN_DIR" "$id" --model gemini-3.8-flash-low) || rc=$?
-  expect_code 0 "$rc" "an unreachable model listing must not block the spawn"
-  [ -s "$CASE_DIR/launch.log" ] || fail "an unreachable listing produced no launch command"
-  assert_contains "$out" "listing is unreachable" "an unreachable listing launched without its notice"
-  pass "fm-spawn: an unreachable agy listing establishes nothing and launches"
+  expect_code 1 "$rc" "an unreachable model listing must refuse rather than park a worker"
+  [ ! -s "$CASE_DIR/launch.log" ] || fail "a refused agy lane still typed a launch command"
+  assert_contains "$out" "not signed in" "the refusal did not name the sign-in check"
+  pass "fm-spawn: an unreachable agy listing refuses at the preflight, before any endpoint"
 }
 
-test_agy_hung_listing_is_cut_off_and_launches() {
+test_agy_hung_listing_is_cut_off_and_refuses() {
   local id rec out rc started elapsed
   id="agy-hanglisting-z8-$$"
   rec=$(make_agy_spawn_case hanglisting "$id")
@@ -692,13 +699,13 @@ test_agy_hung_listing_is_cut_off_and_launches() {
   out=$(FM_FAKE_AGY_MODELS_HANG=1 run_agy_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" \
     "$FAKEBIN_DIR" "$id" --model gemini-3.8-flash-low) || rc=$?
   elapsed=$(( $(date +%s) - started ))
-  expect_code 0 "$rc" "a hung model listing must not block the spawn"
+  # Same preflight contract as the unreachable case above: the bound still cuts
+  # the probe off quickly, and the refusal happens before any endpoint exists.
+  expect_code 1 "$rc" "a hung model listing must refuse rather than park a worker"
   [ "$elapsed" -lt 20 ] || fail "the model probe was not cut off by its bound (took ${elapsed}s)"
-  assert_contains "$out" "did not answer within 1s" "a hung listing launched without its timeout notice"
-  [ -s "$CASE_DIR/launch.log" ] || fail "a hung listing produced no launch command"
-  assert_contains "$(cat "$CASE_DIR/launch.log")" "--model 'gemini-3.8-flash-low'" \
-    "a hung listing dropped the requested model instead of launching it unvalidated"
-  pass "fm-spawn: a hung agy listing is cut off by the shared bound and launches unvalidated"
+  [ ! -s "$CASE_DIR/launch.log" ] || fail "a refused agy lane still typed a launch command"
+  assert_contains "$out" "sign-in check did not finish" "the refusal did not name the bounded probe"
+  pass "fm-spawn: a hung agy listing is cut off by the shared bound and refuses"
 }
 
 test_agy_zero_model_timeout_is_clamped_to_the_default_bound() {
@@ -712,12 +719,12 @@ test_agy_zero_model_timeout_is_clamped_to_the_default_bound() {
     run_agy_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" \
     "$FAKEBIN_DIR" "$id" --model gemini-3.8-flash-low) || rc=$?
   elapsed=$(( $(date +%s) - started ))
-  expect_code 0 "$rc" "a hung listing with a zero bound must not block the spawn"
+  # The clamp is what this case owns; the preflight then refuses the hung lane
+  # exactly as the two cases above (this home's agy authentication preflight).
+  expect_code 1 "$rc" "a hung listing with a zero bound must refuse, not park a worker"
   [ "$elapsed" -lt 25 ] || fail "a zero model bound disabled the deadline (took ${elapsed}s)"
-  assert_contains "$out" "did not answer within 15s" \
-    "a zero model bound was not clamped to the documented default"
-  [ -s "$CASE_DIR/launch.log" ] || fail "a zero model bound produced no launch command"
-  pass "fm-spawn: a zero FM_AGY_MODELS_TIMEOUT is clamped to the default bound"
+  [ ! -s "$CASE_DIR/launch.log" ] || fail "a refused agy lane still typed a launch command"
+  pass "fm-spawn: a zero FM_AGY_MODELS_TIMEOUT is clamped and the hung lane refuses"
 }
 
 # Bare Enter key presses only: shell setup rides its Enter on the typed text
@@ -900,8 +907,8 @@ test_herdr_malformed_and_failed_reads_stay_unknown
 test_agy_launch_carries_the_brief_with_model_effort_and_autonomy
 test_agy_effort_xhigh_is_recorded_but_omitted
 test_agy_unlisted_model_refuses_before_pane_creation
-test_agy_unreachable_listing_launches_unvalidated
-test_agy_hung_listing_is_cut_off_and_launches
+test_agy_unreachable_listing_refuses_before_any_endpoint
+test_agy_hung_listing_is_cut_off_and_refuses
 test_agy_zero_model_timeout_is_clamped_to_the_default_bound
 test_agy_trust_registers_the_logical_and_resolved_worktree_paths
 test_agy_trust_creates_a_missing_store

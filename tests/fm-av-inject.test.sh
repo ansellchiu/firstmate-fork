@@ -454,7 +454,6 @@ run_spawn() {
 
 verified_cases=(
   "claude:crewmate:claude --dangerously-skip-permissions"
-  "agy:crewmate:'__FAKEBIN__/agy' --dangerously-skip-permissions"
   "codex:crewmate:codex --dangerously-bypass-approvals-and-sandbox"
   "codex:secondmate:codex --dangerously-bypass-approvals-and-sandbox"
   "opencode:crewmate:opencode "
@@ -475,6 +474,11 @@ EOF
   slug="$harness-$kind"
   # The Kimi adapter installs a global turn-end hook that validates config.toml
   # with python3's tomllib; without it fm-spawn.sh correctly refuses the spawn.
+  # agy is deliberately out of this matrix: its spawn only reports success
+  # after the live pane shows agy working (folder-trust answer plus the working
+  # indicator), which this fixture's fake pane does not render.
+  # tests/fm-agy-harness.test.sh owns that launch path; the no-secret property
+  # this matrix exists for is identical across the adapters listed above.
   if [ "$harness" = kimi ] && ! python3 -c 'import tomllib' >/dev/null 2>&1; then
     echo "skip: python3 with tomllib not available, so the kimi turn-end hook cannot be installed ($harness $kind spawn)"
     continue
