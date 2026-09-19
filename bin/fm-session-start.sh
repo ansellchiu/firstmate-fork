@@ -49,6 +49,9 @@
 #                       state/.afk daemon flag), and a cheap per-task
 #                       endpoint-liveness read:
 #                       read-only, always runs.
+#   6a. extensions    - one bounded subsection per installed extension that
+#                       registers a session-start hook: read-only, absent when
+#                       the home has no such extension.
 #   7. network checks - the result of the deferred network stage started back at
 #                       step 1, harvested WITHOUT waiting for it.
 #   8. context digest - data/projects.md, data/secondmates.md, data/captain.md,
@@ -271,6 +274,8 @@ stage() {  # <stage-name>: breadcrumb for the parent's truncation banner
 
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
+# shellcheck source=bin/fm-ext-hook-lib.sh
+. "$SCRIPT_DIR/fm-ext-hook-lib.sh"
 # shellcheck source=bin/fm-session-lock-lib.sh
 . "$SCRIPT_DIR/fm-session-lock-lib.sh"
 
@@ -344,6 +349,12 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-line-cap-lib.sh
 . "$SCRIPT_DIR/fm-line-cap-lib.sh"
+# Incidental findings surfacing: pending entries live in per-task
+# data/<id>/findings.md (contract: bin/fm-findings-lib.sh) and must reach
+# firstmate at every natural checkpoint until triaged; this read-only scan is
+# the durable recurrence beside teardown's one-time surface.
+# shellcheck source=bin/fm-findings-lib.sh
+. "$SCRIPT_DIR/fm-findings-lib.sh"
 
 # One tasks-axi compatibility verdict per session start. The probe costs three
 # tasks-axi subprocesses and this digest needs the same answer twice - here for
@@ -804,9 +815,9 @@ stage read-once
 section "READ-ONCE CONTRACT"
 cat <<'EOF'
 Everything below is printed in full for this session start: every state/*.meta,
-a compact data/backlog.md listing, a bounded tail of every state/*.status,
-data/projects.md, data/secondmates.md, data/captain.md, data/captain-shared.md,
-and data/learnings.md.
+a compact data/backlog.md listing, a bounded tail of every state/*.status, each
+installed extension's session-start contribution, data/projects.md,
+data/secondmates.md, data/captain.md, data/captain-shared.md, and data/learnings.md.
 Do NOT re-read any of them after reading this digest, and do NOT bulk-read
 data/backlog.md or state/*.status: re-reading everything defeats the entire
 point of this command.
@@ -875,6 +886,18 @@ for status in "$STATE"/*.status; do
 done
 [ "$ORPHAN_STATUS_FOUND" -eq 1 ] || printf '(none)\n'
 
+# Pending incidental findings (bin/fm-findings-lib.sh). A ship worker's
+# out-of-scope observation must stay visible until it is triaged; teardown
+# surfaces it once at cleanup, and this bounded subsection is the durable
+# recurrence. Read-only, and silent when nothing is pending.
+if FINDINGS_BLOCK=$(fm_findings_pending_lines "$DATA" all 8); then
+  subsection "Pending incidental findings (data/*/findings.md)"
+  printf '%s\n' "$FINDINGS_BLOCK"
+  printf 'Each line is one out-of-scope observation a ship worker recorded for later triage; its evidence sits in that findings.md file.\n'
+  printf 'Triage each explicitly - file the follow-up work or dismiss it with a reason - then close it with %s/bin/fm-findings.sh triage <task-id> <slug> --note "...".\n' "$FM_ROOT"
+  printf 'A recorded finding never expands its task or authorizes a change by itself.\n'
+fi
+
 subsection "AFK"
 # The away posture is the record (bin/fm-afk-contract.sh); the legacy flag
 # still marks a running daemon on the harnesses that launch one.
@@ -916,6 +939,40 @@ if fm_pf_relay_active "$FM_HOME" \
     printf '%s/bin/fm-public-followup.sh deliver <id>. Hand a delivered loop on with rechain, or close it with\n' "$FM_ROOT"
     printf '%s/bin/fm-public-followup.sh retire <id> --reason "...". Load fmx-respond for the procedure.\n' "$FM_ROOT"
   fi
+fi
+
+# --- 6a. extensions ---------------------------------------------------------
+# Installed extensions contribute here, each in its own bounded subsection. The
+# position is deliberate: after the live fleet state, before the network checks
+# and the curated memory, so an extension can never displace either. An
+# extension that is absent, opted out, or simply idle contributes nothing and
+# prints no section - that is the expected condition, and it costs one
+# enumeration. A registered hook that fails or hangs does NOT stop the digest;
+# it is bounded, killed at the bound, and reported as an EXT_HOOK: line.
+# bin/fm-ext-hook-lib.sh owns that contract and the reasoning behind it.
+stage extensions
+EXT_HOOK_ROWS=$("$SCRIPT_DIR/fm-ext.sh" hooks session-start --home "$FM_HOME" 2>/dev/null) || EXT_HOOK_ROWS=
+if [ -n "$EXT_HOOK_ROWS" ]; then
+  EXT_SECTION_OPEN=0
+  while IFS=$'\t' read -r ext_name ext_path ext_status; do
+    [ -n "$ext_name" ] || continue
+    fm_ext_hook_capture "$FM_HOME" "$FM_ROOT" "$ext_name" "$ext_path" "${ext_status:-ok}" || true
+    if [ -n "$FM_EXT_HOOK_BODY" ] || [ -n "$FM_EXT_HOOK_DIAG" ]; then
+      if [ "$EXT_SECTION_OPEN" -eq 0 ]; then
+        section "EXTENSIONS"
+        EXT_SECTION_OPEN=1
+      fi
+    fi
+    if [ -n "$FM_EXT_HOOK_DIAG" ]; then
+      printf '%s\n' "$FM_EXT_HOOK_DIAG"
+    fi
+    if [ -n "$FM_EXT_HOOK_BODY" ]; then
+      subsection "$FM_EXT_HOOK_TITLE"
+      printf '%s\n' "$FM_EXT_HOOK_BODY"
+    fi
+  done <<EXT_HOOK_ROWS_EOF
+$EXT_HOOK_ROWS
+EXT_HOOK_ROWS_EOF
 fi
 
 # --- 7. network checks ------------------------------------------------------

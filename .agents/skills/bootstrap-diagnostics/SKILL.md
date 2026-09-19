@@ -2,7 +2,7 @@
 name: bootstrap-diagnostics
 description: >-
   Agent-only handling playbook for session-start bootstrap diagnostics.
-  Use whenever the session-start digest's bootstrap or network-checks section prints an actionable diagnostic line - MISSING, MISSING_MANUAL, PRESENTATION_UNAVAILABLE, BACKEND_INVALID, NEEDS_GH_AUTH, TANGLE, STARTUP_MEMORY_BUDGET, CREW_DISPATCH invalid, FLEET_SYNC, NETWORK_CHECKS, HOME_SUMMARY, BACKLOG_RECONCILE, SECONDMATE_SYNC, SECONDMATE_LIVENESS, SECONDMATE_HANDOFF, NUDGE_SECONDMATES, or FMX - or reports that an interrupted backlog cleanup may have left an endpoint or local copy, or when a standalone bin/fm-bootstrap.sh or bin/fm-startup-network.sh run prints one of those lines.
+  Use whenever the session-start digest's bootstrap, network-checks, or extensions section prints an actionable diagnostic line - MISSING, MISSING_MANUAL, PRESENTATION_UNAVAILABLE, BACKEND_INVALID, NEEDS_GH_AUTH, TANGLE, VAULT, STARTUP_MEMORY_BUDGET, CREW_DISPATCH invalid, FLEET_SYNC, NETWORK_CHECKS, HOME_SUMMARY, BACKLOG_RECONCILE, SECONDMATE_SYNC, SECONDMATE_LIVENESS, SECONDMATE_HANDOFF, NUDGE_SECONDMATES, EXT_HOOK, or FMX - or reports that an interrupted backlog cleanup may have left an endpoint or local copy, or when a standalone bin/fm-bootstrap.sh or bin/fm-startup-network.sh run prints one of those lines.
   A silent bootstrap section, or any other BOOTSTRAP_INFO fact, means no skill load.
 user-invocable: false
 metadata:
@@ -35,14 +35,25 @@ When any diagnostic needs captain attention, report the plain consequence and re
 - `TANGLE: <remediation>` - the primary checkout is stranded on a feature branch instead of its default branch; `AGENTS.md` section 8 explains why this guard exists and what it protects.
   The work is safe on that branch ref; restore the primary to its default branch with the printed `git -C <root> checkout <default>`, then re-validate that branch in a proper worktree.
   This is the only sanctioned firstmate-initiated git write to the primary, and it is a non-destructive branch switch that strands nothing.
+- `VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)` - the Automic Vault approval service is down, hung, or refusing requests.
+  Spawning is unaffected because no launch is wrapped; tell the captain that a worker's key-dependent tool calls will refuse until the menu-bar vault app is opened or approval is completed, and wait for vault recovery before dispatching work that needs those credentials.
 - `STARTUP_MEMORY_BUDGET: invalid config/startup-memory-budget - <reason>` - the visible startup-memory budget is not a safe one-line positive decimal file; do not infer the default or propagate it.
   Correct the local primary file, then rerun session start so the normal convergence path can deliver the validated value to secondmate homes.
 - `CREW_DISPATCH: invalid config/crew-dispatch.json - <reason>` - the optional dispatch profile file exists but failed low-cost bootstrap validation; stop profile-based dispatch, report the actionable error, and require correction of the malformed schema, unverified harness name, or invalid harness/effort pair rather than falling back around it or selecting a bad profile.
+- `EXT_HOOK: <extension> session-start <failed|timed out|is registered but ...>` - an installed extension's session-start contributor could not produce its digest subsection, so that section is simply missing from this digest; nothing else in the digest is affected.
+  This never blocks session start by design, so do not rerun session start to "fix" it and do not treat the fleet as unsupervised: the lock, the wake queue, and the fleet reconciliation all completed normally.
+  Handle it as an extension health problem, not a startup problem: run `bin/fm-ext.sh status <extension>` to see whether the installation itself is broken, and run the hook by hand from the package to read its full error.
+  A `timed out` line means the hook was killed at the bound rather than allowed to hang, so suspect a network call or a lock wait inside the hook.
+  A `is registered but missing`/`not executable` line means the package and the home's install record disagree, which `bin/fm-ext.sh update <extension>` re-derives.
+  A `(repeated Nx)` suffix means this exact failure has now recurred N consecutive session starts; a rising count is what turns a tolerable degradation into something worth the captain's attention, because the extension has been silently contributing nothing that whole time.
 - `FLEET_SYNC: <repo>: skipped: <reason>` - a benign one-off skip (offline, no origin, local-only); bootstrap continued, investigate only if it blocks work.
   A skip can also report the bounded fleet-refresh timeout (`FM_FLEET_SYNC_BOOTSTRAP_TIMEOUT`, or a fleet-size-aware default with a 20 second floor); a timeout never blocks startup.
 - `FLEET_SYNC: <repo>: recovered: <detail>` - the clone had drifted onto a clean detached HEAD holding no unique commits and the sync self-healed it (re-attached the default branch and fast-forwarded); no action needed, it is reported only so the self-heal is visible.
 - `FLEET_SYNC: <repo>: STUCK: on <state>, N commits behind <base> - needs attention` - the clone is dirty, on a non-default branch, detached with unique commits, or diverged, so the sync left it untouched (never forcing or discarding); it will keep falling behind until you look.
   A loud STUCK, especially a growing N across bootstraps, means that clone needs hands-on attention; dispatch a crewmate or resolve it before it strands work.
+- `FLEET_SYNC: <repo>: STUCK: cannot read the registered delivery posture from <registry>; sync refused until the registry line is fixed:` - the clone itself is fine; that project's `data/projects.md` entry could not be parsed (a mistyped `+annotation`, an unreadable registry), and the sync refuses rather than guessing a posture and pulling a project the captain registered `local-only`.
+  The indented `STUCK:` continuation lines beneath it name the registry file and the offending annotation; fix that line and the next refresh proceeds.
+  Every other clone still refreshed, but the run exited non-zero.
 - `HOME_SUMMARY: this home has never published state/home-summary.json` or `... has not been republished since <stamp>` - this home's structured summary publication has failed repeatedly, and the line carries the failure count and the newest recorded reason from `state/.home-summary-refresh.log`.
   Publication is deliberately best-effort, so it cannot change another session-start, spawn, teardown, or watcher-poll result, and the watcher runs it detached so a slow attempt cannot delay the liveness beacon.
   Read the named record for the recorded reasons, then reproduce with a direct `bin/fm-home-summary-refresh.sh` (no `--best-effort`, which is what keeps the failure quiet) so the refresh error reaches you.

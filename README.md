@@ -187,7 +187,7 @@ Claude and grok use the slash form shown here; codex uses the same names with `$
 | `/quiet`           | Enter quiet supervision mode: the same token-saving sub-supervisor tradeoff as `/afk`, for a captain who is staying and chatting - ordinary messages do not exit it, only an explicit `/quiet off` does |
 | `/ahoy`            | Recap visible session events since the prior real captain message plus visibly unanswered captain decisions, then guide the captain through any open decisions one at a time in agent-judged impact order; fall back to Bearings when invoked as the session's first real captain message |
 | `/bearings`        | Generate a concise four-section chat digest from bounded fleet state, including registered remote-home ledgers and measured follow-up for owned contributions; use `/bearings file` to also replace today's dated report in `data/`, and add `include PRs` for live GitHub enrichment |
-| `/updatefirstmate` | Guardedly update the running firstmate and its secondmates - fast-forward, or reconcile a redundant post-squash-merge divergence - then persist and restart every live mate successfully left on the target commit - including already-current homes - with an honest re-read nudge only when restart cannot be proven |
+| `/updatefirstmate` | Check the public canonical Firstmate repo first and reconcile any genuinely new public commits through an isolated branch and a private pull request, then guardedly update the running firstmate - fast-forward, or reconcile a redundant post-squash-merge divergence - and its secondmates, then persist and restart every live mate successfully left on the target commit - including already-current homes - with an honest re-read nudge only when restart cannot be proven |
 | `/stow`            | Sweep the session for uncaptured durable knowledge, persist the open work records this session knows are unfiled or now wrong, curate tiered startup memory with decay and cold archival, enforce each home's budget or surface the required decision, cascade to registered second mates, and report what is safe to reset |
 
 Bearings invocation examples:
@@ -205,10 +205,13 @@ Agent-only reference skills live under `.agents/skills/` and are loaded by first
 Firstmate's skills live in two separate places with different audiences:
 
 - `.agents/skills/` - agent-loaded skills (this section's table, plus firstmate's agent-only reference skills). Every one of these assumes a live firstmate home and is meaningless, or actively misleading, installed anywhere else, so each carries `metadata.internal: true` in its frontmatter. That flag hides them from installer discovery (tools like the [skills.sh](https://skills.sh) `npx skills add` installer) without affecting how firstmate itself loads them - frontmatter metadata is inert to the agent's own skill loader.
-- `skills/` - public, installer-facing skills meant to be installed standalone into any project, independent of firstmate.
-  Each one is a self-contained skill with no dependency on firstmate's paths, tools, or vocabulary.
-  Today that is `skills/stow`, a generic session-knowledge-sweep skill that routes findings by explicit instruction first, then existing local conventions, then a private `.stow-notes.md` fallback, and curates tiered entries through decay, local archival, and user-approved on-demand offload proposals.
+- `skills/` - public, installer-facing skills, each a self-contained directory a public skill installer (such as [skills.sh](https://skills.sh)) can discover and stage.
+  Entries here are fully generic, with no dependency on firstmate's paths, tools, or vocabulary, and each entry's own `README.md` or header comment says what it assumes.
+  `skills/stow` is the current case: a session-knowledge-sweep skill that routes findings by explicit instruction first, then existing local conventions, then a private `.stow-notes.md` fallback, and curates tiered entries through decay, local archival, and user-approved on-demand offload proposals.
   It intentionally shares no code with the firstmate-internal `.agents/skills/stow` it is named after, so the two can evolve independently.
+
+A skill that needs to ship its own runtime, commands, config, and lifecycle is not a skill in either tier - it is an extension, and it lives in its own repository rather than in this tree.
+[docs/configuration.md](docs/configuration.md#extensions-configext-required) and `bin/fm-ext.sh --help` own that contract.
 
 ## Documentation
 

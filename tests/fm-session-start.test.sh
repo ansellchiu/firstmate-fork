@@ -24,6 +24,9 @@
 #   - composition: the script invokes the real fm-lock.sh/fm-bootstrap.sh/
 #     fm-wake-drain.sh (their real, distinctive output appears verbatim), it
 #     does not reimplement their logic
+#   - the EXTENSIONS section: an installed contributor renders its subsection,
+#     a home with no extensions prints no section at all, and a contributor that
+#     fails degrades to an EXT_HOOK: line without stopping the digest
 #   - the deferred startup stage: slow network and inactive current-state reads
 #     do not delay the digest, the work still runs and lands durable findings, a
 #     network result surfaces exactly once (inline or as a wake, never both), a
@@ -35,6 +38,8 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # shellcheck source=tests/wake-helpers.sh
 . "$(dirname "${BASH_SOURCE[0]}")/wake-helpers.sh"
+# shellcheck source=tests/ext-fixture-helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/ext-fixture-helpers.sh"
 
 SESSION_START="$ROOT/bin/fm-session-start.sh"
 BASE_PATH=${FM_TEST_BASE_PATH:-/usr/bin:/bin:/usr/sbin:/sbin}
@@ -1186,6 +1191,55 @@ EOF
   [ "$orphan_count" -eq 1 ] || fail "orphan status log was printed $orphan_count times: $out"
 
   pass "orphan status logs are printed once with bounded tails"
+}
+
+test_pending_findings_surface_and_stay_silent() {
+  local rec root home fakebin out
+  rec=$(new_world pending-findings)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  mkdir -p "$home/data/task-a"
+  printf '%s\n' \
+    '# Incidental findings - task task-a' \
+    '' \
+    '## finding: adjacent-broken-test' \
+    '- status: pending' \
+    '- recorded: 2026-09-11T00:00:00Z' \
+    '- evidence: tests/other.test.sh:44' \
+    '- suggested-disposition: file a follow-up fix' \
+    '' \
+    '## finding: docs-typo' \
+    '- status: triaged 2026-09-10T00:00:00Z -- dismissed: fixed in PR 5' \
+    '- recorded: 2026-09-09T00:00:00Z' \
+    '- evidence: README.md:8' \
+    '- suggested-disposition: fix wording' \
+    > "$home/data/task-a/findings.md"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  assert_contains "$out" "Pending incidental findings (data/*/findings.md)" \
+    "digest did not label the pending findings subsection"
+  assert_contains "$out" "task-a/adjacent-broken-test" "digest did not surface the pending finding"
+  assert_contains "$out" "file a follow-up fix" "digest omitted the suggested disposition"
+  assert_not_contains "$out" "docs-typo" "a triaged finding leaked into the digest"
+  assert_contains "$out" "fm-findings.sh triage" "digest did not name the triage command"
+
+  # A home with no findings files prints no subsection at all.
+  rec=$(new_world no-findings)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "Pending incidental findings" \
+    "digest printed a findings subsection with no findings files"
+
+  pass "pending incidental findings surface in the digest and stay silent when absent"
 }
 
 # --- session-start secondmate recovery boundary -----------------------------
@@ -2692,9 +2746,126 @@ test_session_start_relaunches_herdr_husk_secondmate
 test_status_tail_bounding
 test_status_tail_line_cap
 test_orphan_status_logs_are_printed
+test_pending_findings_surface_and_stay_silent
 test_endpoint_liveness_tmux
 test_endpoint_liveness_herdr
 test_composition_invokes_real_scripts
+# --- extensions: the session-start contributor seam --------------------------
+
+# install_ext_into_world <home> <root> <name>: build a fixture package beside the
+# world and install it into that home. Echoes the package directory.
+install_ext_into_world() {  # <home> <root> <name>
+  local home=$1 root=$2 name=$3 pkg
+  pkg="$(dirname "$home")/exts/$name"
+  mkdir -p "$(dirname "$pkg")"
+  fm_ext_fixture "$pkg" "$name"
+  ( cd "$home" && git init -q 2>/dev/null; true )
+  "$ROOT/bin/fm-ext.sh" install "$pkg" --home "$home" >/dev/null 2>&1 \
+    || fail "installing the fixture extension into the session-start world failed"
+  printf '%s' "$pkg"
+}
+
+test_extensions_section_renders_an_installed_contributor() {
+  local rec root home fakebin out
+  rec=$(new_world ext-render)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  install_ext_into_world "$home" "$root" hello-ext >/dev/null
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  assert_contains "$out" "EXTENSIONS" "the digest printed no EXTENSIONS section for an installed contributor"
+  assert_contains "$out" "fixture digest line" "the contributor's body did not reach the digest"
+  assert_contains "$out" "hello-ext" "the contributor's subsection was not titled"
+
+  # Position is a contract: extensions must not displace the network checks or
+  # the curated memory a truncated tail is meant to take first.
+  ext_line=$(printf '%s\n' "$out" | grep -n '^EXTENSIONS$' | head -1 | cut -d: -f1)
+  net_line=$(printf '%s\n' "$out" | grep -n '^NETWORK CHECKS$' | head -1 | cut -d: -f1)
+  [ -n "$ext_line" ] && [ -n "$net_line" ] \
+    || fail "could not locate both the EXTENSIONS and NETWORK CHECKS sections"
+  [ "$ext_line" -lt "$net_line" ] \
+    || fail "the EXTENSIONS section landed after the network checks (ext=$ext_line net=$net_line)"
+
+  pass "an installed extension renders its own bounded subsection ahead of the network checks"
+}
+
+test_no_extensions_means_no_section() {
+  local rec root home fakebin out
+  rec=$(new_world ext-absent)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  # A home with no extensions pays nothing: no header, no placeholder, no
+  # "(none)" line. This is what keeps the seam free for homes that never use it.
+  printf '%s\n' "$out" | grep -q '^EXTENSIONS$' \
+    && fail "a home with no extensions still printed an EXTENSIONS section"
+  assert_contains "$out" "NETWORK CHECKS" "the digest did not complete without extensions"
+
+  pass "a home with no installed extensions prints no EXTENSIONS section at all"
+}
+
+test_failing_contributor_does_not_stop_the_digest() {
+  local rec root home fakebin out pkg
+  rec=$(new_world ext-failure)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  pkg=$(install_ext_into_world "$home" "$root" hello-ext)
+  fm_ext_fixture_hook_failing "$pkg" 3
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  assert_contains "$out" "EXT_HOOK: hello-ext session-start failed (exit 3" \
+    "a failing contributor produced no typed diagnostic in the digest"
+  # The half that matters most: the digest is recovery infrastructure, so the
+  # sections AFTER the broken contributor must still be there.
+  assert_contains "$out" "NETWORK CHECKS" \
+    "a failing contributor stopped the digest before the network checks"
+  assert_contains "$out" "data/captain.md" \
+    "a failing contributor stopped the digest before the context digest"
+  printf '%s\n' "$out" | grep -q 'this body must never reach the digest' \
+    && fail "the failed contributor's partial body was rendered into the digest"
+
+  pass "a failing contributor degrades to a visible diagnostic without stopping the digest"
+}
+
+test_hanging_contributor_does_not_wedge_the_digest() {
+  local rec root home fakebin out pkg started elapsed
+  rec=$(new_world ext-hang)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  pkg=$(install_ext_into_world "$home" "$root" hello-ext)
+  fm_ext_fixture_hook_hanging "$pkg"
+
+  started=$(date +%s)
+  out=$(FM_EXT_HOOK_TIMEOUT_SECONDS=2 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  elapsed=$(( $(date +%s) - started ))
+
+  assert_contains "$out" "EXT_HOOK: hello-ext session-start timed out" \
+    "a hanging contributor did not report the bound it hit"
+  assert_contains "$out" "NETWORK CHECKS" \
+    "a hanging contributor stopped the digest before the network checks"
+  [ "$elapsed" -lt 60 ] \
+    || fail "the digest was delayed by a hanging contributor: ${elapsed}s"
+
+  pass "a hanging contributor is bounded and the session start completes anyway"
+}
+
+
 test_branch_outcome_replay_respects_captain_barrier_and_lease_sweep
 test_non_pi_session_start_leaves_branch_state_untouched
 test_backlog_compact_tasks_axi_omits_bodies_and_keeps_metadata
@@ -2724,5 +2895,51 @@ test_read_only_pi_compact_refreshes_against_its_own_session_identity
 test_codex_unreachable_reset_sources_do_not_claim_instruction_refresh
 test_agents_baseline_requires_sha256_and_successful_completion
 test_reemit_keeps_repair_ownership_with_the_lock_holder
+test_extensions_section_renders_an_installed_contributor
+test_no_extensions_means_no_section
+test_failing_contributor_does_not_stop_the_digest
+test_hanging_contributor_does_not_wedge_the_digest
+
+test_session_start_vault_diagnostic() {
+  local rec root home fakebin out
+  rec=$(new_world session-start-vault-degraded)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  cat > "$fakebin/av" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = list ]; then
+  printf 'automic vault: human approval required\n' >&2
+  exit 1
+fi
+exit 1
+SH
+  chmod +x "$fakebin/av"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)" \
+    "session start includes VAULT diagnostic line when vault is degraded"
+
+  cat > "$fakebin/av" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = list ]; then
+  printf 'vault1\n'
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$fakebin/av"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "VAULT: approval service degraded" \
+    "session start stays silent on healthy vault"
+
+  pass "session start reports degraded vault and stays silent when vault is healthy"
+}
+
+test_session_start_vault_diagnostic
 
 echo "# fm-session-start.test.sh: all assertions passed"
+
