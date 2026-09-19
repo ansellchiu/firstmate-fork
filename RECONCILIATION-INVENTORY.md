@@ -23,7 +23,7 @@ The branch is rooted on that commit itself, so upstream's history IS this branch
 | --- | --- |
 | `git merge-base --is-ancestor upstream/main HEAD` | true |
 | `git merge-base HEAD upstream/main` | `2bcb88c3` - the current upstream tip, not a superseded one |
-| commits on top of the seed | 48 (46 reconciliations plus two integration commits) |
+| commits on top of the seed | 57 (46 reconciliations, then the integration and repair commits the suites drove) |
 | upstream files added since the divergence base, present here | **73 / 73** |
 | private-only files, present here | **71 / 71** |
 | files differing from upstream | 198 (the honest private footprint) |
@@ -62,28 +62,74 @@ Four dispositions appear below:
   This is the only mechanism, per report section 3.2, by which the divergence footprint actually shrinks.
 - Nothing is carried on the strength of "private wins" or "upstream wins" alone.
 
-Two `reconcile(integration)` commits close the series, for the seams only the whole series exposes;
-they are listed at the end.
+A short run of integration and repair commits closes the series, for the seams only the whole series
+exposes and the defects its own suites then caught; they are listed at the end.
 
 ## Verification
 
-Run on the final reconciled tip.
+Everything below was run on the final reconciled tip, in this disposable worktree.
 
 | Check | Command | Result |
 | --- | --- | --- |
 | upstream ancestry | `git merge-base --is-ancestor upstream/main HEAD` | true |
 | merge base is the upstream tip | `git merge-base HEAD upstream/main` | `2bcb88c3` |
-| upstream-added files present | census against `40c50ea8..2bcb88c3` | 73 / 73 |
-| private-only files present | census against `40c50ea8..origin/main` | 71 / 71 |
-| shell lint, full canonical set | `CI=true bin/fm-lint.sh` | PENDING |
-| test coverage guard | `bin/fm-test-run.sh --check-coverage` | PENDING |
-| portable parallel lane 1 | `bin/fm-test-run.sh --lane portable-parallel-1` | PENDING |
-| portable parallel lane 2 | `bin/fm-test-run.sh --lane portable-parallel-2` | PENDING |
-| portable serial lane | `bin/fm-test-run.sh --lane portable-serial` | PENDING |
-| publish script dry run | `./push-route-b.sh --dry-run` | PENDING |
+| upstream-added files present | census against `40c50ea8..2bcb88c3` | **73 / 73** |
+| private-only files present | census against `40c50ea8..origin/main` | **71 / 71** |
+| shell lint, full canonical set | `CI=true bin/fm-lint.sh` | **clean** (ShellCheck 0.11.0, actionlint 1.7.12, 3 workflows valid) |
+| test coverage guard | `bin/fm-test-run.sh --check-coverage` | **ok** - 243 scripts, all mapped; 24 parallel, 202 serial over 9 shards, 17 Herdr |
+| portable parallel lane 1 | `bin/fm-test-run.sh --lane portable-parallel-1` | **11 suites, 0 failed** |
+| portable parallel lane 2 | `bin/fm-test-run.sh --lane portable-parallel-2` | **13 suites, 0 failed** |
+| portable serial lane | `bin/fm-test-run.sh --lane portable-serial` | 202 suites, 30 gate-skipped, **15 failed - none of them caused by this series** (below) |
+| publish script dry run | `./push-route-b.sh` | **clean**, one ref planned, nothing pushed |
 
-The real-Herdr family and every live-harness suite are deliberately not run here: they need a live
-Herdr server and real harness binaries, and the fork's CI is where they belong.
+The real-Herdr family is deliberately not run here: it needs a live Herdr server, and the fork's CI
+is where it belongs.
+
+### The 15 serial failures, each accounted for
+
+None is introduced by this reconciliation. Every one was checked by running the same suite against a
+real `git clone` of `firstmate-private` main (`db19959e`) in a scratch directory, or is a live-harness
+suite that drives a real binary on the host.
+
+**Already failing on `firstmate-private` main** (reproduced there, same assertion):
+
+| Suite | What it reports |
+| --- | --- |
+| `fm-findings` | cleanup of a task with a findings file refuses - no completion receipt |
+| `fm-gate-refuse` | cleanup of landed work refuses - no completion receipt |
+| `fm-backlog-atomicity` | Beads completion cleanup refuses - no completion receipt |
+| `fm-backend-orca` | Orca ship cleanup fails on a matching worktree id |
+| `fm-on` | the trusted doctor does not print `mode=check` with git unavailable |
+| `fm-secondmate-liveness` | a Herdr pane state of `unknown` maps to `missing` on a host whose herdr answers `stopped` |
+| `fm-watch-triage` | the auto-standdown case's loud wake line |
+| `fm-secondmate-sync` | spawn does not fast-forward the secondmate worktree |
+| `fm-shared-captain-inheritance` | spawn convergence does not copy shared captain preferences |
+| `fm-voice-relay` | credential reuse |
+| `fm-calm-pi-extension` | `render_export_dom` retries against a Chrome that never finishes |
+| `fm-remote-secondmate-lifecycle-e2e` | remote retirement does not remove the remote home |
+
+The first three are one defect: the completion-receipt gate landed in `3b1ef065` without updating the
+fixtures that stamp a landed ship task by hand. It is recorded as an incidental finding against this
+task rather than fixed here, because it is this home's, not the migration's. The same class of
+fixture gap in upstream-owned suites WAS fixed here, because those failures only appear once this
+series puts the gate and those fixtures in one tree.
+
+**Live-harness suites, failing on this host rather than in the code:**
+
+| Suite | What it needs |
+| --- | --- |
+| `fm-pi-branch-responsiveness-live-e2e` | a real Pi that draws its TUI (0.85.1 never did here) |
+| `fm-pi-working-composer-live-e2e` | the same, plus a ready composer under Calm |
+| `fm-composer-codex-idle-live-e2e` | a real codex-cli whose idle screen classifies empty |
+
+### What the suites caught in this series
+
+Worth stating plainly, because it is the argument for running them rather than reasoning about the
+diff: three of the repairs above were real product defects this reconciliation introduced, not test
+noise. `fm_merge_outcome_report` lost the receipt helpers its retained body calls; the watcher lost
+`FM_STALE_AUTO_STANDDOWN_THRESHOLD`'s default, so every wedge escalation died at that line under
+`set -u` and a wedged worker would have gone unreported; and one `wedge_timer_check` call site still
+passed five arguments after the signature took a sixth, aborting the rate-limit resume path.
 
 ## The reconciliation series
 
@@ -577,10 +623,10 @@ Every drop below is a supersession, recorded so a later reader can re-open it ra
 6. **`bin/fm-backlog-transition-lib.sh` and `bin/fm-backlog-handoff.sh`** (`backlog-transitions`) -
    superseded whole; upstream carries this home's refactor plus a bounded read on top.
 
-## The integration commits
+## The integration and repair commits
 
-Five commits are not any one entry's own work. They fix seams no single reconciliation could see,
-each one found by running the suites rather than by reading the diff:
+Eleven commits are not any one entry's own work. They fix seams no single reconciliation could see -
+each one found by running the suites, not by reading the diff:
 
 - `fm_merge_outcome_report` now takes upstream's `[authority]` **and** this home's four receipt anchors,
   and both call sites (`bin/fm-pr-merge.sh`, `bin/fm-watch.sh`) pass them. Upstream's signature and this
@@ -605,6 +651,23 @@ each one found by running the suites rather than by reading the diff:
 - `tests/fm-kimi-harness.test.sh`'s spawn cases, guarded on the same python3 `tomllib` host
   requirement its hook cases already use. Upstream's own tree fails this suite on a host with
   python3 below 3.11; the guard is the suite's own existing pattern, applied where it was missing.
+- `fm_merge_outcome_receipt` and its bounded attempt ledger, restored: resolving that library's
+  header to upstream had dropped the private helper definitions its retained body calls, so a proved
+  merge could not record its receipt.
+- `FM_STALE_AUTO_STANDDOWN_THRESHOLD`'s default in the watcher, restored, and the sixth argument at
+  one `wedge_timer_check` call site. Without the first, every wedge escalation died at that line
+  under `set -u` and a wedged worker went unreported; without the second, the rate-limit resume path
+  aborted its poll.
+- The landing-receipt writer's own stderr, folded into `bin/fm-pr-check.sh`'s one actionable line
+  instead of leaking beside it.
+- Landing receipts seeded in the upstream fixtures the receipt gate now binds
+  (`fm-public-followup`, `fm-remote-secondmate-parent-binding`, `fm-teardown-endpoint-safety`), and
+  this home's `fm_merge_outcome_report` calls in `tests/fm-receipt.test.sh` given the reconciled
+  signature's explicit authority argument.
+- `tests/fm-backend-herdr.test.sh`'s native-idle case, asserting this home's retained
+  `herdr-native-idle-unknown` verdict rather than upstream's idle mapping.
+- `tests/fm-spawn-dispatch-profile.test.sh`'s agy case retired to the adapter suite that owns it,
+  and that suite's fake `timeout` taught to drop options and the duration before exec'ing.
 
 ## Local `main`
 
