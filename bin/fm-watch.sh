@@ -920,6 +920,10 @@ EOF
 # below).
 FM_WEDGE_DEMAND_INSPECT_COUNT=${FM_WEDGE_DEMAND_INSPECT_COUNT:-3}
 
+# Threshold for auto-teardown of never-started gated workers after repeated stale
+# escalations with unchanged underlying state (default 3, env-overridable).
+FM_STALE_AUTO_STANDDOWN_THRESHOLD=${FM_STALE_AUTO_STANDDOWN_THRESHOLD:-${FM_STALE_STANDDOWN_THRESHOLD:-${FM_AUTO_STANDDOWN_THRESHOLD:-3}}}
+
 # One bounded re-surface for a pane the watcher is deliberately absorbing, so no
 # absorb can rot invisibly. <age> is how long the current absorb has held and
 # <throttle> is the per-window marker whose mtime records the last re-surface, so
@@ -2849,7 +2853,7 @@ EOF
                 handle_rate_limited_stale "$w" "$task" "$h" "$rl"
               else
                 clear_rate_limit_tracking "$w"
-                wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf" "$task"
+                wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf" "$task" "$h"
               fi
             else
               wedge_timer_check "$w" "$ssf" "non-terminal stale" "$ewf" "$task" "$h"
