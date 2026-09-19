@@ -198,7 +198,9 @@
 # in this home's status log per status_open_decisions (bin/fm-classify-lib.sh), or
 # a still-open captain-held task resolved as above. A key in neither is refused
 # before sending, so a mistyped key cannot deliver an answer while silently
-# orphaning the decision. A failed or unconfirmed send never closes a key; a
+# orphaning the decision. A failed or unconfirmed send never closes a key (a remote
+# delivered-with-pending-confirmation outcome counts as delivered - see the
+# remote paragraph above); a
 # delivered answer whose closing append fails exits nonzero with the exact
 # manual close command, leaving the decision open to re-surface (the safe
 # direction). A send without the flag never closes anything: a routine steer,
@@ -265,6 +267,15 @@ fm_send_id_from_meta() { # <meta-file>
   local base
   base=${1##*/}
   printf '%s' "${base%.meta}"
+}
+
+delivery_rigor_rank() {  # <mode> -> 3 (most outward / rigor) .. 1 (least); 0 = not a task mode
+  case "$1" in
+    no-mistakes) echo 3 ;;
+    direct-PR) echo 2 ;;
+    local-only) echo 1 ;;
+    *) echo 0 ;;
+  esac
 }
 
 # fm_send_clear_after_interrupt: muse RESTORES the interrupted prompt back into
@@ -791,6 +802,44 @@ else
   # The pre-marker answer text, kept for the closing resolved note so the
   # durable ledger records the plain answer without marker or corr bytes.
   RESOLVE_ANSWER_TEXT=$MESSAGE
+
+  # Pre-send delivery-mode posture check on validation triggers:
+  # Refuse triggering no-mistakes validation if the target project's registered
+  # posture in data/projects.md does not permit it (e.g. local-only or direct-PR).
+  case "$MESSAGE" in
+    /no-mistakes|/no-mistakes\ *|\$no-mistakes|\$no-mistakes\ *|no-mistakes|no-mistakes\ *)
+      if [ -n "$TARGET_META" ] && [ -f "$TARGET_META" ]; then
+        target_proj=$(fm_meta_get "$TARGET_META" project)
+        [ -n "$target_proj" ] || target_proj=$(fm_meta_get "$TARGET_META" worktree)
+        if [ -n "$target_proj" ]; then
+          target_proj_name=$(basename "$target_proj")
+          target_id=$(fm_send_id_from_meta "$TARGET_META")
+          [ -n "$target_id" ] || target_id=${RAW_TARGET:-task}
+          # Fail closed on an unreadable posture for the same reason the spawn
+          # path does: a guard that cannot read its refusal threshold must not
+          # silently pass the validation trigger through.
+          pmode_err=$(mktemp "${TMPDIR:-/tmp}/fm-send-pmode.XXXXXX")
+          if standing_line=$("$SCRIPT_DIR/fm-project-mode.sh" --raw "$target_proj_name" 2>"$pmode_err") && [ -n "$standing_line" ]; then
+            rm -f "$pmode_err"
+            standing_mode=${standing_line%% *}
+          else
+            {
+              echo "error: cannot verify the registered delivery posture for $target_proj_name before triggering validation for $target_id; refusing the send until the registry line is fixed:"
+              sed 's/^/  /' "$pmode_err"
+            } >&2
+            rm -f "$pmode_err"
+            exit 1
+          fi
+          if [ "$standing_mode" != no-mistakes-prod-only ]; then
+            if [ "$(delivery_rigor_rank "no-mistakes")" -gt "$(delivery_rigor_rank "$standing_mode")" ]; then
+              echo "error: cannot trigger validation for $target_id: requested mode=no-mistakes while the registered posture for $target_proj_name is $standing_mode - more outward-facing than the project register permits; refusing validation trigger" >&2
+              exit 1
+            fi
+          fi
+        fi
+      fi
+      ;;
+  esac
   if [ "$MARK_FROM_FIRSTMATE" = 1 ] && [ -n "$FIRE_AND_FORGET_ID" ]; then
     fm_message_mark_from_firstmate "$MESSAGE" MESSAGE
     MESSAGE="${FM_FROMFIRST_MARK}delivery=${FIRE_AND_FORGET_ID} ${MESSAGE#"$FM_FROMFIRST_MARK"}"

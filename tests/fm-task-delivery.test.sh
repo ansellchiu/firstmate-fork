@@ -18,6 +18,7 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 SPAWN="$ROOT/bin/fm-spawn.sh"
+SEND="$ROOT/bin/fm-send.sh"
 BRIEF="$ROOT/bin/fm-brief.sh"
 PROMOTE="$ROOT/bin/fm-promote.sh"
 PROJECT_MODE="$ROOT/bin/fm-project-mode.sh"
@@ -67,6 +68,16 @@ run_spawn() {  # <home> <fakebin> <spawn-args...>
     FM_PROJECTS_OVERRIDE="$TMP_ROOT/projects-unused" FM_CONFIG_OVERRIDE="$home/config" \
     FM_SPAWN_NO_GUARD=1 FM_BACKEND=tmux PATH="$fakebin:$PATH" \
     "$SPAWN" "$@" 2>&1
+}
+
+run_send() {  # <home> <fakebin> <send-args...>
+  local home=$1 fakebin=$2
+  shift 2
+  FM_ROOT_OVERRIDE='' FM_HOME="$home" \
+    FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_PROJECTS_OVERRIDE="$TMP_ROOT/projects-unused" FM_CONFIG_OVERRIDE="$home/config" \
+    PATH="$fakebin:$PATH" \
+    "$SEND" "$@" 2>&1
 }
 
 # A ship spawn must stop when its delivery contract was never decided or cannot be
@@ -156,6 +167,56 @@ EOF
   pass "fm-spawn: the brief's recorded mode and the spawn's explicit mode must agree"
 }
 
+# Spawning with a delivery mode that is MORE outward-facing than the project
+# register permits must be REFUSED before anything is created.
+test_spawn_refuses_outward_facing_mode_exceeding_registry() {
+  local rec home proj fakebin out status label registry mode registered n=0
+  while IFS='|' read -r label registry mode registered; do
+    [ -n "$label" ] || continue
+    n=$((n + 1))
+    rec=$(make_home "refuse-outward-$n" "$registry")
+    IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+    write_brief "$home" "delivery-outward-$n" "$mode"
+    out=$(run_spawn "$home" "$fakebin" "delivery-outward-$n" "$proj" claude --mode "$mode" --yolo off)
+    status=$?
+    [ "$status" -ne 0 ] || fail "$label: expected non-zero exit for outward-facing mode"
+    assert_contains "$out" "more outward-facing than the project register permits; refusing spawn" \
+      "$label: did not explain outward-facing refusal"
+    assert_contains "$out" "delivery-outward-$n requested mode=$mode while the registered posture for proj is $registered" \
+      "$label: refusal did not name the task, requested mode, and registered posture"
+    assert_absent "$home/state/delivery-outward-$n.meta" "$label: refused spawn wrote task metadata"
+  done <<'ROWS'
+local-only project spawned no-mistakes|- proj [local-only] - fixture (added 2026-01-01)|no-mistakes|local-only
+local-only project spawned direct-PR|- proj [local-only] - fixture (added 2026-01-01)|direct-PR|local-only
+direct-PR project spawned no-mistakes|- proj [direct-PR] - fixture (added 2026-01-01)|no-mistakes|direct-PR
+ROWS
+  pass "fm-spawn: an outward-facing mode exceeding the registered posture is refused"
+}
+
+# The spawn must refuse - never guess - when the registered posture cannot be
+# read at all, for example on a mistyped +annotation: dispatching on a posture
+# the guard could not read is how a local-only project would silently reach a
+# remote.
+test_spawn_refuses_an_unreadable_registered_posture() {
+  local rec home proj fakebin out status
+  rec=$(make_home "posture-unreadable" "- proj [local-only +parkd] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  write_brief "$home" "delivery-pmfail-1" "no-mistakes"
+  out=$(run_spawn "$home" "$fakebin" "delivery-pmfail-1" "$proj" claude --mode no-mistakes --yolo off)
+  status=$?
+  [ "$status" -ne 0 ] || fail "expected non-zero exit when the registered posture cannot be read"
+  assert_contains "$out" "cannot read the registered delivery posture for proj" \
+    "the refusal did not name the caller and the project"
+  assert_contains "$out" 'unknown flag "+parkd" on project "proj"' \
+    "the refusal did not surface the reader's annotation error"
+  assert_absent "$home/state/delivery-pmfail-1.meta" "a refused spawn wrote task metadata"
+  pass "fm-spawn: an unreadable registered posture refuses the spawn"
+}
+
 # The registry is the captain's standing posture, so dropping below its rigor is
 # allowed but never silent, while matching or exceeding it stays quiet. An
 # unregistered project resolves to the same no-mistakes standing default
@@ -186,11 +247,33 @@ EOF
 no-mistakes project shipped direct-PR|- proj [no-mistakes] - fixture (added 2026-01-01)|direct-PR|notice|no-mistakes
 no-mistakes project shipped local-only|- proj [no-mistakes] - fixture (added 2026-01-01)|local-only|notice|no-mistakes
 no-mistakes project shipped no-mistakes|- proj [no-mistakes] - fixture (added 2026-01-01)|no-mistakes|quiet|no-mistakes
-local-only project shipped no-mistakes|- proj [local-only] - fixture (added 2026-01-01)|no-mistakes|quiet|local-only
+direct-PR project shipped local-only|- proj [direct-PR] - fixture (added 2026-01-01)|local-only|notice|direct-PR
 conditional policy shipped direct-PR|- proj [no-mistakes-prod-only] - fixture (added 2026-01-01)|direct-PR|quiet|no-mistakes-prod-only
+conditional policy shipped no-mistakes|- proj [no-mistakes-prod-only] - fixture (added 2026-01-01)|no-mistakes|quiet|no-mistakes-prod-only
 unregistered project resolves to the no-mistakes standing default|- other [no-mistakes] - fixture (added 2026-01-01)|direct-PR|notice|no-mistakes
 ROWS
   pass "fm-spawn: a rigor downgrade against the registered posture is announced, never blocked"
+}
+
+# An absent registry or unregistered project defaults to no-mistakes standing
+# posture, does not crash, and allows matching mode while warning on less rigor.
+test_absent_registry_and_unregistered_project_delivery() {
+  local rec home proj fakebin out
+  rec=$(make_home absent-reg)
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  # Absent registry + no-mistakes: no crash, quiet
+  write_brief "$home" delivery-absent-1 no-mistakes
+  out=$(run_spawn "$home" "$fakebin" delivery-absent-1 "$proj" claude --mode no-mistakes --yolo off)
+  assert_not_contains "$out" "less rigor" "absent registry erroneously warned on no-mistakes"
+  assert_not_contains "$out" "more outward-facing" "absent registry erroneously refused no-mistakes"
+
+  # Absent registry + local-only: warns less rigor against no-mistakes standing default
+  write_brief "$home" delivery-absent-2 local-only
+  out=$(run_spawn "$home" "$fakebin" delivery-absent-2 "$proj" claude --mode local-only --yolo off)
+  assert_contains "$out" "less rigor than the captain's standing posture" "absent registry did not warn on local-only"
+  pass "fm-spawn: absent registry defaults safely to no-mistakes standing posture"
 }
 
 # A scout's deliverable is a report, so it records no delivery posture at all;
@@ -269,6 +352,10 @@ test_promote_requires_and_records_the_delivery_contract() {
   assert_grep 'yolo=on' "$meta" "promotion did not record the decided merge posture"
   assert_contains "$out" "ship instructions for mode=direct-PR" "promotion hint did not carry the decided mode"
   [ "$(grep -c '^mode=' "$meta")" = 1 ] || fail "promotion left more than one mode= line in the task record"
+  assert_grep 'fm-findings.sh record promote-d1' "$home/data/promote-d1/ship-instructions.md" \
+    "promoted ship instructions did not carry the incidental-findings record command"
+  assert_grep 'findings.md' "$home/data/promote-d1/ship-instructions.md" \
+    "promoted ship instructions did not name the durable findings file"
   pass "fm-promote: promotion requires the delivery contract and records it exactly once"
 }
 
@@ -429,6 +516,100 @@ EOF
   err=$(FM_HOME="$home" "$PROJECT_MODE" typoproj 2>&1 >/dev/null)
   assert_contains "$err" "unknown mode" "a typo'd registry mode stopped warning"
   pass "fm-project-mode: the conditional policy is accepted, mapped for mechanical callers, and readable raw"
+}
+
+# The single-project read must fail closed on an unrecognized flag: its callers
+# refuse on a non-zero exit, so the read may never answer a mistyped annotation
+# with a guessed posture line.
+test_project_mode_refuses_a_mistyped_flag_annotation() {
+  local home out err status
+  home="$TMP_ROOT/project-mode-badflag/home"
+  mkdir -p "$home/data"
+  printf -- '- proj [local-only +parkd] - fixture (added 2026-01-01)\n' > "$home/data/projects.md"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" proj 2>/dev/null)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a mistyped +annotation exited zero on the single-project read"
+  [ -z "$out" ] || fail "a failed posture read printed a mode to guess from: $out"
+  err=$(FM_HOME="$home" "$PROJECT_MODE" proj 2>&1 >/dev/null)
+  assert_contains "$err" 'unknown flag "+parkd" on project "proj"' \
+    "the reader error must name the project and the bad token"
+  assert_contains "$err" "$home/data/projects.md" \
+    "the reader error must name the registry file"
+  pass "fm-project-mode: the single-project read fails closed on a mistyped +annotation"
+}
+
+# Pre-send delivery-mode posture check on validation triggers:
+# Refuse triggering no-mistakes validation if the target project's registered
+# posture in data/projects.md does not permit it (e.g. local-only or direct-PR).
+test_send_validation_trigger_refuses_outward_facing_posture() {
+  local rec home proj fakebin out status
+
+  # 1. local-only project: /no-mistakes trigger must be refused
+  rec=$(make_home val_local "- proj [local-only] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  fm_write_meta "$home/state/val-t1.meta" "window=sess:fm-val-t1" "kind=ship" "harness=claude" "project=$proj"
+  out=$(run_send "$home" "$fakebin" val-t1 "/no-mistakes")
+  status=$?
+  [ "$status" -ne 0 ] || fail "triggering validation on local-only project should fail"
+  assert_contains "$out" "more outward-facing than the project register permits; refusing validation trigger" \
+    "refusal did not explain outward-facing restriction"
+  assert_contains "$out" "requested mode=no-mistakes while the registered posture for proj is local-only" \
+    "refusal did not name task, requested mode, and registered posture"
+
+  # 2. direct-PR project: $no-mistakes trigger on codex must be refused
+  rec=$(make_home val_direct "- proj [direct-PR] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  fm_write_meta "$home/state/val-t2.meta" "window=sess:fm-val-t2" "kind=ship" "harness=codex" "project=$proj"
+  out=$(run_send "$home" "$fakebin" val-t2 "\$no-mistakes")
+  status=$?
+  [ "$status" -ne 0 ] || fail "triggering validation on direct-PR project should fail"
+  assert_contains "$out" "requested mode=no-mistakes while the registered posture for proj is direct-PR" \
+    "refusal did not name task, requested mode, and registered posture"
+
+  # 3. no-mistakes project: validation trigger clears posture check (fails at refusing fake tmux)
+  rec=$(make_home val_nm "- proj [no-mistakes] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  fm_write_meta "$home/state/val-t3.meta" "window=sess:fm-val-t3" "kind=ship" "harness=claude" "project=$proj"
+  out=$(run_send "$home" "$fakebin" val-t3 "/no-mistakes")
+  assert_not_contains "$out" "more outward-facing" "no-mistakes project was refused for validation"
+
+  # 4. no-mistakes-prod-only project: validation trigger clears posture check
+  rec=$(make_home val_prod "- proj [no-mistakes-prod-only] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  fm_write_meta "$home/state/val-t4.meta" "window=sess:fm-val-t4" "kind=ship" "harness=claude" "project=$proj"
+  out=$(run_send "$home" "$fakebin" val-t4 "/no-mistakes")
+  assert_not_contains "$out" "more outward-facing" "no-mistakes-prod-only project was refused for validation"
+
+  pass "fm-send: outward-facing validation triggers are refused against local-only and direct-PR registers"
+}
+
+# The pre-send posture check must refuse the whole send when the target
+# project's posture cannot be read, exactly as it refuses an outward-facing
+# posture: a validation trigger on a local-only project is the harm.
+test_send_validation_trigger_refuses_an_unreadable_posture() {
+  local rec home proj fakebin out status
+  rec=$(make_home "send-posture-unreadable" "- proj [local-only +parkd] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  fm_write_meta "$home/state/val-t6.meta" "window=sess:fm-val-t6" "kind=ship" "harness=claude" "project=$proj"
+  out=$(run_send "$home" "$fakebin" val-t6 "/no-mistakes")
+  status=$?
+  [ "$status" -ne 0 ] || fail "the validation trigger was sent despite an unreadable posture"
+  assert_contains "$out" "cannot verify the registered delivery posture for proj" \
+    "the refusal did not name the caller, project, and remedy"
+  assert_contains "$out" 'unknown flag "+parkd" on project "proj"' \
+    "the refusal did not surface the reader's annotation error"
+  pass "fm-send: an unreadable registered posture refuses the validation trigger"
 }
 
 # Spawn and promotion refuse leftover Task-subsection placeholders through the
@@ -885,11 +1066,17 @@ test_spawn_refreshes_legacy_worker_roles
 test_ship_spawn_requires_a_valid_delivery_contract
 test_scout_and_secondmate_refuse_delivery_flags
 test_spawn_refuses_a_brief_mode_mismatch
+test_spawn_refuses_outward_facing_mode_exceeding_registry
 test_spawn_notices_a_rigor_downgrade_against_the_registry
+test_spawn_refuses_an_unreadable_registered_posture
+test_absent_registry_and_unregistered_project_delivery
+test_send_validation_trigger_refuses_outward_facing_posture
+test_send_validation_trigger_refuses_an_unreadable_posture
 test_scout_records_no_delivery_posture
 test_promote_requires_and_records_the_delivery_contract
 test_promote_refuses_a_symlinked_task_record
 test_promotion_delivers_the_real_definition_of_done
 test_project_mode_maps_the_conditional_policy
+test_project_mode_refuses_a_mistyped_flag_annotation
 test_spawn_and_promote_require_filled_task_subsections
 echo "# all fm-task-delivery tests passed"
