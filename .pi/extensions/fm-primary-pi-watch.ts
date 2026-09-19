@@ -52,17 +52,25 @@ import {
   FIRSTMATE_CALM_PRESENTATION_EVENT,
 } from "./lib/fm-calm-visibility.ts";
 import { encodeFirstmateOperationalInput } from "./lib/fm-operational-input.ts";
+import {
+  type LockOwnership,
+  lockOwnership as sessionLockOwnership,
+  pidAlive,
+} from "./lib/fm-primary-session-lock.ts";
 
 type ArmResult = {
   ok: boolean;
   message: string;
 };
 
-type LockOwnership = "owned" | "missing" | "other";
-
 type CloseClassification = {
   kind: "actionable" | "failure";
   message: string;
+};
+
+type ContinuityRestoration = {
+  failure: string;
+  recovery?: { generation: string; watcherPid: string };
 };
 
 type PendingActionableClose = {
@@ -71,6 +79,7 @@ type PendingActionableClose = {
   message: string;
   predecessorArmPid: string;
   delivered?: true;
+  restoration?: ContinuityRestoration;
 };
 
 type ReplacementActionableHandoff = {
@@ -106,15 +115,16 @@ type SessionGeneration = {
   seq: number;
   pendingActionables: PendingActionableClose[];
   cleanupFailure: string;
+  // The continuity restoration this generation has in flight. A generation
+  // owns one arm child, so it restores continuity once at a time: an
+  // actionable close that lands mid-restoration shares that verdict instead
+  // of racing a second loop for the same successor.
+  continuityRestoration: Promise<ContinuityRestoration> | null;
   // Main follow-ups Pi has accepted but not yet consumed, by pending token.
   // Never cleared at shutdown: a delivery continuation that runs after the
   // replacement began reads it to tell a main-queued wake (replayed) from a
   // branch-handled one (finished).
   unconsumedWakes: Map<string, UnconsumedWake>;
-  // A verified successor's failure close that arrived while the pipeline was
-  // still delivering the wake it was started for; its bounded retry runs once
-  // that delivery settles instead of being skipped by the single-flight guard.
-  deferredClose: { message: string; predecessorArmPid: string } | null;
 };
 
 function refreshWatchToolShell(
@@ -197,9 +207,19 @@ function replacementCoordinatorFor(handoff: string): ReplacementCoordinator {
 const replacementCoordinator = replacementCoordinatorFor(actionableHandoff);
 const armReadiness = new WeakMap<ChildProcess, Promise<boolean>>();
 const armClose = new WeakMap<ChildProcess, Promise<void>>();
-// Children the extension itself asked to exit; their close is not a failure
-// of the successor and never earns a deferred retry.
+// Children a restoration attempt started and has not released yet; their close
+// is the restoration's own to answer, and the loop's next attempt is the retry.
+const armRestoring = new WeakSet<ChildProcess>();
+// Children the extension itself asked to exit and is still waiting on; their
+// close is not a failure of the successor and earns no retry. A child that
+// outlives that wait leaves the set: the restoration gave up on it, so its
+// eventual close is an ordinary unsupervised close again.
 const armRetired = new WeakSet<ChildProcess>();
+// Actionables this session raised itself: their close handler owns the
+// restoration and attaches its result, so delivery waits for it. An inherited
+// record leaves the set as it is adopted: no close handler here owns it, and
+// it carries whatever restoration crossed with it.
+const awaitingRestoration = new WeakSet<PendingActionableClose>();
 const armRecovery = new WeakMap<ChildProcess, { generation: string; watcherPid: string }>();
 const armPendingActionable = new WeakMap<ChildProcess, PendingActionableClose>();
 
@@ -209,36 +229,10 @@ function positiveInteger(name: string, fallback: number): number {
   return Math.floor(value);
 }
 
-function parentPid(pid: string): string {
-  const result = spawnSync("ps", ["-o", "ppid=", "-p", pid], { encoding: "utf8" });
-  if (result.status !== 0) return "";
-  return result.stdout.trim();
-}
-
-function pidAlive(pid: string): boolean {
-  try {
-    process.kill(Number(pid), 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
+// ./lib/fm-primary-session-lock.ts owns what lock ownership means; this
+// binding only supplies this extension's state directory.
 function lockOwnership(): LockOwnership {
-  let lockPid = "";
-  try {
-    lockPid = readFileSync(`${state}/.lock`, "utf8").trim();
-  } catch {
-    return "missing";
-  }
-  if (!/^[0-9]+$/.test(lockPid) || lockPid === "1") return "other";
-  let pid = String(process.pid);
-  for (let i = 0; i < 8; i += 1) {
-    if (pid === lockPid) return "owned";
-    pid = parentPid(pid);
-    if (!pid || pid === "1") break;
-  }
-  return pidAlive(lockPid) ? "other" : "missing";
+  return sessionLockOwnership(state);
 }
 
 function markLoaded(): void {
@@ -290,6 +284,24 @@ function createPendingActionable(message: string, predecessorArmPid: string): Pe
   };
 }
 
+function validRestoration(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== "object" || value === null) return false;
+  return typeof (value as { failure?: unknown }).failure === "string";
+}
+
+// A restoration result describes the session that recorded it: its recovery
+// names an arm child whose pid is dead by the time another generation reads it,
+// and its failure text describes a continuity outage that generation's own arm
+// may not share. Only the wake itself crosses a handoff; the inheriting
+// generation's own arm speaks for continuity, and its delivery never waits on
+// a restoration the retiring generation still owns.
+function inheritPendingActionable(pending: PendingActionableClose): PendingActionableClose {
+  delete pending.restoration;
+  awaitingRestoration.delete(pending);
+  return pending;
+}
+
 function validatePendingActionable(value: unknown): PendingActionableClose {
   if (
     typeof value !== "object" || value === null ||
@@ -301,7 +313,8 @@ function validatePendingActionable(value: unknown): PendingActionableClose {
     typeof (value as { predecessorArmPid?: unknown }).predecessorArmPid !== "string" ||
     !/^[0-9]*$/.test((value as { predecessorArmPid: string }).predecessorArmPid) ||
     ((value as { delivered?: unknown }).delivered !== undefined &&
-      (value as { delivered?: unknown }).delivered !== true)
+      (value as { delivered?: unknown }).delivered !== true) ||
+    !validRestoration((value as { restoration?: unknown }).restoration)
   ) {
     throw new Error(`invalid Pi replacement actionable handoff at ${actionableHandoff}`);
   }
@@ -432,8 +445,8 @@ function createGeneration(): SessionGeneration {
     seq: 0,
     pendingActionables: [],
     cleanupFailure: "",
+    continuityRestoration: null,
     unconsumedWakes: new Map(),
-    deferredClose: null,
   };
 }
 
@@ -662,8 +675,12 @@ export default function (pi: ExtensionAPI) {
     if (recovery) {
       const confirmed = confirmHandlingDeliveryWithRetry(owner, recovery);
       if (!confirmed.ok) {
-        const watcherPid = recovery.watcherPid;
-        if (!pidAlive(watcherPid)) {
+        // Whatever confirmHandlingDeliveryWithRetry last tried: a record that
+        // is not the current child's own names some earlier successor, and a
+        // wake delivered long after its close must not retire the healthy arm
+        // that replaced it.
+        const attempted = owner.child ? armRecovery.get(owner.child) : undefined;
+        if (attempted && !pidAlive(attempted.watcherPid)) {
           await retireArm(owner.child);
         }
         return await sendWake(owner, `${message}\n\n${confirmed.detail}`, pending);
@@ -759,6 +776,11 @@ export default function (pi: ExtensionAPI) {
           (item) => !item.delivered && !owner.unconsumedWakes.has(item.token),
         );
         if (!pending) break;
+        // A watcher can print its actionable row before its arm emits close.
+        // Let the close handler establish continuity and attach the result
+        // before delivery starts. A replacement handoff carries whatever
+        // restoration its own session recorded and proceeds immediately.
+        if (!pending.restoration && awaitingRestoration.has(pending)) break;
         const existingClaim = replacementCoordinator.deliveries.get(pending.token);
         if (existingClaim && existingClaim.owner !== owner) {
           const settlement = await existingClaim.settlement;
@@ -783,10 +805,7 @@ export default function (pi: ExtensionAPI) {
           }
         };
         try {
-          // A new restoration supersedes whatever became of the previous
-          // successor; only a failure during this delivery is retried after it.
-          owner.deferredClose = null;
-          const restoration = await restoreAfterActionableClose(owner, pending.predecessorArmPid);
+          const restoration = pending.restoration ?? { failure: "" };
           if (!generationIsLive(owner)) {
             settleClaim("failed");
             releaseClaim();
@@ -833,25 +852,17 @@ export default function (pi: ExtensionAPI) {
         owner.restoring = false;
         if (owner.pendingActionables.some((pending) => pending.delivered)) schedulePendingCleanup(owner);
         // No bare arm is launched here. A generation without a child at this
-        // point has either delivered a typed restoration failure after its
-        // bounded retries, which hands repair to main through fm_watch_arm_pi
-        // (one more silent launch past the bound could hold a hung child that
-        // the repair call would then report as "unchanged"), or lost a
-        // verified successor during the delivery, which takes the ordinary
-        // bounded, lock-checked retry it would have taken had the pipeline
-        // been idle.
-        const deferred = owner.deferredClose;
-        owner.deferredClose = null;
-        if (deferred && !owner.child && !owner.retryTimer) {
-          scheduleRetry(owner, deferred.message, deferred.predecessorArmPid);
-        }
+        // point has delivered a typed restoration failure after its bounded
+        // retries, which hands repair to main through fm_watch_arm_pi (one
+        // more silent launch past the bound could hold a hung child that the
+        // repair call would then report as "unchanged").
       }
     }
   }
 
   const receiveReplacementActionable: ReplacementActionableReceiver = (pending) => {
     if (!generationIsLive(generation)) return;
-    enqueuePendingActionable(generation, pending);
+    enqueuePendingActionable(generation, inheritPendingActionable(pending));
     void processPendingActionables(generation);
   };
 
@@ -884,9 +895,15 @@ export default function (pi: ExtensionAPI) {
     armRetired.add(armChild);
     armChild.kill("SIGTERM");
     const closed = armClose.get(armChild);
-    if (!closed) return false;
+    if (!closed) {
+      armRetired.delete(armChild);
+      return false;
+    }
     return new Promise((resolveRetired) => {
-      const timer = setTimeout(() => resolveRetired(false), armRetireTimeoutMs);
+      const timer = setTimeout(() => {
+        armRetired.delete(armChild);
+        resolveRetired(false);
+      }, armRetireTimeoutMs);
       timer.unref();
       void closed.then(() => {
         clearTimeout(timer);
@@ -895,35 +912,53 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  async function restoreAfterActionableClose(owner: SessionGeneration, predecessorArmPid: string): Promise<{
-    failure: string;
-    recovery?: { generation: string; watcherPid: string };
-  }> {
+  function restoreAfterActionableClose(owner: SessionGeneration, predecessorArmPid: string): Promise<ContinuityRestoration> {
+    const inFlight = owner.continuityRestoration;
+    if (inFlight) return inFlight;
+    const started = restoreContinuity(owner, predecessorArmPid);
+    owner.continuityRestoration = started;
+    const release = (): void => {
+      if (owner.continuityRestoration === started) owner.continuityRestoration = null;
+    };
+    void started.then(release, release);
+    return started;
+  }
+
+  async function restoreContinuity(owner: SessionGeneration, predecessorArmPid: string): Promise<ContinuityRestoration> {
     let failure = "";
-    for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
-      if (!generationIsLive(owner)) return { failure: "" };
-      const replacement = startArm(owner, predecessorArmPid);
-      const successorChild = owner.child;
-      if (replacement.ok && successorChild && await waitForReadiness(successorChild)) {
-        return { failure: "", recovery: armRecovery.get(successorChild) };
-      }
-      if (replacement.ok) {
-        failure = "watcher: FAILED - Pi extension could not verify a ready successor watcher";
-        if (!(await retireArm(successorChild))) {
-          return {
-            failure: `${failure}\nwatcher: FAILED - Pi extension could not restore watcher continuity because the unready successor arm did not exit within ${armRetireTimeoutMs}ms`,
-          };
+    const owned: ChildProcess[] = [];
+    try {
+      for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
+        if (!generationIsLive(owner)) return { failure: "" };
+        const replacement = startArm(owner, predecessorArmPid);
+        const successorChild = owner.child;
+        if (successorChild && !armRestoring.has(successorChild)) {
+          armRestoring.add(successorChild);
+          owned.push(successorChild);
         }
-      } else {
-        failure = /(?:read-only|no live session)/.test(replacement.message)
-          ? `watcher: FAILED - Pi extension cannot restore continuity because this session no longer owns the lock\n${replacement.message}`
-          : `watcher: FAILED - Pi extension could not start the successor watcher cycle\n${replacement.message}`;
-        if (/(?:read-only|no live session)/.test(replacement.message)) break;
+        if (replacement.ok && successorChild && await waitForReadiness(successorChild)) {
+          return { failure: "", recovery: armRecovery.get(successorChild) };
+        }
+        if (replacement.ok) {
+          failure = "watcher: FAILED - Pi extension could not verify a ready successor watcher";
+          if (!(await retireArm(successorChild))) {
+            return {
+              failure: `${failure}\nwatcher: FAILED - Pi extension could not restore watcher continuity because the unready successor arm did not exit within ${armRetireTimeoutMs}ms`,
+            };
+          }
+        } else {
+          failure = /(?:read-only|no live session)/.test(replacement.message)
+            ? `watcher: FAILED - Pi extension cannot restore continuity because this session no longer owns the lock\n${replacement.message}`
+            : `watcher: FAILED - Pi extension could not start the successor watcher cycle\n${replacement.message}`;
+          if (/(?:read-only|no live session)/.test(replacement.message)) break;
+        }
+        if (attempt === retryLimit) break;
+        await waitForRetry(attempt + 1);
       }
-      if (attempt === retryLimit) break;
-      await waitForRetry(attempt + 1);
+      return { failure: `${failure}\nwatcher: FAILED - Pi extension could not restore watcher continuity after ${retryLimit} retries` };
+    } finally {
+      for (const child of owned) armRestoring.delete(child);
     }
-    return { failure: `${failure}\nwatcher: FAILED - Pi extension could not restore watcher continuity after ${retryLimit} retries` };
   }
 
   function scheduleRetry(owner: SessionGeneration, message: string, predecessorArmPid: string): void {
@@ -992,7 +1027,6 @@ export default function (pi: ExtensionAPI) {
     let stderr = "";
     let settled = false;
     let readinessSettled = false;
-    let verified = false;
     let resolveReadiness: (ready: boolean) => void = () => {};
     let resolveClosed: () => void = () => {};
     const readiness = new Promise<boolean>((resolveReady) => {
@@ -1006,7 +1040,6 @@ export default function (pi: ExtensionAPI) {
     const settleReadiness = (ready: boolean): void => {
       if (readinessSettled) return;
       readinessSettled = true;
-      verified = ready;
       resolveReadiness(ready);
     };
     const observeEstablishedArm = (): void => {
@@ -1020,6 +1053,7 @@ export default function (pi: ExtensionAPI) {
       if (reason && !armPendingActionable.has(armChild)) {
         const pending = createPendingActionable(reason, String(armChild.pid ?? ""));
         armPendingActionable.set(armChild, pending);
+        awaitingRestoration.add(pending);
         enqueuePendingActionable(owner, pending);
       }
     };
@@ -1034,7 +1068,7 @@ export default function (pi: ExtensionAPI) {
       stderr += chunk.toString();
       observeEstablishedArm();
     });
-    armChild.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+    armChild.on("close", async (code: number | null, signal: NodeJS.Signals | null) => {
       if (settled) return;
       settled = true;
       resolveClosed();
@@ -1044,23 +1078,35 @@ export default function (pi: ExtensionAPI) {
       const predecessor = String(armChild.pid ?? "");
       if (classification.kind === "actionable") {
         const pending = armPendingActionable.get(armChild) ?? createPendingActionable(classification.message, predecessor);
+        // Restore continuity before this close can enter notification delivery.
+        // The delivery path only consumes the result; it must never own the
+        // successor lifecycle while a branch turn is settling.
+        // A retired generation restores nothing and speaks for nothing: the
+        // record may already belong to the replacement that inherited it.
+        const restoring = !pending.restoration && generationIsLive(owner);
+        if (restoring) awaitingRestoration.add(pending);
         enqueuePendingActionable(owner, pending);
+        if (restoring) {
+          try {
+            const restored = await restoreAfterActionableClose(owner, predecessor);
+            if (generationIsLive(owner)) pending.restoration = restored;
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
+            if (generationIsLive(owner)) {
+              pending.restoration = {
+                failure: `watcher: FAILED - Pi extension could not restore watcher continuity after an actionable close\n${detail}`,
+              };
+            }
+          } finally {
+            awaitingRestoration.delete(pending);
+          }
+        }
         if (!generationIsLive(owner)) return;
         owner.retryFailures = 0;
         void processPendingActionables(owner);
         return;
       }
-      if (!generationIsLive(owner)) return;
-      if (owner.restoring) {
-        // The pipeline is still delivering the wake this successor was
-        // started for. A verified successor that failed on its own keeps its
-        // bounded retry for the end of that delivery; an unready child closing
-        // here was retired by the restoration itself.
-        if (verified && !armRetired.has(armChild)) {
-          owner.deferredClose = { message: classification.message, predecessorArmPid: predecessor };
-        }
-        return;
-      }
+      if (!generationIsLive(owner) || armRetired.has(armChild) || armRestoring.has(armChild)) return;
       scheduleRetry(owner, classification.message, predecessor);
     });
     armChild.on("error", (error: Error) => {
@@ -1069,8 +1115,11 @@ export default function (pi: ExtensionAPI) {
       resolveClosed();
       settleReadiness(false);
       releaseChild();
-      if (!generationIsLive(owner)) return;
-      if (owner.restoring) return;
+      // No close will follow this arm, so nothing will attach a restoration
+      // result to an actionable it already printed.
+      const printed = armPendingActionable.get(armChild);
+      if (printed) awaitingRestoration.delete(printed);
+      if (!generationIsLive(owner) || armRetired.has(armChild) || armRestoring.has(armChild)) return;
       scheduleRetry(owner, `watcher: FAILED - Pi extension arm child ${id} failed: ${error.message}`, String(armChild.pid ?? ""));
     });
     return {
@@ -1093,7 +1142,7 @@ export default function (pi: ExtensionAPI) {
     }
     const inProcessPending = replacementCoordinator.pending.splice(0);
     for (const actionable of [...pending, ...inProcessPending]) {
-      enqueuePendingActionable(owner, actionable);
+      enqueuePendingActionable(owner, inheritPendingActionable(actionable));
     }
     if (owner.pendingActionables.length > 0) {
       if (loadFailure) surfaceFailure(owner, loadFailure);
@@ -1101,6 +1150,9 @@ export default function (pi: ExtensionAPI) {
       if (!armResult.ok) {
         surfaceFailure(owner, `watcher: FAILED - Pi extension could not arm before replacement wake delivery\n${armResult.message}`);
       }
+      // This arm result, not the retired session's, is what continuity means
+      // here: an inherited wake carries no restoration and runs no fresh
+      // handling confirmation before delivery.
       void processPendingActionables(owner);
       return armResult;
     }

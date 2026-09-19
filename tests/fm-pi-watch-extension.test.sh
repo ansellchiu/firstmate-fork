@@ -37,6 +37,7 @@ install_pi_watch_extension_fixture() {
   cp "$ROOT/.pi/extensions/lib/fm-async-exec.ts" "$repo/.pi/extensions/lib/fm-async-exec.ts"
   cp "$ROOT/.pi/extensions/lib/fm-calm-visibility.ts" "$repo/.pi/extensions/lib/fm-calm-visibility.ts"
   cp "$ROOT/.pi/extensions/lib/fm-operational-input.ts" "$repo/.pi/extensions/lib/fm-operational-input.ts"
+  cp "$ROOT/.pi/extensions/lib/fm-primary-session-lock.ts" "$repo/.pi/extensions/lib/fm-primary-session-lock.ts"
   mkdir -p "$repo/bin"
   cp "$ROOT/bin/fm-operational-input.sh" "$repo/bin/fm-operational-input.sh"
   chmod +x "$repo/bin/fm-operational-input.sh"
@@ -2366,6 +2367,15 @@ function liveArms() {
   return armRows().filter((arm) => arm.pid && arm.marker && existsSync(arm.marker) && pidAlive(arm.pid));
 }
 
+// bin/fm-watch-arm.sh --handling-delivered rows, as the fixture records them.
+function confirmations() {
+  if (!existsSync(process.env.FM_ARM_LOG)) return [];
+  return readFileSync(process.env.FM_ARM_LOG, "utf8")
+    .trim()
+    .split(/\n/)
+    .filter((row) => row.startsWith("confirmed "));
+}
+
 async function waitFor(pred, label, attempts = 500) {
   for (let i = 0; i < attempts; i += 1) {
     if (pred()) return;
@@ -2397,6 +2407,8 @@ await waitFor(() => liveArms().length === 0, "mid-delivery successor actionable 
 
 await previous.handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
 await waitFor(() => liveArms().length === 0, "retired old-session successor");
+// Every watcher the old session confirmed handling with is dead from here on.
+const confirmedBeforeReplacement = confirmations();
 
 const replacement = makePi(false);
 const replacementMod = await import(`${pathToFileURL(process.env.PLUGIN).href}?replacement=durable-handoff`);
@@ -2427,6 +2439,10 @@ if (replacement.prompts.some((message) => message.includes("signal: replacement-
 if (replacement.prompts.filter((message) => message.includes("signal: replacement-successor actionable outcome")).length !== 1) {
   throw new Error(`replacement session did not receive exactly one carried successor outcome: ${replacement.prompts.join(" | ")}`);
 }
+const carriedConfirmations = confirmations().slice(confirmedBeforeReplacement.length);
+if (carriedConfirmations.length !== 0) {
+  throw new Error(`a carried handoff confirmed handling against a previous session's watcher: ${carriedConfirmations.join(" | ")}`);
+}
 if (!replacement.prompts.some((message) => message.includes("could not clear a delivered replacement-session actionable wake"))) {
   throw new Error(`handoff cleanup failure was not surfaced: ${replacement.prompts.join(" | ")}`);
 }
@@ -2455,17 +2471,26 @@ EOF
 }
 
 test_pi_streaming_followup_is_replayed_after_replacement() {
-  local repo home plugin trigger out status
+  local repo home plugin log trigger out status
   repo="$TMP_ROOT/pi-streaming-followup-replacement-root"
   home="$TMP_ROOT/pi-streaming-followup-replacement-home"
+  log="$TMP_ROOT/pi-streaming-followup-replacement.log"
   trigger="$TMP_ROOT/pi-streaming-followup-replacement.trigger"
   mkdir -p "$repo/bin" "$home/state" "$home/config"
   install_pi_watch_extension_fixture "$repo"
   plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  # --handling-delivered keeps bin/fm-watch-arm.sh's own precondition: a
+  # confirmation naming a watcher pid that is not alive is rejected.
   cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
 #!/usr/bin/env bash
+if [ "${1:-}" = --handling-delivered ]; then
+  printf 'confirmed generation=%s watcher=%s\n' "$2" "$4" >> "${FM_ARM_LOG:?}"
+  kill -0 "$4" 2>/dev/null || exit 1
+  exit 0
+fi
 trap 'exit 0' TERM INT
-printf 'watcher: started pid=%s\n' "$$"
+printf 'arm pid=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+printf 'watcher: started pid=%s recovery-generation=streaming-fixture\n' "$$"
 while :; do
   if [ -e "$FM_TRIGGER_FILE" ]; then
     rm -f "$FM_TRIGGER_FILE"
@@ -2476,9 +2501,26 @@ while :; do
 done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_TRIGGER_FILE="$trigger" node --input-type=module 2>&1 <<'EOF'
-import { writeFileSync } from "node:fs";
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_TRIGGER_FILE="$trigger" node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+
+function armLogRows(prefix) {
+  if (!existsSync(process.env.FM_ARM_LOG)) return [];
+  return readFileSync(process.env.FM_ARM_LOG, "utf8")
+    .trim()
+    .split(/\n/)
+    .filter((row) => row.startsWith(prefix));
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function makePi() {
   const handlers = new Map();
@@ -2531,6 +2573,21 @@ await waitFor(
 );
 if (replacement.prompts.filter((message) => message.includes("signal: streaming queued actionable outcome")).length !== 1) {
   throw new Error(`replacement did not replay the unconsumed follow-up exactly once: ${replacement.prompts.join(" | ")}`);
+}
+// The recovery record the old session attached names its own successor, which
+// died with it: the replay must confirm handling with nobody, and must not
+// mistake the rejection for a lost watcher and retire its fresh arm.
+if (replacement.prompts.some((message) => message.includes("handling delivery confirmation"))) {
+  throw new Error(`the replay confirmed handling against a dead watcher: ${replacement.prompts.join(" | ")}`);
+}
+if (armLogRows("confirmed ").length !== 1) {
+  throw new Error(`expected only the old session's in-session confirmation: ${armLogRows("confirmed ").join(" | ")}`);
+}
+await waitFor(() => armLogRows("arm pid=").length === 3, "replacement arm alongside the replay");
+const replacementArm = armLogRows("arm pid=").at(-1).slice("arm pid=".length);
+await new Promise((resolve) => setTimeout(resolve, 80));
+if (!pidAlive(replacementArm)) {
+  throw new Error(`the replay retired the replacement's freshly armed watcher: ${armLogRows("arm pid=").join(" | ")}`);
 }
 await replacement.handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
 
@@ -2676,11 +2733,11 @@ EOF
 }
 
 # A verified successor can die while the wake it was started for is still
-# being delivered (a branch turn can take minutes). Its failure close arrives
-# while the pipeline is busy, so the ordinary retry path must be deferred to
-# the end of that delivery rather than skipped, or the live generation is left
-# with no watcher and no retry.
-test_pi_successor_failure_during_delivery_is_retried_after_delivery() {
+# being delivered (a branch turn can take minutes). Its failure close must be
+# retried at once rather than waiting for that delivery to settle, or the live
+# generation sits without a watcher for the whole turn; the settlement that
+# follows must then not launch a second, competing arm.
+test_pi_successor_failure_during_delivery_is_retried_without_waiting() {
   local repo home plugin log stop out status
   repo="$TMP_ROOT/pi-successor-dies-mid-delivery-root"
   home="$TMP_ROOT/pi-successor-dies-mid-delivery-home"
@@ -2755,22 +2812,239 @@ mod.default(pi);
 await tool.execute("initial-arm", {}, undefined, undefined, {});
 await waitFor(() => branchAccepted, "branch accepted the wake behind a verified successor");
 if (arms() !== 2) throw new Error(`expected the verified successor before delivery, got ${arms()} arms`);
-// The successor dies while the branch still holds the delivery.
+// The successor dies while the branch still holds the delivery. Continuity
+// must not wait for branch settlement.
 await new Promise((resolve) => setTimeout(resolve, 300));
-if (arms() !== 2) throw new Error(`a retry launched while the delivery was still in flight: ${arms()} arms`);
+if (arms() !== 3) throw new Error(`successor replacement waited behind delivery settlement: ${arms()} arms`);
+// Settlement must not launch a competing arm: the successor was already replaced.
 releaseBranch();
-await waitFor(() => arms() === 3, "a retry watcher after the delivery settled");
 await new Promise((resolve) => setTimeout(resolve, 150));
-if (arms() !== 3) throw new Error(`the deferred retry was not single-flight: ${arms()} arms`);
+if (arms() !== 3) throw new Error(`delivery settlement was not single-flight: ${arms()} arms`);
 if (prompts.length !== 0) throw new Error(`a bounded retry surfaced a failure prompt: ${prompts.join(" | ")}`);
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 process.exit(0);
 EOF
 )
   status=$?
-  expect_code 0 "$status" "Pi must retry a verified successor that failed during wake delivery"
+  expect_code 0 "$status" "Pi must retry a successor that failed during delivery without waiting for it"
   [ -z "$out" ] || fail "Pi successor-dies-mid-delivery test printed output: $out"
-  pass "Pi retries a verified successor that failed during wake delivery once that delivery settles"
+  pass "Pi retries a verified successor that failed during wake delivery without waiting for settlement"
+}
+
+# A recovery record is consumed by the delivery it was restored for, which can
+# be a whole branch turn later. By then the watcher it names may be gone and an
+# ordinary bounded retry may already own a healthy arm: a confirmation rejected
+# for the dead one must never retire the live one, which would leave the
+# generation with no watcher and no retry at all.
+test_pi_stale_recovery_rejection_keeps_the_retry_arm() {
+  local repo home plugin log second stop out status
+  repo="$TMP_ROOT/pi-stale-recovery-retire-root"
+  home="$TMP_ROOT/pi-stale-recovery-retire-home"
+  log="$TMP_ROOT/pi-stale-recovery-retire.log"
+  second="$TMP_ROOT/pi-stale-recovery-retire.second"
+  stop="$TMP_ROOT/pi-stale-recovery-retire.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  # --handling-delivered keeps bin/fm-watch-arm.sh's own precondition: a
+  # confirmation naming a watcher pid that is not alive is rejected.
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --handling-delivered ]; then
+  kill -0 "$4" 2>/dev/null || exit 1
+  exit 0
+fi
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+trap 'exit 0' TERM INT
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh) recovery-generation=g1\n' "$$"
+  printf 'signal: first outcome\n'
+  exit 0
+fi
+if [ "$count" -eq 2 ]; then
+  printf 'watcher: started pid=%s (beacon fresh) recovery-generation=g2\n' "$$"
+  while [ ! -e "$FM_SECOND_FILE" ]; do sleep 0.02; done
+  printf 'signal: second outcome\n'
+  exit 0
+fi
+if [ "$count" -eq 3 ]; then
+  printf 'watcher: started pid=%s (beacon fresh) recovery-generation=g3\n' "$$"
+  sleep 0.1
+  printf 'watcher: FAILED - successor lost its beacon\n'
+  exit 3
+fi
+# The bounded retry's arm: slow to announce itself, so the delivery that
+# follows still has no recovery record of its own for it.
+sleep 0.6
+printf 'watcher: started pid=%s (beacon fresh) recovery-generation=g4\n' "$$"
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_SECOND_FILE="$second" FM_STOP_FILE="$stop" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let releaseBranch = () => {};
+const branchSettlement = new Promise((resolve) => {
+  releaseBranch = resolve;
+});
+let branchAccepted = false;
+let tool = null;
+const prompts = [];
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (message) => {
+    prompts.push(message);
+  },
+  events: {
+    on() {},
+    emit(event, data) {
+      if (event !== "fm-branch-supervision:dispatch" || branchAccepted) return;
+      branchAccepted = true;
+      data.accept(branchSettlement);
+    },
+  },
+};
+
+function armPids() {
+  if (!existsSync(process.env.FM_ARM_LOG)) return [];
+  return readFileSync(process.env.FM_ARM_LOG, "utf8")
+    .split("\n")
+    .filter((row) => row.startsWith("arm="))
+    .map((row) => row.slice("arm=".length));
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(Number(pid), 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+writeFileSync(`${process.env.FM_HOME}/state/stale-recovery.meta`, "project=/projects/stale-recovery\nwindow=fm-stale-recovery\n");
+writeFileSync(`${process.env.FM_HOME}/state/.wake-queue`, "1\t1\tsignal\tstale-recovery.status\tsignal: first outcome\n");
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("initial-arm", {}, undefined, undefined, {});
+await waitFor(() => branchAccepted && armPids().length === 2, "branch holds the first outcome behind a verified successor");
+// The successor raises its own actionable while that branch turn still holds
+// the pipeline, so its restored successor's recovery record waits undelivered.
+writeFileSync(process.env.FM_SECOND_FILE, "go\n");
+await waitFor(() => armPids().length === 4, "the restored successor dies and the bounded retry arms");
+const retryArm = armPids()[3];
+if (!pidAlive(retryArm)) throw new Error("the bounded retry arm was already gone before the delivery");
+releaseBranch();
+await waitFor(
+  () => prompts.some((message) => message.includes("signal: second outcome")),
+  "second outcome delivered after the branch settled",
+);
+await new Promise((resolve) => setTimeout(resolve, 150));
+if (!pidAlive(retryArm)) {
+  throw new Error(`a stale recovery rejection retired the live retry arm: ${armPids().join(" | ")}`);
+}
+if (armPids().length !== 4) throw new Error(`the settled delivery launched another arm: ${armPids().join(" | ")}`);
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must keep the live retry arm when a stale recovery confirmation is rejected"
+  [ -z "$out" ] || fail "Pi stale-recovery retirement test printed output: $out"
+  pass "Pi keeps its live retry arm when a stale recovery confirmation is rejected"
+}
+
+# An unready successor that exits at once closes before the restoration can
+# retire it. Its close belongs to the restoration attempt that started it: a
+# second, independent retry chain for the same outage would double the launches
+# and reset the bound the restoration is still counting against.
+test_pi_instant_unready_successor_keeps_one_retry_chain() {
+  local repo home plugin log out status
+  repo="$TMP_ROOT/pi-instant-unready-successor-root"
+  home="$TMP_ROOT/pi-instant-unready-successor-home"
+  log="$TMP_ROOT/pi-instant-unready-successor.log"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: wake behind an unready successor\n'
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_PI_ARM_READY_TIMEOUT_MS="$ARM_READY_TIMEOUT_MS" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const prompts = [];
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (message) => {
+    prompts.push(message);
+  },
+};
+
+const arms = () => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith("arm=")).length
+  : 0;
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("initial-arm", {}, undefined, undefined, {});
+await waitFor(() => prompts.length >= 1, "the bounded restoration surfaced its typed failure");
+await new Promise((resolve) => setTimeout(resolve, 200));
+if (prompts.length !== 1) {
+  throw new Error(`one outage produced more than one bounded-retry chain: ${prompts.join(" | ")}`);
+}
+if (!prompts[0].includes("signal: wake behind an unready successor")) {
+  throw new Error(`the original wake was lost: ${prompts[0]}`);
+}
+if (!prompts[0].includes("could not restore watcher continuity after 2 retries")) {
+  throw new Error(`missing typed restoration failure: ${prompts[0]}`);
+}
+if (arms() !== 4) throw new Error(`expected one arm plus three restoration attempts, got ${arms()}`);
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must keep one retry chain for an instantly unready successor"
+  [ -z "$out" ] || fail "Pi instant-unready successor test printed output: $out"
+  pass "Pi keeps a single bounded retry chain for an instantly unready successor"
 }
 
 test_pi_late_retiring_actionable_reaches_replacement() {
@@ -2876,6 +3150,499 @@ EOF
   expect_code 0 "$status" "Pi replacement must receive an actionable close after retirement timeout"
   [ -z "$out" ] || fail "Pi late retiring actionable test printed output: $out"
   pass "Pi replacement receives actionable closes after retirement timeout"
+}
+
+# The same record, not a copy: an actionable row printed after the replacement
+# has already registered its receiver rides the in-process handoff as the very
+# object the retiring generation enqueued. The replacement owns no restoration
+# for it, so its delivery must not wait on one - here the retired arm outlives
+# its row and never closes, so no later close can nudge the delivery along.
+test_pi_late_retiring_actionable_reaches_registered_replacement() {
+  local repo home plugin count stop out status
+  repo="$TMP_ROOT/pi-late-registered-actionable-root"
+  home="$TMP_ROOT/pi-late-registered-actionable-home"
+  count="$TMP_ROOT/pi-late-registered-actionable.count"
+  stop="$TMP_ROOT/pi-late-registered-actionable.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+count=0
+[ ! -f "$FM_ARM_COUNT" ] || count=$(cat "$FM_ARM_COUNT")
+count=$((count + 1))
+printf '%s\n' "$count" > "$FM_ARM_COUNT"
+late_close() {
+  sleep 0.4
+  printf 'signal: late registered actionable outcome\n'
+  while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+  exit 0
+}
+trap late_close TERM INT
+printf 'watcher: started pid=%s\n' "$$"
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_COUNT="$count" FM_STOP_FILE="$stop" FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+function makePi() {
+  const handlers = new Map();
+  let tool = null;
+  const prompts = [];
+  const pi = {
+    on(event, handler) {
+      handlers.set(event, handler);
+    },
+    registerCommand() {},
+    registerTool(candidate) {
+      if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+    },
+    sendUserMessage: async (message) => {
+      prompts.push(message);
+    },
+    events: { on() {}, emit() {} },
+  };
+  return { pi, handlers, getTool: () => tool, prompts };
+}
+
+const arms = () => existsSync(process.env.FM_ARM_COUNT)
+  ? readFileSync(process.env.FM_ARM_COUNT, "utf8").trim()
+  : "0";
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+// One module instance across the replacement, as Pi loads it: both
+// generations are bound by the same factory call.
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+const session = makePi();
+mod.default(session.pi);
+const armed = await session.getTool().execute("initial-arm", {}, undefined, undefined, {});
+if (!armed.details?.ok) throw new Error(`initial arm failed: ${JSON.stringify(armed.details)}`);
+await waitFor(() => arms() === "1", "original arm");
+// Returns on the retirement timeout, while the retired arm is still inside
+// its TERM trap and has not printed its actionable row yet.
+await session.handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
+await session.handlers.get("session_start")?.({ type: "session_start", reason: "new" }, {});
+await waitFor(() => arms() === "2", "replacement arm before the late row");
+if (session.prompts.length !== 0) throw new Error(`unexpected wake before the late row: ${session.prompts.join(" | ")}`);
+await waitFor(
+  () => session.prompts.some((message) => message.includes("signal: late registered actionable outcome")),
+  "late actionable delivery to the registered replacement",
+);
+const latePrompts = session.prompts.filter((message) => message.includes("signal: late registered actionable outcome"));
+if (latePrompts.length !== 1) {
+  throw new Error(`replacement did not receive exactly one late outcome: ${session.prompts.join(" | ")}`);
+}
+if (latePrompts[0].includes("could not persist a late replacement-session actionable wake")) {
+  throw new Error(`the late row took the copied fallback instead of the in-process handoff: ${latePrompts[0]}`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must deliver a late actionable close to a replacement that already registered"
+  [ -z "$out" ] || fail "Pi late registered actionable test printed output: $out"
+  pass "Pi delivers a late actionable close through the in-process replacement handoff"
+}
+
+# A restoration failure describes the session that hit it. When a wake Pi
+# accepted but never consumed is replayed by a replacement whose own arm is
+# healthy, the captain must not be told continuity is still broken - and the
+# stale label must not force the replay onto main either.
+test_pi_replayed_wake_drops_the_retired_restoration_failure() {
+  local repo home plugin log stop out status
+  repo="$TMP_ROOT/pi-replayed-restoration-failure-root"
+  home="$TMP_ROOT/pi-replayed-restoration-failure-home"
+  log="$TMP_ROOT/pi-replayed-restoration-failure.log"
+  stop="$TMP_ROOT/pi-replayed-restoration-failure.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+trap 'exit 0' TERM INT
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: outcome behind an exhausted restoration\n'
+  exit 0
+fi
+# Every successor of the retiring session is unready, so its restoration
+# exhausts its bound and records a typed continuity failure.
+if [ "$count" -le 4 ]; then
+  exit 0
+fi
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_PI_ARM_READY_TIMEOUT_MS="$ARM_READY_TIMEOUT_MS" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const prompts = [];
+const handlers = new Map();
+const pi = {
+  on(event, handler) {
+    handlers.set(event, handler);
+  },
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  // Nothing consumes the follow-up, so the record rides the handoff.
+  sendUserMessage: async (message) => {
+    prompts.push(message);
+  },
+  events: { on() {}, emit() {} },
+};
+
+const arms = () => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith("arm=")).length
+  : 0;
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("initial-arm", {}, undefined, undefined, {});
+await waitFor(() => prompts.length === 1, "the retiring session's exhausted restoration");
+if (!prompts[0].includes("could not restore watcher continuity after 2 retries")) {
+  throw new Error(`the retiring session did not report its own outage: ${prompts[0]}`);
+}
+await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
+await handlers.get("session_start")?.({ type: "session_start", reason: "new" }, {});
+await waitFor(() => prompts.length === 2, "the replacement replayed the unconsumed wake");
+await waitFor(() => arms() === 5, "the replacement armed its own watcher");
+if (!prompts[1].includes("signal: outcome behind an exhausted restoration")) {
+  throw new Error(`the replayed wake lost its outcome: ${prompts[1]}`);
+}
+if (prompts[1].includes("could not restore watcher continuity")) {
+  throw new Error(`the replay carried the retired session's restoration failure: ${prompts[1]}`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must not replay a retired session's restoration failure"
+  [ -z "$out" ] || fail "Pi replayed restoration failure test printed output: $out"
+  pass "Pi drops a retired session's restoration failure from a replayed wake"
+}
+
+# An arm can end its actionable row without a trailing newline, so the record
+# is only built when the close is classified. It must still join the queue
+# before its restoration runs: a session replaced while that restoration is in
+# flight has to persist the wake in its handoff, not lose it.
+test_pi_unterminated_actionable_row_is_queued_before_restoration() {
+  local repo home plugin log stop handoff out status
+  repo="$TMP_ROOT/pi-unterminated-actionable-root"
+  home="$TMP_ROOT/pi-unterminated-actionable-home"
+  log="$TMP_ROOT/pi-unterminated-actionable.log"
+  stop="$TMP_ROOT/pi-unterminated-actionable.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: outcome on an unterminated row'
+  exit 0
+fi
+# The successor stays silent and ignores retirement, so the restoration is
+# still in flight when the session is replaced.
+trap '' TERM INT
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.05; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  handoff="$home/state/extensions/pi-primary-watch/session-replacement-actionable.json"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_HANDOFF_FILE="$handoff" FM_PI_ARM_READY_TIMEOUT_MS=3000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=200 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const prompts = [];
+const handlers = new Map();
+const pi = {
+  on(event, handler) {
+    handlers.set(event, handler);
+  },
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (message) => {
+    prompts.push(message);
+  },
+  events: { on() {}, emit() {} },
+};
+
+const arms = () => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith("arm=")).length
+  : 0;
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("initial-arm", {}, undefined, undefined, {});
+await waitFor(() => arms() === 2, "the restoration started a successor for the unterminated row");
+if (prompts.length !== 0) throw new Error(`the wake was delivered before its restoration: ${prompts.join(" | ")}`);
+await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
+// The durable replacement handoff at
+// state/extensions/pi-primary-watch/session-replacement-actionable.json is
+// this extension's own serialized contract with its replacement session.
+if (!existsSync(process.env.FM_HANDOFF_FILE)) {
+  throw new Error("the replaced session persisted no handoff for the in-flight actionable close");
+}
+const handoff = JSON.parse(readFileSync(process.env.FM_HANDOFF_FILE, "utf8"));
+const messages = (handoff.pending ?? []).map((item) => item.message);
+if (!messages.some((message) => message.includes("signal: outcome on an unterminated row"))) {
+  throw new Error(`the handoff lost the in-flight actionable close: ${JSON.stringify(handoff)}`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must persist an actionable close that is still restoring when its session is replaced"
+  [ -z "$out" ] || fail "Pi unterminated actionable row test printed output: $out"
+  pass "Pi queues an unterminated actionable row before its restoration runs"
+}
+
+# A successor can print its wake row and exit before it ever announces
+# readiness (bin/fm-watch-arm.sh's owned_child_finished does exactly that), so
+# an actionable close can land while the restoration that started it is still
+# running. That close must share the restoration in flight: a second, competing
+# loop spends the retry budget twice over on one outage.
+test_pi_actionable_close_during_restoration_shares_it() {
+  local repo home plugin log out status
+  repo="$TMP_ROOT/pi-nested-restoration-root"
+  home="$TMP_ROOT/pi-nested-restoration-home"
+  log="$TMP_ROOT/pi-nested-restoration.log"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: outcome from the first cycle\n'
+  exit 0
+fi
+if [ "$count" -eq 2 ]; then
+  printf 'signal: outcome from a fast-waking successor\n'
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_PI_ARM_READY_TIMEOUT_MS="$ARM_READY_TIMEOUT_MS" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const prompts = [];
+const pi = {
+  on() {},
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (message) => {
+    prompts.push(message);
+  },
+};
+
+const arms = () => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith("arm=")).length
+  : 0;
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("initial-arm", {}, undefined, undefined, {});
+await waitFor(() => prompts.length === 2, "both actionable closes delivered");
+await new Promise((resolve) => setTimeout(resolve, 250));
+if (arms() !== 4) {
+  throw new Error(`one outage spent more than one bounded restoration: ${arms()} arms`);
+}
+if (prompts.length !== 2) throw new Error(`unexpected extra wake: ${prompts.join(" | ")}`);
+if (!prompts.some((message) => message.includes("signal: outcome from the first cycle"))) {
+  throw new Error(`the first cycle's outcome was lost: ${prompts.join(" | ")}`);
+}
+if (!prompts.some((message) => message.includes("signal: outcome from a fast-waking successor"))) {
+  throw new Error(`the fast-waking successor's outcome was lost: ${prompts.join(" | ")}`);
+}
+for (const message of prompts) {
+  if (!message.includes("could not restore watcher continuity after 2 retries")) {
+    throw new Error(`a shared restoration verdict went missing: ${message}`);
+  }
+}
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must share one restoration with an actionable close that lands during it"
+  [ -z "$out" ] || fail "Pi nested restoration test printed output: $out"
+  pass "Pi shares one bounded restoration with an actionable close landing during it"
+}
+
+# A retired generation can still be inside a restoration when its last arm
+# prints a late wake row, and that record is handed straight to the replacement
+# that now owns it. The retired session's verdict must not be stamped onto it:
+# the replacement's own arm is what speaks for continuity.
+test_pi_retired_restoration_verdict_stays_off_an_inherited_wake() {
+  local repo home plugin log stop out status
+  repo="$TMP_ROOT/pi-retired-verdict-root"
+  home="$TMP_ROOT/pi-retired-verdict-home"
+  log="$TMP_ROOT/pi-retired-verdict.log"
+  stop="$TMP_ROOT/pi-retired-verdict.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+# Armed before this arm announces itself, so a retirement that lands while the
+# arm is still starting up still produces the late wake row under test.
+late_close() {
+  sleep 0.3
+  printf 'signal: late row\n'
+  printf 'late=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+  exit 0
+}
+trap late_close TERM INT
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+if [ "$count" -eq 1 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: first outcome\n'
+  exit 0
+fi
+# The retiring session's first restoration attempt is unready.
+if [ "$count" -eq 2 ]; then
+  exit 0
+fi
+# Its last attempt never announces readiness and outlives its retirement,
+# printing its own wake row only after the replacement has taken over.
+if [ "$count" -eq 3 ]; then
+  while :; do sleep 0.02; done
+fi
+trap 'exit 0' TERM INT
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_PI_ARM_READY_TIMEOUT_MS=4000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=1 node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let releaseFirstDelivery = () => {};
+const firstDelivery = new Promise((resolve) => {
+  releaseFirstDelivery = resolve;
+});
+let tool = null;
+const prompts = [];
+const handlers = new Map();
+const pi = {
+  on(event, handler) {
+    handlers.set(event, handler);
+  },
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  // The replacement is still delivering the inherited wake when the retired
+  // session's restoration resolves, so the late record waits in its queue.
+  sendUserMessage: async (message) => {
+    prompts.push(message);
+    if (message.includes("signal: first outcome")) await firstDelivery;
+  },
+  events: { on() {}, emit() {} },
+};
+
+const logRows = (prefix) => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith(prefix)).length
+  : 0;
+
+async function waitFor(pred, label) {
+  for (let i = 0; i < 500; i += 1) {
+    if (pred()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+// One module instance across the replacement, as Pi loads it.
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("initial-arm", {}, undefined, undefined, {});
+await waitFor(() => logRows("arm=") === 3, "the retiring session's last restoration attempt");
+if (prompts.length !== 0) throw new Error(`the first outcome was delivered before its restoration: ${prompts.join(" | ")}`);
+await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
+await handlers.get("session_start")?.({ type: "session_start", reason: "new" }, {});
+await waitFor(() => logRows("arm=") === 4, "the replacement's own arm");
+await waitFor(() => prompts.length === 1, "the replacement started delivering the inherited wake");
+await waitFor(() => logRows("late=") === 1, "the retired arm's late wake row");
+// Let the retired session's restoration resolve while the replacement is
+// still blocked on its first delivery.
+await new Promise((resolve) => setTimeout(resolve, 250));
+releaseFirstDelivery();
+await waitFor(() => prompts.length === 2, "the late wake delivered by the replacement");
+if (!prompts[1].includes("signal: late row")) {
+  throw new Error(`the late wake lost its outcome: ${prompts[1]}`);
+}
+if (prompts[1].includes("could not restore watcher continuity")) {
+  throw new Error(`the retired session stamped its verdict on an inherited wake: ${prompts[1]}`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must keep a retired restoration verdict off an inherited wake"
+  [ -z "$out" ] || fail "Pi retired restoration verdict test printed output: $out"
+  pass "Pi keeps a retired session's restoration verdict off an inherited wake"
 }
 
 test_pi_replacement_tokens_are_process_unique() {
@@ -4178,8 +4945,15 @@ test_pi_session_transition_generation_owner
 test_pi_session_replacement_carries_inflight_actionable_close
 test_pi_streaming_followup_is_replayed_after_replacement
 test_pi_streaming_time_delivery_keeps_the_successor_chain
-test_pi_successor_failure_during_delivery_is_retried_after_delivery
+test_pi_successor_failure_during_delivery_is_retried_without_waiting
+test_pi_stale_recovery_rejection_keeps_the_retry_arm
+test_pi_instant_unready_successor_keeps_one_retry_chain
 test_pi_late_retiring_actionable_reaches_replacement
+test_pi_late_retiring_actionable_reaches_registered_replacement
+test_pi_replayed_wake_drops_the_retired_restoration_failure
+test_pi_unterminated_actionable_row_is_queued_before_restoration
+test_pi_actionable_close_during_restoration_shares_it
+test_pi_retired_restoration_verdict_stays_off_an_inherited_wake
 test_pi_replacement_tokens_are_process_unique
 test_pi_replacement_persistence_failure_stops_arm_child
 test_pi_process_exit_cleanup_listener_lifecycle
