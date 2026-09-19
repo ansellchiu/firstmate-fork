@@ -173,6 +173,259 @@ test_outcome_startup_replay_preserves_silence() {
   pass "only routine fleet outcomes can be silent"
 }
 
+# --- repeat suppression -------------------------------------------------------
+#
+# The incident this covers: one overnight window delivered the same no-change
+# fact about one worker twelve times, which teaches the captain to skim past
+# outcomes. Suppression is presentation-only, so every assertion here also
+# checks that the durable store still holds every outcome.
+
+present_of() { # <store> <seq>
+  jq -r --argjson seq "$2" 'select(.seq == $seq) | .present' "$1"
+}
+
+repeat_of() { # <store> <seq>
+  jq -r --argjson seq "$2" 'select(.seq == $seq) | .repeat' "$1"
+}
+
+test_repeat_suppression_collapses_unchanged_routine_facts() {
+  local home store replay i
+  home="$TMP_ROOT/store-repeat-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+
+  # A first-of-a-kind fact always reaches the captain.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-7 --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "first routine append failed"
+  [ "$(present_of "$store" 1)" = true ] || fail "the first occurrence of a routine fact was suppressed"
+
+  # The eleven repeats behind it are stored and not delivered.
+  for i in 2 3 4 5 6 7 8 9 10 11 12; do
+    FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+      --task task-7 --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+      || fail "repeat append $i failed"
+    [ "$(present_of "$store" "$i")" = false ] || fail "repeat $i of an unchanged fact was delivered again"
+  done
+  [ "$(wc -l < "$store")" -eq 12 ] || fail "suppression dropped outcomes from the durable store"
+
+  # Re-wrapped whitespace is the same fact, not a change.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-7 --verdict routine --summary '  benign  idle
+flag, nothing new ' >/dev/null || fail "re-wrapped append failed"
+  [ "$(present_of "$store" 13)" = false ] || fail "whitespace alone made an unchanged fact look new"
+
+  # A different task never rides another task's window.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-8 --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "second task append failed"
+  [ "$(present_of "$store" 14)" = true ] || fail "one task's window suppressed another task's first note"
+
+  # A state change re-delivers immediately, however deep the suppressed run was.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-7 --verdict routine --summary 'worker stopped responding' >/dev/null \
+    || fail "changed-fact append failed"
+  [ "$(present_of "$store" 15)" = true ] || fail "a changed fact was suppressed behind its predecessor"
+  [ "$(repeat_of "$store" 15)" = 0 ] || fail "a changed fact carried a repeat count from another fingerprint"
+
+  # Nothing captain-facing is ever a suppression candidate, even when its
+  # summary repeats verbatim.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-7 --verdict captain --summary 'PR https://example.invalid/pr/1 checks green' >/dev/null \
+    || fail "captain append failed"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-7 --verdict captain --summary 'PR https://example.invalid/pr/1 checks green' >/dev/null \
+    || fail "repeated captain append failed"
+  [ "$(present_of "$store" 16)" = true ] || fail "a captain outcome was suppressed"
+  [ "$(present_of "$store" 17)" = true ] || fail "a repeated captain outcome was suppressed"
+
+  # A captain outcome reopens the task, so the next routine note is seen again.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-7 --verdict routine --summary 'worker stopped responding' >/dev/null \
+    || fail "post-captain routine append failed"
+  [ "$(present_of "$store" 18)" = true ] || fail "a captain outcome did not reopen its task's window"
+
+  # Presentation is the only thing suppression touches: every outcome is in the
+  # store, and only the undelivered ones are held back from the session digest.
+  [ "$(wc -l < "$store")" -eq 18 ] || fail "the durable store lost an outcome to suppression"
+  replay=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" startup-replay) || fail "startup replay failed"
+  [ "$(printf '%s\n' "$replay" | grep -c '"task":"task-7".*"summary":"benign idle flag')" -eq 1 ] \
+    || fail "startup replay repeated a suppressed no-change fact"
+  assert_contains "$replay" "worker stopped responding" "startup replay hid a changed fact"
+  pass "unchanged routine facts are stored every time and delivered once per window"
+}
+
+test_repeat_suppression_window_expiry_redelivers_once() {
+  local home store
+  home="$TMP_ROOT/store-window-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=5 "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 1 failed"
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=5 "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 2 failed"
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=5 "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 3 failed"
+  [ "$(present_of "$store" 2)" = false ] && [ "$(present_of "$store" 3)" = false ] \
+    || fail "in-window repeats were delivered"
+
+  sleep 5.5
+  # Expiry re-delivers ONCE, and says how many identical updates it stands for.
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=5 "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "post-expiry append failed"
+  [ "$(present_of "$store" 4)" = true ] || fail "window expiry never re-delivered the standing fact"
+  [ "$(repeat_of "$store" 4)" = 2 ] || fail "the re-delivered note lost its suppressed-repeat count"
+
+  # ... and then goes quiet again rather than resuming the stream.
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=5 "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 5 failed"
+  [ "$(present_of "$store" 5)" = false ] || fail "window expiry resumed a stream instead of re-delivering once"
+  [ "$(repeat_of "$store" 5)" = 0 ] || fail "a suppressed row carried a repeat count"
+  pass "an expired window re-delivers a standing fact once, counting what it stands for"
+}
+
+test_repeat_suppression_fails_toward_delivery() {
+  local home store out status
+  home="$TMP_ROOT/store-dedupe-fault-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 1 failed"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 2 failed"
+  [ "$(present_of "$store" 2)" = false ] || fail "the repeat was not suppressed before the fault"
+
+  # A cache nobody can read must cost the captain a repeated note, never a
+  # missed one.
+  printf 'garbage\n' > "$home/state/.branch-outcome-dedupe"
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 3 failed"
+  [ "$(present_of "$store" 3)" = true ] || fail "an unreadable dedupe cache hid an outcome"
+
+  # An explicitly disabled window suppresses nothing; a malformed one falls
+  # back to the default rather than silently disabling suppression.
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=0 "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 4 failed"
+  [ "$(present_of "$store" 4)" = true ] || fail "a zero window still suppressed an outcome"
+  FM_HOME="$home" FM_BRANCH_OUTCOME_DEDUPE_WINDOW=not-a-number "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null || fail "append 5 failed"
+  [ "$(present_of "$store" 5)" = false ] || fail "a malformed window silently disabled suppression"
+
+  # A stored row that claims a captain outcome was suppressed is not a store
+  # this code wrote, so every read fails closed rather than hiding it.
+  printf '%s\n' '{"seq":6,"epoch":1,"task":"task-1","wake":"","verdict":"captain","summary":"blocked","silent":false,"present":false,"repeat":0,"statusEndpoint":0,"statusIdent":"-"}' >> "$store"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "unread accepted a stored suppressed captain outcome"
+  assert_contains "$out" "malformed or non-sequential" "suppressed captain refusal lost its diagnostic"
+  pass "a broken cache, a disabled window, and a poisoned row all fail toward delivery"
+}
+
+test_window_opens_only_after_the_outcome_is_durable() {
+  local home store shim status
+  home="$TMP_ROOT/store-window-durability-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+  shim="$TMP_ROOT/store-window-durability-bin"
+  mkdir -p "$shim"
+
+  # An append that dies before its row reaches the store, the way a kill or a
+  # failed state write does.
+  cat > "$shim/rm" <<EOF
+#!/bin/sh
+for arg in "\$@"; do
+  case "\$arg" in *.branch-outcome-index-ready) exit 1 ;; esac
+done
+exec $(command -v rm) "\$@"
+EOF
+  chmod +x "$shim/rm"
+
+  PATH="$shim:$PATH" FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-9 --verdict routine --summary 'benign idle flag, nothing new' >/dev/null 2>&1
+  status=$?
+  [ "$status" -ne 0 ] || fail "the interrupted append reported success"
+  [ ! -s "$store" ] || fail "the interrupted append stored a row: $(cat "$store")"
+
+  # Nothing was stored and nothing was delivered, so the retry is still this
+  # fact's first occurrence and must reach the captain.
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-9 --verdict routine --summary 'benign idle flag, nothing new' >/dev/null \
+    || fail "retry append failed"
+  [ "$(present_of "$store" 1)" = true ] \
+    || fail "an interrupted append suppressed the retry of a fact the captain never saw"
+  pass "a suppression window opens only once its outcome is durable"
+}
+
+test_untrusted_cache_count_cannot_poison_the_store() {
+  local home store cache old out
+  home="$TMP_ROOT/store-count-poison-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+  cache="$home/state/.branch-outcome-dedupe"
+  old=$(( $(date +%s) - 100000 ))
+
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null \
+    || fail "first append failed"
+
+  # The cache is a bounded, evictable file: an out-of-band count it cannot be
+  # trusted with must never travel into the append-only store.
+  awk -F'\t' -v OFS='\t' -v old="$old" '
+    NR == 1 { print; next }
+    NF == 4 { $2 = old; $3 = "99999999999999999999"; print }
+  ' "$cache" > "$cache.poisoned" || fail "could not rewrite the dedupe cache"
+  mv -f "$cache.poisoned" "$cache"
+
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-1 --verdict routine --summary 'idle, nothing new' >/dev/null \
+    || fail "post-expiry append failed"
+  [ "$(repeat_of "$store" 2)" = 0 ] || fail "an untrusted cache count reached the stored row"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread) \
+    || fail "an untrusted cache count made the outcome store unreadable"
+  assert_contains "$out" '"seq":2' "the re-delivered outcome was lost"
+  pass "a cache count the store cannot represent restarts at zero instead of poisoning it"
+}
+
+test_unclearable_captain_window_fails_loudly_without_losing_the_outcome() {
+  local home store shim out status
+  home="$TMP_ROOT/store-captain-clear-fault-home"
+  mkdir -p "$home/state"
+  store="$home/state/branch-outcomes.jsonl"
+  shim="$TMP_ROOT/store-captain-clear-fault-bin"
+  mkdir -p "$shim"
+
+  # A rename that cannot land on the dedupe cache, and nowhere else.
+  cat > "$shim/mv" <<EOF
+#!/bin/sh
+for arg in "\$@"; do
+  case "\$arg" in *.branch-outcome-dedupe) exit 1 ;; esac
+done
+exec $(command -v mv) "\$@"
+EOF
+  chmod +x "$shim/mv"
+
+  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-3 --verdict routine --summary 'idle, nothing new' >/dev/null \
+    || fail "routine append that opens the window failed"
+  [ -f "$home/state/.branch-outcome-dedupe" ] || fail "the routine append never recorded a window"
+
+  out=$(PATH="$shim:$PATH" FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append \
+    --task task-3 --verdict captain --summary 'worker needs a credential' 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "an uncleared repeat-suppression window was reported as a clean append"
+  assert_contains "$out" "repeat-suppression window could not be cleared" \
+    "the failed window clear lost its diagnostic"
+
+  # The outcome itself must survive the loud failure and stay deliverable.
+  [ "$(wc -l < "$store")" -eq 2 ] || fail "a failed window clear discarded the stored outcome"
+  [ "$(present_of "$store" 2)" = true ] || fail "the stored captain outcome was not marked for delivery"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" unread) || fail "unread failed after the clear fault"
+  assert_contains "$out" "worker needs a credential" "the captain outcome was lost to the failed window clear"
+  pass "a captain window that cannot be cleared fails loudly and keeps its outcome durable"
+}
+
 test_outcome_startup_replay_stops_at_captain_barrier() {
   local home replay unread
   home="$TMP_ROOT/store-captain-barrier-home"
@@ -1098,6 +1351,12 @@ test_branch_prompt_is_byte_stable_and_above_cache_floor
 test_outcome_store_is_append_only_with_cursor_reads
 test_outcome_startup_replay_preserves_silence
 test_outcome_startup_replay_stops_at_captain_barrier
+test_repeat_suppression_collapses_unchanged_routine_facts
+test_repeat_suppression_window_expiry_redelivers_once
+test_repeat_suppression_fails_toward_delivery
+test_unclearable_captain_window_fails_loudly_without_losing_the_outcome
+test_window_opens_only_after_the_outcome_is_durable
+test_untrusted_cache_count_cannot_poison_the_store
 test_outcome_cursor_corruption_fails_closed
 test_cursor_advancement_refuses_ahead_processed_marker
 test_outcome_sequence_conflicts_fail_closed

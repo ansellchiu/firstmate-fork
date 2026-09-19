@@ -6,8 +6,12 @@
 #   - Store: $STATE/branch-outcomes.jsonl, strictly APPEND-ONLY. One JSON
 #     object per line: {"seq":N,"epoch":N,"task":"...","wake":"...",
 #     "verdict":"routine"|"captain","summary":"...","silent":true|false,
-#     "statusEndpoint":N,"statusIdent":"..."}. Legacy rows without `silent`
-#     or status provenance remain valid and are treated as visible.
+#     "present":true|false,"repeat":N,"statusEndpoint":N,"statusIdent":"..."}.
+#     Legacy rows without `silent`, presentation fields, or status provenance
+#     remain valid and are treated as visible.
+#     `present` is the PRESENTATION decision and `repeat` its repeat count;
+#     see "Repeat suppression" below. Every outcome is stored in full whatever
+#     they say, so suppression can never become record loss.
 #     Every read and append validates the complete log as a gap-free sequence;
 #     malformed, duplicate, or reordered rows fail closed.
 #     Existing lines are never rewritten, reordered, or deleted by any
@@ -22,6 +26,31 @@
 #     A captain row advances only after its matching visible entry exists in
 #     Pi's session, so reload recovery is idempotent across that crash window.
 #     A cursor beyond the validated store tail fails closed.
+#   - Repeat suppression: an unchanged routine fact about one task is stored
+#     every time but PRESENTED only once per bounded window, because a repeat
+#     the captain has already read trains them to skim past outcomes. At
+#     append, a routine non-silent row is fingerprinted from its whitespace-
+#     normalized summary and compared with that task's last presented
+#     fingerprint in $STATE/.branch-outcome-dedupe (a bounded, evictable
+#     CACHE; the row's own `present` and `repeat` fields are the authority).
+#     A first-of-a-kind or changed fingerprint presents immediately and opens a
+#     new window. An identical fingerprint inside the window is suppressed
+#     (`present:false`) and counted. The first identical fingerprint after the
+#     window expires presents ONCE carrying `repeat` = how many were suppressed,
+#     and reopens the window, so expiry re-delivers rather than resuming a
+#     stream. A `captain` row is NEVER suppressed and clears its task's window,
+#     so the next routine note about that task is presented again; that clear
+#     runs once the row is durable, and a window that cannot be cleared fails
+#     the append loudly rather than surviving to suppress the next routine
+#     note - the stored outcome is still delivered by the next read. A `silent`
+#     row is `present:false` with no window effect: it was already not rendered.
+#     Window: $FM_BRANCH_OUTCOME_DEDUPE_WINDOW seconds, default 21600 (6h);
+#     0 disables suppression, and a malformed value falls back to the default
+#     rather than silently disabling it. An unreadable or unwritable cache
+#     presents the outcome: the safe direction here is noise, never loss.
+#     The window a row opens is recorded only after that row is durable, so an
+#     append that never reached the store cannot suppress its own retry, and a
+#     count the cache cannot be trusted to increment restarts at zero.
 #   - Processed marker: $STATE/.branch-outcomes-processed holds the highest
 #     seq whose captain rows main has ACKNOWLEDGED as processed, separately
 #     from the read cursor: reading (the visible entry) is the branch's act,
@@ -39,8 +68,12 @@
 #     re-presented. A present marker is validated before the migration returns,
 #     and a marker ahead of the read cursor fails closed.
 #   - Outcome index: $STATE/.<task>.branch-outcome-index stores one bounded
-#     cache of the latest outcome's status provenance. The authoritative copy
-#     is in the append-only row. $STATE/.branch-outcome-index-ready is removed
+#     cache of the latest PRESENTED outcome's status provenance, because the
+#     index answers "how far has this task's status log already reached the
+#     captain", not "how far has it been stored". A suppressed repeat leaves
+#     the cache at the last presented row's endpoint, so a status event the
+#     captain has never seen stays uncovered and main's drain backstop can
+#     still resurface it. The authoritative copy is in the append-only row. $STATE/.branch-outcome-index-ready is removed
 #     before append and published only after the cache update; processed-init
 #     rebuilds every cache before publishing it, so interruption or upgrade
 #     fails closed without making each drain scan lifetime history.
@@ -61,6 +94,10 @@
 #   fm-branch-outcome.sh append --task <id> --verdict routine|captain \
 #       --summary <text> [--wake <text>] [--silent true|false]
 #     Append one outcome record; prints the assigned seq.
+#   fm-branch-outcome.sh forget --task <id>
+#     Drop that task's repeat-suppression window, so its next routine outcome
+#     is presented as a first-of-a-kind fact. bin/fm-teardown.sh calls it for a
+#     retired task id, which a later task may reuse. Never touches the store.
 #   fm-branch-outcome.sh unread
 #     Print every unread record (raw JSONL). Exit 0 with no output when none.
 #   fm-branch-outcome.sh mark-read --through <seq>
@@ -105,9 +142,14 @@ MAX_SAFE_SEQ=9007199254740991
 OUTCOME_INDEX_VERSION=fm-branch-outcome-index-v1
 OUTCOME_INDEX_MAX_BYTES=512
 OUTCOME_INDEX_READY="$STATE/.branch-outcome-index-ready"
+DEDUPE="$STATE/.branch-outcome-dedupe"
+DEDUPE_VERSION=fm-branch-outcome-dedupe-v1
+DEDUPE_MAX_ENTRIES=128
+DEDUPE_WINDOW_DEFAULT=21600
+TAB=$(printf '\t')
 
 usage() {
-  echo "usage: fm-branch-outcome.sh append --task <id> --verdict routine|captain --summary <text> [--wake <text>] [--silent true|false] | unread | mark-read --through <seq> | unprocessed | mark-processed --through <seq> | processed-init [--held-lock] | list [--recent <n>] | startup-replay" >&2
+  echo "usage: fm-branch-outcome.sh append --task <id> --verdict routine|captain --summary <text> [--wake <text>] [--silent true|false] | forget --task <id> | unread | mark-read --through <seq> | unprocessed | mark-processed --through <seq> | processed-init [--held-lock] | list [--recent <n>] | startup-replay" >&2
   exit 2
 }
 
@@ -188,12 +230,22 @@ last_seq() {
           and ((.statusEndpoint | type) == "number" and .statusEndpoint >= 0 and .statusEndpoint <= 9007199254740991 and .statusEndpoint == (.statusEndpoint | floor))
           and ((.statusIdent | type) == "string" and (.statusIdent | test("[\\t\\n]") | not))
         )
+        or (
+          keys == ["epoch", "present", "repeat", "seq", "silent", "statusEndpoint", "statusIdent", "summary", "task", "verdict", "wake"]
+          and (.silent | type) == "boolean"
+          and (.present | type) == "boolean"
+          and ((.repeat | type) == "number" and .repeat >= 0 and .repeat <= 9007199254740991 and .repeat == (.repeat | floor))
+          and ((.statusEndpoint | type) == "number" and .statusEndpoint >= 0 and .statusEndpoint <= 9007199254740991 and .statusEndpoint == (.statusEndpoint | floor))
+          and ((.statusIdent | type) == "string" and (.statusIdent | test("[\\t\\n]") | not))
+        )
       )
       and ((.seq | type) == "number" and .seq >= 1 and .seq <= 9007199254740991 and .seq == (.seq | floor))
       and ((.epoch | type) == "number" and .epoch >= 0 and .epoch == (.epoch | floor))
       and ((.task | type) == "string" and (.wake | type) == "string")
       and ((.summary | type) == "string" and (.verdict == "routine" or .verdict == "captain"))
-      and (.silent != true or (.task == "fleet" and .verdict == "routine"));
+      and (.silent != true or (.task == "fleet" and .verdict == "routine"))
+      and (.present != false or .verdict == "routine")
+      and ((.repeat // 0) == 0 or (.present == true and .verdict == "routine"));
     if endswith("\n") then split("\n")[:-1]
     else error("unterminated outcome store")
     end
@@ -247,6 +299,31 @@ write_outcome_index() { # <task> <seq> [<endpoint> <identity>]
   mv -f -- "$tmp" "$path"
 }
 
+# The status provenance of this task's newest PRESENTED row, which is the
+# coverage the index may claim. No presented row means nothing about this task
+# has reached the captain, so nothing is covered.
+presented_status_position() { # <task>
+  local task=$1 row
+  PRESENTED_STATUS_ENDPOINT=0
+  PRESENTED_STATUS_IDENT=-
+  PRESENTED_STATUS_SEQ=
+  [ -s "$STORE" ] || return 0
+  row=$(jq -r -s --arg task "$task" '
+    map(select(.task == $task and .present != false and .silent != true))
+    | last
+    | if . == null then empty
+      else [(.seq | tostring), ((.statusEndpoint // 0) | tostring), (.statusIdent // "-")] | @tsv
+      end
+  ' "$STORE") || return 1
+  [ -n "$row" ] || return 0
+  PRESENTED_STATUS_SEQ=${row%%"$TAB"*}
+  PRESENTED_STATUS_IDENT=${row##*"$TAB"}
+  row=${row#*"$TAB"}
+  PRESENTED_STATUS_ENDPOINT=${row%%"$TAB"*}
+  case "$PRESENTED_STATUS_ENDPOINT" in ''|*[!0-9]*) PRESENTED_STATUS_ENDPOINT=0; PRESENTED_STATUS_IDENT=- ;; esac
+  [ -n "$PRESENTED_STATUS_IDENT" ] || PRESENTED_STATUS_IDENT=-
+}
+
 publish_outcome_index_ready() { # <seq>
   local tmp
   tmp=$(mktemp "$STATE/.branch-outcome-index-ready.XXXXXX") || return 1
@@ -258,12 +335,20 @@ rebuild_outcome_indexes() {
   local rows task seq epoch endpoint ident f mtime
   rm -f -- "$OUTCOME_INDEX_READY" || return 1
   [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
+  # Rebuilt coverage is PRESENTED coverage: a task whose newest rows were all
+  # suppressed repeats is covered only through its last presented row, and a
+  # task with no presented row at all is covered nowhere.
   rows=$(jq -r -s '
     map(select(.task != "fleet"))
     | group_by(.task)
-    | map(.[-1])[]
-    | [.task, (.seq | tostring), (.epoch | tostring),
-       ((.statusEndpoint // "") | tostring), (.statusIdent // "")]
+    | map(
+        (map(select(.present != false and .silent != true)) | last) as $p
+        | if $p == null
+          then [(.[-1].task), (.[-1].seq | tostring), (.[-1].epoch | tostring), "0", "-"]
+          else [$p.task, ($p.seq | tostring), ($p.epoch | tostring),
+                (($p.statusEndpoint // "") | tostring), ($p.statusIdent // "")]
+          end
+      )[]
     | @tsv
   ' "$STORE") || return 1
   while IFS=$(printf '\t') read -r task seq epoch endpoint ident; do
@@ -294,6 +379,131 @@ rebuild_outcome_indexes() {
 $rows
 EOF
   publish_outcome_index_ready "$(last_seq)"
+}
+
+# --- Repeat suppression ------------------------------------------------------
+#
+# The header's "Repeat suppression" bullet is the contract; this is its
+# mechanism. Every failure direction in the presentation decision and in the
+# window it opens PRESENTS the outcome, because an extra note costs the captain
+# a glance while a wrongly hidden one costs them the event. The one direction
+# that fails loudly instead is the captain-path window clear, which would
+# otherwise leave a window standing that hides the next routine note; it runs
+# only once the outcome is durable.
+
+DECIDED_PRESENT=true
+DECIDED_REPEAT=0
+PENDING_WINDOW=
+PENDING_COUNT=0
+PENDING_FINGERPRINT=
+
+dedupe_window() {
+  local value=${FM_BRANCH_OUTCOME_DEDUPE_WINDOW:-}
+  case "$value" in
+    ''|*[!0-9]*|0[0-9]*) printf '%s\n' "$DEDUPE_WINDOW_DEFAULT"; return 0 ;;
+  esac
+  if bounded_uint "$value"; then printf '%s\n' "$value"; else printf '%s\n' "$DEDUPE_WINDOW_DEFAULT"; fi
+}
+
+# Whitespace-normalized so a re-wrapped identical fact still reads as identical,
+# but nothing stronger: undersuppressing a repeat is far cheaper than
+# suppressing a genuine change.
+summary_fingerprint() { # <summary>
+  local normalized
+  normalized=$(printf '%s' "$1" | tr '\n\t' '  ' | awk '{ $1 = $1; print }')
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$normalized" | shasum -a 256 2>/dev/null | awk '{print substr($1, 1, 32)}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$normalized" | sha256sum 2>/dev/null | awk '{print substr($1, 1, 32)}'
+  else
+    printf '%s' "$normalized" | cksum | awk '{printf "%08x%08x\n", $1, $2}'
+  fi
+}
+
+dedupe_other_entries() { # <task> - every valid cache line except this task's
+  [ -f "$DEDUPE" ] && [ -r "$DEDUPE" ] && [ ! -L "$DEDUPE" ] || return 0
+  awk -F'\t' -v ver="$DEDUPE_VERSION" -v task="$1" '
+    NR == 1 { if ($0 != ver) exit 0; next }
+    NF == 4 && $1 != task && $1 ~ /^[A-Za-z0-9._-]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { print }
+  ' "$DEDUPE" 2>/dev/null || true
+}
+
+dedupe_replace() { # <task> <window-epoch> <suppressed-count> <fingerprint>
+  local tmp
+  tmp=$(mktemp "$STATE/.branch-outcome-dedupe.XXXXXX") || return 1
+  chmod 0600 "$tmp" || { rm -f -- "$tmp"; return 1; }
+  {
+    printf '%s\n' "$DEDUPE_VERSION"
+    # Newest window first, then truncate: the cache stays bounded by evicting
+    # the tasks whose windows are oldest and therefore closest to expiry anyway.
+    {
+      printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"
+      dedupe_other_entries "$1"
+    } | sort -t"$TAB" -k2,2nr | head -n "$DEDUPE_MAX_ENTRIES"
+  } > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  # A truncated write would still parse as a cache, so prove the version line
+  # landed rather than publishing a file whose first entry reads as a header.
+  [ "$(head -n 1 "$tmp")" = "$DEDUPE_VERSION" ] || { rm -f -- "$tmp"; return 1; }
+  mv -f -- "$tmp" "$DEDUPE"
+}
+
+dedupe_forget() { # <task> - drop this task's window entirely
+  local tmp
+  [ -f "$DEDUPE" ] && [ ! -L "$DEDUPE" ] || return 0
+  tmp=$(mktemp "$STATE/.branch-outcome-dedupe.XXXXXX") || return 1
+  chmod 0600 "$tmp" || { rm -f -- "$tmp"; return 1; }
+  {
+    printf '%s\n' "$DEDUPE_VERSION"
+    dedupe_other_entries "$1"
+  } > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  [ "$(head -n 1 "$tmp")" = "$DEDUPE_VERSION" ] || { rm -f -- "$tmp"; return 1; }
+  mv -f -- "$tmp" "$DEDUPE"
+}
+
+# Sets DECIDED_PRESENT and DECIDED_REPEAT for one routine, non-silent outcome,
+# and the PENDING_* window its caller commits once the row is durable. Reading
+# decides nothing else: a window recorded before the outcome exists could
+# suppress the retry of a report that was never stored or delivered.
+dedupe_decide() { # <task> <fingerprint> <now>
+  local task=$1 fingerprint=$2 now=$3 window entry stored_window stored_count stored_fingerprint age
+  local next_window=$3 next_count=0
+  DECIDED_PRESENT=true
+  DECIDED_REPEAT=0
+  window=$(dedupe_window)
+  entry=''
+  if [ -f "$DEDUPE" ] && [ -r "$DEDUPE" ] && [ ! -L "$DEDUPE" ]; then
+    entry=$(awk -F'\t' -v ver="$DEDUPE_VERSION" -v task="$task" '
+      NR == 1 { if ($0 != ver) exit 0; next }
+      NF == 4 && $1 == task && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { print $2 "\t" $3 "\t" $4; exit 0 }
+    ' "$DEDUPE" 2>/dev/null) || entry=''
+  fi
+  if [ -n "$entry" ] && [ "$window" -gt 0 ]; then
+    stored_window=${entry%%"$TAB"*}
+    stored_fingerprint=${entry##*"$TAB"}
+    stored_count=${entry#*"$TAB"}
+    stored_count=${stored_count%%"$TAB"*}
+    # The cache may never cost more than a repeated note, so a count that is
+    # not a safe integer to increment restarts at zero rather than wrapping
+    # into the row's `repeat` and failing every later read of the store.
+    if ! bounded_uint "$stored_count" || [ "$stored_count" -ge "$MAX_SAFE_SEQ" ]; then
+      stored_count=0
+    fi
+    if [ "$stored_fingerprint" = "$fingerprint" ]; then
+      age=$(( now - stored_window ))
+      # A backwards clock leaves the window unprovable, so present and restart
+      # it rather than suppressing on arithmetic nobody can trust.
+      if [ "$age" -ge 0 ] && [ "$age" -lt "$window" ]; then
+        DECIDED_PRESENT=false
+        next_window=$stored_window
+        next_count=$(( stored_count + 1 ))
+      else
+        DECIDED_REPEAT=$stored_count
+      fi
+    fi
+  fi
+  PENDING_WINDOW=$next_window
+  PENDING_COUNT=$next_count
+  PENDING_FINGERPRINT=$fingerprint
 }
 
 print_unread() {
@@ -458,29 +668,88 @@ case "$CMD" in
       exit 1
     fi
     SEQ=$(( LAST_SEQ + 1 ))
+    NOW=$(date +%s)
+    # Presentation decision (header: "Repeat suppression"). A captain outcome
+    # is always presented and reopens its task's window; a silent fleet review
+    # was already unrendered; only a routine note can repeat itself into noise.
+    DECIDED_PRESENT=true
+    DECIDED_REPEAT=0
+    # Both window actions are deferred until the row is durable: a window
+    # opened or left standing over an outcome that was never stored decides
+    # the presentation of a retry that nobody has seen.
+    WINDOW_ACTION=none
+    if [ "$SILENT" = true ]; then
+      DECIDED_PRESENT=false
+    elif [ "$VERDICT" = captain ]; then
+      WINDOW_ACTION=clear
+    else
+      dedupe_decide "$TASK" "$(summary_fingerprint "$SUMMARY")" "$NOW"
+      WINDOW_ACTION=open
+    fi
     capture_status_position "$TASK"
     rm -f -- "$OUTCOME_INDEX_READY" || { fm_lock_release "$LOCK"; exit 1; }
-    printf '{"seq":%s,"epoch":%s,"task":"%s","wake":"%s","verdict":"%s","summary":"%s","silent":%s,"statusEndpoint":%s,"statusIdent":"%s"}\n' \
-      "$SEQ" "$(date +%s)" "$(json_escape "$TASK")" "$(json_escape "$WAKE")" \
-      "$VERDICT" "$(json_escape "$SUMMARY")" "$SILENT" "$CAPTURED_STATUS_ENDPOINT" \
+    printf '{"seq":%s,"epoch":%s,"task":"%s","wake":"%s","verdict":"%s","summary":"%s","silent":%s,"present":%s,"repeat":%s,"statusEndpoint":%s,"statusIdent":"%s"}\n' \
+      "$SEQ" "$NOW" "$(json_escape "$TASK")" "$(json_escape "$WAKE")" \
+      "$VERDICT" "$(json_escape "$SUMMARY")" "$SILENT" "$DECIDED_PRESENT" "$DECIDED_REPEAT" \
+      "$CAPTURED_STATUS_ENDPOINT" \
       "$(json_escape "$CAPTURED_STATUS_IDENT")" >> "$STORE"
     # A task with neither a live meta nor a status log is retired: the branch
     # reports the teardown it just performed, and writing the index here would
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
-    if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
-        && ! write_outcome_index "$TASK" "$SEQ"; then
-      fm_lock_release "$LOCK"
-      echo "error: outcome was stored but its bounded task index could not be updated" >&2
-      exit 1
+    if [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; then
+      INDEX_SEQ=$SEQ
+      INDEX_ENDPOINT=$CAPTURED_STATUS_ENDPOINT
+      INDEX_IDENT=$CAPTURED_STATUS_IDENT
+      if [ "$DECIDED_PRESENT" != true ]; then
+        # The index claims coverage, and a suppressed row covered nothing: hold
+        # it at the last presented row so a status event the captain never saw
+        # stays uncovered for main's drain backstop.
+        if ! presented_status_position "$TASK"; then
+          fm_lock_release "$LOCK"
+          echo "error: outcome was stored but its presented coverage could not be resolved" >&2
+          exit 1
+        fi
+        INDEX_ENDPOINT=$PRESENTED_STATUS_ENDPOINT
+        INDEX_IDENT=$PRESENTED_STATUS_IDENT
+        [ -z "$PRESENTED_STATUS_SEQ" ] || INDEX_SEQ=$PRESENTED_STATUS_SEQ
+      fi
+      if ! write_outcome_index "$TASK" "$INDEX_SEQ" "$INDEX_ENDPOINT" "$INDEX_IDENT"; then
+        fm_lock_release "$LOCK"
+        echo "error: outcome was stored but its bounded task index could not be updated" >&2
+        exit 1
+      fi
     fi
     if ! publish_outcome_index_ready "$SEQ"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2
       exit 1
     fi
+    case "$WINDOW_ACTION" in
+      clear)
+        if ! dedupe_forget "$TASK"; then
+          fm_lock_release "$LOCK"
+          echo "error: outcome was stored but its task's repeat-suppression window could not be cleared" >&2
+          exit 1
+        fi
+        ;;
+      open)
+        # A window that cannot be recorded costs a repeated note next time,
+        # never a hidden one, so it never fails an append that already landed.
+        dedupe_replace "$TASK" "$PENDING_WINDOW" "$PENDING_COUNT" "$PENDING_FINGERPRINT" || true
+        ;;
+    esac
     fm_lock_release "$LOCK"
     printf '%s\n' "$SEQ"
+    ;;
+  forget)
+    [ "${1:-}" = --task ] || usage
+    TASK=${2:-}
+    [ "$#" -eq 2 ] || usage
+    outcome_index_path "$TASK" >/dev/null || usage
+    fm_lock_acquire_wait "$LOCK"
+    dedupe_forget "$TASK" || { fm_lock_release "$LOCK"; echo "error: could not drop the task's repeat-suppression window" >&2; exit 1; }
+    fm_lock_release "$LOCK"
     ;;
   unread)
     [ "$#" -eq 0 ] || usage
@@ -623,7 +892,9 @@ case "$CMD" in
         | ($verdicts | index("captain")) as $captain
         | .[0:($captain // length)][]
       ')
-      VISIBLE=$(printf '%s\n' "$REPLAYABLE" | jq -c 'select(.silent != true)')
+      # Legacy rows carry no presentation decision, so both guards are load
+      # bearing: `silent` covers them, `present` covers every current row.
+      VISIBLE=$(printf '%s\n' "$REPLAYABLE" | jq -c 'select(.silent != true and .present != false)')
       if [ -n "$VISIBLE" ]; then
         printf 'BRANCH OUTCOMES (handled by the supervision branch, not yet seen by this session):\n'
         printf '%s\n' "$VISIBLE"
