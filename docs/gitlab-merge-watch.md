@@ -178,6 +178,8 @@ $ PATH="$noglab" fm-pr-check.sh e6 https://github.com/kunchenguid/firstmate/pull
 armed: state/e6.check.sh
 ```
 
+A GitHub registration now also assigns the pull request to the account `gh-axi` is authenticated as, which this 2026-07-21 run predates; rerun that case with `FM_PR_ASSIGN_CAPTAIN=0` so the evidence stays a read of the arming path rather than a write to that pull request.
+
 ## Registration version
 
 The live registration tag is `fm-pr-poll-registration-v2`, which includes the provider tag.

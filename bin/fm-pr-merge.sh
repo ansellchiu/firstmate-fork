@@ -720,6 +720,18 @@ FIELDS
   FM_PR_GITHUB_QUEUE_OBSERVED=true
 }
 
+# The merge commit is receipt EVIDENCE, never part of the merge verdict, so it
+# is read on its own and always succeeds: a forge whose GraphQL schema rejects
+# the mergeCommit selection loses an anchor, and must never lose the
+# queue-aware outcome read that tells a queued pull request from an unmerged
+# one. Sets FM_PR_GITHUB_MERGE_COMMIT to the oid, or leaves it empty.
+github_read_merge_commit() {
+  local commit=''
+  FM_PR_GITHUB_MERGE_COMMIT=
+  commit=$(fm_pr_github_merge_commit "$PR_OWNER" "$PR_REPO" "$PR_NUMBER") || return 0
+  FM_PR_GITHUB_MERGE_COMMIT=$commit
+}
+
 github_read_outcome_with_gh_axi() {
   local output state
   if ! output=$(gh-axi pr view "$PR_NUMBER" --repo "$PR_OWNER/$PR_REPO" 2>/dev/null); then
@@ -863,7 +875,7 @@ METHODS
 }
 
 record_pr_metadata() {
-  if ! "$SCRIPT_DIR/fm-pr-check.sh" "$ID" "$URL"; then
+  if ! FM_PR_ASSIGN_CAPTAIN=0 "$SCRIPT_DIR/fm-pr-check.sh" "$ID" "$URL"; then
     return 1
   fi
   grep -qxF "pr=$URL" "$META" || {
@@ -1240,6 +1252,33 @@ esac
 # Reached only after the forge confirmed the merge landed: set -e exits on a
 # refused or failed merge above, and a queued forge merge exits without an
 # outcome while its existing poll remains armed.
+MERGE_COMMIT_SHA=
+MERGE_COMMIT_SOURCE=
+MERGE_HEAD_SHA=
+MERGE_HEAD_SOURCE=
+case "$PROVIDER" in
+  github)
+    # The merge commit, read in its own failure-tolerant call now that the
+    # merge is proved: the receipt's commit_sha anchor and its exact API-field
+    # source. An absent one costs the anchor and nothing else.
+    github_read_merge_commit
+    if [ -n "$FM_PR_GITHUB_MERGE_COMMIT" ]; then
+      MERGE_COMMIT_SHA=$FM_PR_GITHUB_MERGE_COMMIT
+      MERGE_COMMIT_SOURCE=$FM_PR_MERGE_COMMIT_SOURCE
+    fi
+    ;;
+  gitlab)
+    # The merge bound itself to this verified SOURCE head (--sha), which under
+    # any strategy but fast-forward is not the commit that ends up on the
+    # target branch, and glab does not read the merge commit back. So it is
+    # recorded as pr_head: the receipt's commit_sha anchor answers "what
+    # landed" and must never carry a head sha instead.
+    if [ -n "$FM_PR_MERGE_HEAD" ]; then
+      MERGE_HEAD_SHA=$FM_PR_MERGE_HEAD
+      MERGE_HEAD_SOURCE="glab mr merge --sha $FM_PR_MERGE_HEAD"
+    fi
+    ;;
+esac
 outcome_rc=0
 fm_merge_outcome_report "$FM_HOME" "$STATE" "$ID" "$URL" self \
   "${FM_PR_MERGE_AUTHORITY:-}" || outcome_rc=$?

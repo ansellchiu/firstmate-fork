@@ -382,6 +382,7 @@ run_pr_merge() {
   FM_TEST_GH_AXI_LOG="$case_dir/gh-axi.log" \
   FM_TEST_GH_LOG="$case_dir/gh.log" \
   FM_TEST_GH_OUTCOME="$case_dir/github-outcome" \
+  FM_TEST_GH_MERGE_COMMIT="${FM_TEST_GH_MERGE_COMMIT:-}" \
   FM_TEST_GH_RULES="$case_dir/github-rules" \
   FM_TEST_GH_VIEW_JSON="$case_dir/github-view.json" \
   FM_TEST_GH_HEAD="$case_dir/github-head" \
@@ -663,6 +664,8 @@ test_github_auto_merge_without_queue_refuses_legibly() {
     assert_logged_gh_merge "$case_dir" 66 example/repo "$spelling" --merge
     [ "$(grep -c '^pr merge ' "$case_dir/gh.log")" -eq 1 ] \
       || fail "github-auto-no-queue: the wrapper attempted more than one merge"
+    assert_no_grep add-assignee "$case_dir/gh-axi.log" \
+      "github-auto-no-queue: merging re-announced a PR that is leaving review"
     assert_grep 'pr=https://github.com/example/repo/pull/66' "$case_dir/state/task-x1.meta" \
       "github-auto-no-queue: the attempted merge lost its PR reference"
     assert_present "$case_dir/state/task-x1.check.sh" \
@@ -1188,6 +1191,62 @@ test_github_queued_outcome_is_verified() {
   assert_grep 'pr=https://github.com/example/repo/pull/53' "$case_dir/state/task-x1.meta" \
     "github-verified-queued: the queued PR was not recorded for teardown"
   pass "fm-pr-merge accepts and accurately reports a GitHub merge-queue entry"
+}
+
+# The merge commit is receipt evidence, not part of the merge verdict: a forge
+# whose GraphQL schema rejects the mergeCommit selection must still get the
+# queue-aware outcome read, so a queued pull request is never degraded into an
+# unmerged refusal by the gh-axi fallback (which cannot observe the queue).
+test_github_merge_commit_selection_failure_keeps_queue_observation() {
+  local case_dir rc
+  case_dir=$(make_case github-merge-commit-unsupported)
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 6262626262626262626262626262626262626262
+  # Reject only the mergeCommit selection, exactly as an older schema would.
+  cat > "$case_dir/fakebin/gh" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "\$FM_TEST_GH_LOG"
+case "\${1:-} \${2:-}" in
+  "pr view")
+    case " \$* " in
+      *headRefOid*) printf '%s\n' '6262626262626262626262626262626262626262' ; exit 0 ;;
+    esac
+    ;;
+  "api graphql")
+    case " \$* " in
+      *mergeCommit*)
+        echo "error: Field 'mergeCommit' doesn't exist on type 'PullRequest'" >&2
+        exit 1
+        ;;
+    esac
+    cat "\$FM_TEST_GH_OUTCOME"
+    exit 0
+    ;;
+  api\ *)
+    cat "\$FM_TEST_GH_RULES"
+    exit 0
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$case_dir/fakebin/gh"
+  write_github_outcome "$case_dir" OPEN false true master
+  : > "$case_dir/gh-axi.log"
+  : > "$case_dir/gh.log"
+
+  set +e
+  run_pr_merge "$case_dir" task-x1 https://github.com/example/repo/pull/71 -- --auto --merge \
+    > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "github-merge-commit-unsupported: a queued PR should still succeed"
+  assert_grep 'verified: https://github.com/example/repo/pull/71 is queued' \
+    "$case_dir/stdout" \
+    "github-merge-commit-unsupported: the queue entry degraded into an unmerged outcome"
+  assert_no_grep 'pr view 71 --repo example/repo' "$case_dir/gh-axi.log" \
+    "github-merge-commit-unsupported: the outcome read fell back to the queue-blind gh-axi view"
+  pass "a forge that rejects the mergeCommit selection keeps its queue-aware outcome read"
 }
 
 test_github_queue_required_refusal_names_retry_flags() {
@@ -2179,6 +2238,7 @@ test_github_without_gh_failed_read_keeps_bookkeeping
 test_github_merged_outcome_is_verified
 test_github_verified_merge_requires_poll_recording
 test_github_queued_outcome_is_verified
+test_github_merge_commit_selection_failure_keeps_queue_observation
 test_github_queue_required_refusal_names_retry_flags
 test_extra_merge_args_forwarded
 test_missing_meta_refuses_before_merge

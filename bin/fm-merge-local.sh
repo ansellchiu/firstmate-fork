@@ -135,4 +135,21 @@ fm_lock_release "$MERGE_CONTROL_LOCK" || true
 MERGE_CONTROL_LOCK=
 [ "$merge_status" -eq 0 ] || exit "$merge_status"
 after=$(git -C "$PROJ" rev-parse --short "$DEFAULT")
+after_full=$(git -C "$PROJ" rev-parse "$DEFAULT")
+
+# Structural receipt (fm-receipt.v1, bin/fm-receipt.sh owns the format): the
+# local landing writes the task's typed landing receipt here - the exact
+# default-branch head and the command that read it - so a local-only ship
+# never ends up with landed work and no receipt. Failure is loud but not
+# fatal: re-running this command after the fast-forward repairs it, and
+# bin/fm-teardown.sh refuses a ship task whose receipt is missing.
+if ! FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
+    "$SCRIPT_DIR/fm-receipt.sh" write-landing --task "$ID" \
+      --commit-sha "$after_full" \
+      --sha-source "git -C $PROJ rev-parse $DEFAULT" \
+      --verification verified \
+      --digest "Merged $BRANCH into local $DEFAULT" >/dev/null; then
+  printf 'actionable: task %s landed locally but its landing receipt could not be written; teardown will refuse cleanup until fm-merge-local.sh is re-run successfully\n' "$ID" >&2
+fi
+
 echo "merged $BRANCH into local $DEFAULT ($before -> $after) in $PROJ"

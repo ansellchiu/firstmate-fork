@@ -1189,6 +1189,55 @@ fm_pr_poll_retirement_recover_all() {
   [ -z "$FM_PR_POLL_RETIREMENT_REJECTED" ]
 }
 
+# --- landed merge commit -----------------------------------------------------
+# The one reader of "which commit landed on the target branch", shared by the
+# home that performs a merge (bin/fm-pr-merge.sh) and the poll that detects one
+# the forge performed later (bin/fm-watch.sh), so both record the same anchor
+# from the same field. Evidence only: it is read once at merge confirmation and
+# never gates a merge verdict, so every failure - no gh, a refused query, a
+# schema without the field, an unmerged PR - returns non-zero and leaves the
+# caller recording no landed commit rather than a wrong one.
+# shellcheck disable=SC2034 # Public anchor source consumed by sourcing callers.
+FM_PR_MERGE_COMMIT_SOURCE='gh api graphql pullRequest{mergeCommit{oid}}'
+
+# The read runs inside the watcher's main loop, where every other external
+# command is already hard-bounded, so it takes the repo's shared bound rather
+# than trusting the forge to answer. bin/fm-timeout-lib.sh owns bounded
+# execution here, and only this one reader needs it: the dozen entrypoints that
+# source this library must not gain a load-time dependency on it. Loaded lazily
+# the way bin/fm-wake-lib.sh loads the same owner; its top-level set -u is not
+# imposed on this library's consumers.
+_FM_PR_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_fm_pr_require_timeout() {
+  command -v fm_run_timed >/dev/null 2>&1 && return 0
+  local nounset=off
+  case $- in *u*) nounset=on ;; esac
+  # shellcheck source=bin/fm-timeout-lib.sh
+  # shellcheck disable=SC1091
+  . "$_FM_PR_LIB_DIR/fm-timeout-lib.sh" || return 1
+  [ "$nounset" = on ] || set +u
+  command -v fm_run_timed >/dev/null 2>&1
+}
+
+fm_pr_github_merge_commit() {  # <owner> <repo> <number>
+  local owner=$1 repo=$2 number=$3 commit bound
+  command -v gh >/dev/null 2>&1 || return 1
+  _fm_pr_require_timeout || return 1
+  [ -n "$owner" ] && [ -n "$repo" ] || return 1
+  case "$number" in ''|*[!0-9]*) return 1 ;; esac
+  bound=${FM_PR_MERGE_COMMIT_TIMEOUT:-20}
+  case "$bound" in ''|*[!0-9]*|0) bound=20 ;; esac
+  # shellcheck disable=SC2016  # GraphQL variables are literal query syntax.
+  commit=$(fm_run_timed "$bound" gh api graphql \
+    -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){mergeCommit{oid}}}}' \
+    -F "owner=$owner" -F "repo=$repo" -F "number=$number" \
+    --jq '.data.repository.pullRequest.mergeCommit.oid // ""' 2>/dev/null) || return 1
+  # An oid the receipt writer would refuse costs the anchor here, never the
+  # delivery path that carries it.
+  fm_pr_head_valid "$commit" || return 1
+  printf '%s' "$commit"
+}
+
 # --- merge-notification canonical-identity marker ----------------------------
 # A merged-PR poll retires (fm_pr_poll_retirement_recover_one) in the same
 # watcher cycle that detects it, which is normally enough on its own to stop a
