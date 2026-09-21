@@ -22,7 +22,8 @@ LOCK_PID=$$
 cat > "$TMP_ROOT/driver.mjs" <<'JS'
 // Drives the extension against a stub Pi and prints one trace line per
 // observable effect. ACTIONS is a comma list: wait:<ms>, raw:<bytes>,
-// input:<source>:<text>, shutdown.
+// input:<source>:<text>, lock:self, shutdown.
+import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const extension = await import(pathToFileURL(process.env.EXT).href);
@@ -74,6 +75,10 @@ for (const action of (process.env.ACTIONS || "").split(",").filter(Boolean)) {
     if (result !== undefined) trace.push(`raw-altered ${JSON.stringify(result)}`);
   } else if (verb === "input") {
     fire("input", { type: "input", source: rest[0], text: rest.slice(1).join(":") });
+  } else if (verb === "lock") {
+    // The home takes its lock after session_start, the way a cold Pi start does
+    // when the agent later runs bin/fm-session-start.sh.
+    writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
   } else if (verb === "shutdown") fire("session_shutdown");
   else throw new Error(`unknown action ${action}`);
 }
@@ -190,11 +195,25 @@ test_scope_gates() {
   [ "$out" = "subscriptions=0" ] || fail "rpc mode armed the observer: $out"
   pass "non-TUI modes stay inert"
 
+  # Ownership is mutable, so it gates arming rather than subscription: what
+  # must not happen is a countdown or an observation, not the subscription.
   home=$(fixture scope-lock observe)
   printf '%s\n' 999999 >"$home/state/.lock"
-  out=$(drive "$home" 0.1 0.1 "wait:400") || fail "foreign-lock driver failed"
-  [ "$out" = "subscriptions=0" ] || fail "a session that does not hold the home lock armed the observer: $out"
-  pass "a worker that does not hold the home lock stays inert"
+  out=$(drive "$home" 0.1 0.1 "wait:400,raw:x,wait:400") || fail "foreign-lock driver failed"
+  printf '%s\n' "$out" | grep -q 'Auto-AFK in' && fail "a session that does not hold the home lock ran a countdown: $out"
+  [ -e "$home/state/.pi-auto-afk-observations" ] \
+    && fail "a session that does not hold the home lock wrote an observation log"
+  pass "a worker that does not hold the home lock observes nothing"
+
+  # A cold Pi start takes the lock only after session_start, so ownership must
+  # be picked up lazily instead of latched.
+  home=$(fixture scope-lock-late observe)
+  printf '%s\n' 999999 >"$home/state/.lock"
+  out=$(drive "$home" 0.2 5 "wait:300,lock:self,raw:x,wait:600") || fail "late-lock driver failed"
+  printf '%s\n' "$out" | grep -q 'Auto-AFK in' \
+    || fail "a session that took the home lock after session_start stayed dead: $out"
+  log_of "$home" | grep -q 'countdown-start' || fail "late lock pickup recorded nothing: $(log_of "$home")"
+  pass "a lock acquired after session_start arms the observer on the next observed input"
 
   home=$(fixture scope-no-raw observe)
   out=$(drive "$home" 0.2 5 "wait:600,input:interactive:hello,wait:600" NO_RAW=1) \
@@ -210,11 +229,14 @@ test_scope_gates() {
   [ "$out" = "subscriptions=0" ] || fail "a secondmate home armed the observer: $out"
   pass "a secondmate home, which is idle by design, stays inert"
 
+  # Away state is mutable too, so the same observable outcome is the assertion.
   for existing in .afk-contract .afk .afk-return-catchup; do
     home=$(fixture "scope-$existing" observe)
     : >"$home/state/$existing"
-    out=$(drive "$home" 0.1 0.1 "wait:400") || fail "$existing driver failed"
-    [ "$out" = "subscriptions=0" ] || fail "state/$existing present but the observer armed: $out"
+    out=$(drive "$home" 0.1 0.1 "wait:400,raw:x,wait:400") || fail "$existing driver failed"
+    printf '%s\n' "$out" | grep -q 'Auto-AFK in' && fail "state/$existing present but a countdown ran: $out"
+    [ -e "$home/state/.pi-auto-afk-observations" ] \
+      && fail "state/$existing present but the observer wrote an observation log"
   done
   pass "an existing away posture, legacy flag, or unfinished return suppresses the observer"
 }

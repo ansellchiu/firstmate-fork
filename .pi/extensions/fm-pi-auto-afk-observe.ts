@@ -80,16 +80,26 @@ function ownsHomeLock(): boolean {
   return ownsLock;
 }
 
-// A secondmate is deliberately idle with no captain in its pane, so idleness
-// there means nothing. Lock ownership only separates the helm-owning primary
-// from a worker in another worktree; it does not separate main from a
-// secondmate primary, which is why both checks are required. Cheapest gate
-// first, ownership last: this runs on every observed byte, and a home that
-// never opted in must not reach a process spawn at all.
-function enabled(ctx: ExtensionContext): boolean {
+// The gates that cannot change while one Pi process runs, so they are the ones
+// that decide whether this session subscribes to anything at all. A secondmate
+// is deliberately idle with no captain in its pane, so idleness there means
+// nothing.
+function sessionStable(ctx: ExtensionContext): boolean {
   if (ctx.mode !== "tui") return false;
   if (!observeRequested()) return false;
-  if (existsSync(resolve(fmHome, ".fm-secondmate-home"))) return false;
+  return !existsSync(resolve(fmHome, ".fm-secondmate-home"));
+}
+
+// Lock ownership and away state are the mutable gates and are never sampled
+// once: a cold Pi start takes the home lock only when the session later runs
+// bin/fm-session-start.sh, after this extension's session_start has fired, and
+// a captain who returns from the away posture mid-session must get the observer
+// back without restarting Pi. Cheapest gate first, ownership last: this runs on
+// every observed byte, and a home that never opted in must not reach a process
+// spawn at all. Ownership also does not separate main from a secondmate
+// primary, which is why the marker above is a separate check.
+function enabled(ctx: ExtensionContext): boolean {
+  if (!sessionStable(ctx)) return false;
   if (awayStateExists()) return false;
   return ownsHomeLock();
 }
@@ -229,7 +239,7 @@ export default function extension(pi: ExtensionAPI): void {
     // A replacement session starts a fresh observation generation; no deadline
     // is persisted across reload, so stale state cannot trigger a countdown.
     standDown(ctx);
-    if (!enabled(ctx)) return;
+    if (!sessionStable(ctx)) return;
     removeTerminalInput = ctx.ui.onTerminalInput?.((data) => {
       // Every nonempty byte counts, including terminal protocol replies and
       // anything written to the PTY by another process. Cancelling on
@@ -241,7 +251,9 @@ export default function extension(pi: ExtensionAPI): void {
     arm(ctx);
   });
 
-  // Backup for a submitted message when the raw listener is unavailable.
+  // Backup for a submitted message when no raw byte was delivered, in a session
+  // that did subscribe the raw listener; a session that did not subscribe has
+  // nothing armed for this to reset.
   // `extension` is Firstmate's own pi.sendUserMessage traffic (watcher wakes,
   // growth, turn-end follow-ups) and must never count as the captain. `rpc`
   // cannot say whether its caller is a human, so it is not counted either.
