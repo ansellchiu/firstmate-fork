@@ -1,0 +1,7 @@
+=== B. default off: no config/pi-auto-afk ===
+Same scripted session on a home that never opted in.
+
+t+    0s  pi          session_start (mode=tui)
+
+state/.pi-auto-afk-observations:
+    (file does not exist)

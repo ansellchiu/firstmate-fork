@@ -1,0 +1,32 @@
+=== D. firstmate's own pi.sendUserMessage traffic does not count as the captain ===
+An extension-sourced input mid-countdown; then a submitted interactive one.
+
+t+    0s  pi          session_start (mode=tui)
+t+    0s  pi          extension subscribed to raw terminal input
+t+3.007s  status bar  | Auto-AFK in 5s - any Pi input cancels; /afk enters now |
+t+4.008s  status bar  | Auto-AFK in 4s - any Pi input cancels; /afk enters now |
+t+5.006s  pi          input event, source=extension, text="watcher wake"
+t+5.008s  status bar  | Auto-AFK in 3s - any Pi input cancels; /afk enters now |
+t+ 6.01s  status bar  | Auto-AFK in 2s - any Pi input cancels; /afk enters now |
+t+ 7.01s  status bar  | Auto-AFK in 1s - any Pi input cancels; /afk enters now |
+t+8.009s  status bar  [ empty ]
+t+8.009s  notification (info)  Auto-AFK would enter now (observe mode; no away posture entered)
+
+state/.pi-auto-afk-observations:
+    2026-09-21T17:27:43.347Z	observe	countdown-start	idle=3	countdown=5
+    2026-09-21T17:27:48.350Z	observe	would-enter	idle=3	countdown=5
+
+--- and a real submitted interactive message, same timing ---
+
+t+    0s  pi          session_start (mode=tui)
+t+0.001s  pi          extension subscribed to raw terminal input
+t+3.006s  status bar  | Auto-AFK in 5s - any Pi input cancels; /afk enters now |
+t+4.009s  status bar  | Auto-AFK in 4s - any Pi input cancels; /afk enters now |
+t+5.006s  pi          input event, source=interactive, text="hello"
+t+5.006s  status bar  [ empty ]
+t+8.009s  status bar  | Auto-AFK in 5s - any Pi input cancels; /afk enters now |
+
+state/.pi-auto-afk-observations:
+    2026-09-21T17:27:52.416Z	observe	countdown-start	idle=3	countdown=5
+    2026-09-21T17:27:54.416Z	observe	cancelled	idle=3	countdown=5	remaining=3
+    2026-09-21T17:27:57.419Z	observe	countdown-start	idle=3	countdown=5

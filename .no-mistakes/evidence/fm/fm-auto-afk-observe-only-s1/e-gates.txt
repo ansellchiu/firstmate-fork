@@ -1,0 +1,27 @@
+=== E. gates: an existing away posture, a foreign lock, a secondmate home, non-tui ===
+
+--- state/.afk-contract already present ---
+t+    0s  pi          session_start (mode=tui)
+t+    0s  pi          extension subscribed to raw terminal input
+
+state/.pi-auto-afk-observations:
+    (file does not exist)
+
+--- home lock held by another process (pid 999999) ---
+t+0.001s  pi          session_start (mode=tui)
+t+0.001s  pi          extension subscribed to raw terminal input
+
+state/.pi-auto-afk-observations:
+    (file does not exist)
+
+--- .fm-secondmate-home marker present ---
+t+    0s  pi          session_start (mode=tui)
+
+state/.pi-auto-afk-observations:
+    (file does not exist)
+
+--- pi running in rpc mode, not tui ---
+t+    0s  pi          session_start (mode=rpc)
+
+state/.pi-auto-afk-observations:
+    (file does not exist)

@@ -1,0 +1,23 @@
+=== C. one raw terminal byte during the countdown cancels it ===
+
+t+    0s  pi          session_start (mode=tui)
+t+    0s  pi          extension subscribed to raw terminal input
+t+3.005s  status bar  | Auto-AFK in 5s - any Pi input cancels; /afk enters now |
+t+4.006s  status bar  | Auto-AFK in 4s - any Pi input cancels; /afk enters now |
+t+5.003s  captain     types "h" (raw terminal byte)
+t+5.003s  status bar  [ empty ]
+t+5.004s  pi          bytes handed back to pi: unchanged
+t+8.007s  status bar  | Auto-AFK in 5s - any Pi input cancels; /afk enters now |
+t+9.007s  status bar  | Auto-AFK in 4s - any Pi input cancels; /afk enters now |
+t+10.009s  status bar  | Auto-AFK in 3s - any Pi input cancels; /afk enters now |
+
+state/.pi-auto-afk-observations:
+    2026-09-21T17:27:32.275Z	observe	countdown-start	idle=3	countdown=5
+    2026-09-21T17:27:34.273Z	observe	cancelled	idle=3	countdown=5	remaining=4
+    2026-09-21T17:27:37.276Z	observe	countdown-start	idle=3	countdown=5
+
+away-posture state after the run:
+    state/.afk-contract  absent
+    state/.afk  absent
+    state/.afk-return-catchup  absent
+    afk-contracts/  absent

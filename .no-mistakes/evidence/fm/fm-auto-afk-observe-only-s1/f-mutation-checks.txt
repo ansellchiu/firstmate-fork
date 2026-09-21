@@ -1,0 +1,25 @@
+=== Mutation checks: do the tests actually fail when the behaviour breaks? ===
+Each mutation is applied to .pi/extensions/fm-pi-auto-afk-observe.ts, the suite
+is run, and the source is restored. A mutation that the suite still passes would
+mean the assertion has no discriminating power.
+
+--- M1: count firstmate's own extension-sourced traffic as the captain ---
+    (if (event.source === "interactive") -> if (event.source !== "rpc"))
+not ok - extension input cancelled the countdown: 2026-09-21T17:28:55.903Z	observe	countdown-start	idle=0.2	countdown=1
+
+--- M2: let timers survive session shutdown (drop standDown from the handler) ---
+    standDown occurrences now: 6
+not ok - a timer survived session shutdown and reached expiry
+
+--- M3: ignore config/pi-auto-afk and arm every home (default-off broken) ---
+not ok - an opted-out home produced observable effects: subscribe
+
+--- M4: expiry writes the away posture (consent boundary broken) ---
+not ok - expiry created away-posture state: .afk-contract
+
+--- source restored; suite on the real code ---
+ok - a secondmate home, which is idle by design, stays inert
+ok - an existing away posture, legacy flag, or unfinished return suppresses the observer
+ok - session shutdown drops the listener and every pending timer
+--- M5: make the countdown a decremented counter instead of an absolute deadline ---
+not ok - a delayed repaint reported time a decremented counter would show, not the time left: subscribe

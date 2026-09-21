@@ -1,0 +1,22 @@
+=== A. armed home: config/pi-auto-afk = observe (idle 3s / countdown 5s) ===
+What the captain sees in the Pi status bar, and what expiry does.
+
+t+    0s  pi          session_start (mode=tui)
+t+0.001s  pi          extension subscribed to raw terminal input
+t+3.006s  status bar  | Auto-AFK in 5s - any Pi input cancels; /afk enters now |
+t+4.006s  status bar  | Auto-AFK in 4s - any Pi input cancels; /afk enters now |
+t+5.008s  status bar  | Auto-AFK in 3s - any Pi input cancels; /afk enters now |
+t+6.009s  status bar  | Auto-AFK in 2s - any Pi input cancels; /afk enters now |
+t+7.011s  status bar  | Auto-AFK in 1s - any Pi input cancels; /afk enters now |
+t+8.008s  status bar  [ empty ]
+t+8.008s  notification (info)  Auto-AFK would enter now (observe mode; no away posture entered)
+
+state/.pi-auto-afk-observations:
+    2026-09-21T17:27:14.132Z	observe	countdown-start	idle=3	countdown=5
+    2026-09-21T17:27:19.135Z	observe	would-enter	idle=3	countdown=5
+
+away-posture state after the run:
+    state/.afk-contract  absent
+    state/.afk  absent
+    state/.afk-return-catchup  absent
+    afk-contracts/  absent
