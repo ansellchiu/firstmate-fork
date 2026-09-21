@@ -1817,17 +1817,18 @@ if (rows().length !== 3) throw new Error(`late close did not restore one success
 if (prompts.length !== 1) {
   throw new Error(`late ${process.env.FM_LATE_KIND} close sent an extra wake: ${prompts.join(" | ")}`);
 }
-// Folded is not dropped: once the outstanding follow-up is consumed, the next
-// notification accounts for the late actionable wake that folded into it. A
-// non-actionable late close carried no wake, so it accounts for nothing.
+// Consuming the outstanding follow-up runs the drain, which presents and
+// acknowledges every row waiting - including the one a folded late wake
+// enqueued. The next notification therefore names no folded cycles: those
+// cycles are cleared, not pending.
 handlers.get("before_agent_start")?.({ prompt: prompts[0] });
 writeFileSync(process.env.FM_RELEASE2_FILE, "release\n");
 await waitFor(() => prompts.length >= 2, "wake after the outstanding follow-up was consumed");
-const foldedLate = /1 further watcher cycle\(s\) were folded into the previous notification/.test(prompts[1]);
-if (process.env.FM_LATE_KIND === "actionable") {
-  if (!foldedLate) throw new Error(`the late actionable wake was dropped rather than folded: ${prompts[1]}`);
-} else if (foldedLate) {
-  throw new Error(`a non-actionable late close was counted as a folded wake: ${prompts[1]}`);
+if (/further watcher cycle\(s\) were folded into the previous notification/.test(prompts[1])) {
+  throw new Error(`a ${process.env.FM_LATE_KIND} close claimed folded cycles the drain already cleared: ${prompts[1]}`);
+}
+if (!prompts[1].includes("post-consume wake")) {
+  throw new Error(`the wake after consumption was lost: ${prompts[1]}`);
 }
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 await new Promise((resolve) => setTimeout(resolve, 80));
@@ -5054,8 +5055,14 @@ for (let seq = 1; seq <= 8; seq += 1) {
   }
 }
 // Folding must not blind the captain permanently: once the model consumes the
-// outstanding follow-up, the next actionable cycle notifies again.
+// outstanding follow-up, the next actionable cycle notifies again. The
+// consumed follow-up's single drain presents and acknowledges all eight rows,
+// and one row lands after it; the resumed cycle enqueues a ninth.
 handlers.get("before_agent_start")({ prompt: sent[0] });
+writeFileSync(
+  `${process.env.FM_HOME}/state/.wake-queue`,
+  `1789797080\t10\tsignal\tburst10.status\tsignal: ${process.env.FM_HOME}/state/burst10.status\n`,
+);
 writeFileSync(process.env.FM_BURST_RESUME_FILE, "resume\n");
 for (let i = 0; i < 500; i += 1) {
   if (sent.length >= 2) break;
@@ -5064,12 +5071,14 @@ for (let i = 0; i < 500; i += 1) {
 if (sent.length !== 2) {
   throw new Error(`a wake after consumption did not notify again: ${sent.length} follow-ups`);
 }
-if (!/4 further watcher cycle\(s\) were folded into the previous notification/.test(sent[1])) {
-  throw new Error(`the next follow-up did not report the folded burst: ${sent[1]}`);
+// The folded cycles rode the follow-up the drain just cleared, so this
+// notification must not point the captain back at cycles he already retired.
+if (/further watcher cycle\(s\) were folded into the previous notification/.test(sent[1])) {
+  throw new Error(`the next follow-up claimed cycles the drain already cleared: ${sent[1]}`);
 }
-// A row that arrived after the first notification was queued: every later
-// notification states the burst at ITS own delivery, not the first one's.
-if (!/(^|[^0-9])6 notification\(s\) were waiting when this was queued/.test(sent[1])) {
+// Every later notification states the burst at ITS own delivery, not the
+// first one's: two rows survive the drain, not the five it presented.
+if (!/(^|[^0-9])2 notification\(s\) were waiting when this was queued/.test(sent[1])) {
   throw new Error(`the next follow-up did not re-read the burst size: ${sent[1]}`);
 }
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
@@ -5192,7 +5201,16 @@ await waitFor(() => arms() >= racedAt + 3, "the watcher stopped cycling after a 
 if (sent.length !== 4) {
   throw new Error(`a settle raced by a busy run disarmed the fold: ${sent.length} follow-ups`);
 }
-settled({ type: "agent_settled" }, { isIdle: () => true });
+// Nor is a settle that reports idle while a message is still queued: the
+// follow-up is about to be delivered, and one drain covers the cycles folding
+// behind it. Disarming here would cost the captain one turn per later cycle.
+const queuedAt = arms();
+settled({ type: "agent_settled" }, { isIdle: () => true, hasPendingMessages: () => true });
+await waitFor(() => arms() >= queuedAt + 3, "the watcher stopped cycling after a queued-message settle");
+if (sent.length !== 4) {
+  throw new Error(`a settle with a queued message disarmed the fold: ${sent.length} follow-ups`);
+}
+settled({ type: "agent_settled" }, { isIdle: () => true, hasPendingMessages: () => false });
 const settledAt = arms();
 await waitFor(() => sent.length >= 5, "a run settling without consumption never released a wake");
 if (arms() - settledAt >= 10) {
@@ -5308,11 +5326,11 @@ if (/notification\(s\) were waiting/.test(sent[0])) {
 if (!sent[0].includes("signal: ")) {
   throw new Error(`the delivered wake lost its own outcome: ${sent[0]}`);
 }
-// The next notification carries a folded-cycle line, which is the message shape
-// that renders the burst count at all - so this is where a fabricated number
-// would be shown to the captain.
+// Nothing consumes that follow-up, so later cycles fold into it until the
+// bound releases one on its own. That notification carries a folded-cycle
+// line, which is the message shape that renders the burst count at all - so
+// this is where a fabricated number would be shown to the captain.
 await waitFor(() => arms() >= 3, "the watcher stopped cycling behind the first wake");
-handlers.get("before_agent_start")?.({ prompt: sent[0] });
 await waitFor(() => sent.length >= 2, "a wake after the fold never reached the captain");
 if (!/further watcher cycle\(s\) were folded into the previous notification/.test(sent[1])) {
   throw new Error(`expected a folded-cycle notification to read the burst count: ${sent[1]}`);

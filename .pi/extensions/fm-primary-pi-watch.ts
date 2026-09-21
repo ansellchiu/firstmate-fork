@@ -636,7 +636,10 @@ export default function (pi: ExtensionAPI) {
     for (const [token, wake] of owner.unconsumedWakes) {
       if (wake.content !== text) continue;
       owner.unconsumedWakes.delete(token);
-      if (owner.outstandingWake === token) owner.outstandingWake = null;
+      if (owner.outstandingWake === token) {
+        owner.outstandingWake = null;
+        owner.foldedWakes = 0;
+      }
       wake.pending.delivered = true;
       try {
         finishPendingActionable(owner, wake.pending);
@@ -1246,14 +1249,20 @@ export default function (pi: ExtensionAPI) {
   // never will be: it was dropped, cancelled, or delivered as text consumeWake
   // could not match. (An agent_end is not that point; the queued continuation
   // carrying the follow-up runs after it. A settle that raced another
-  // extension's fresh run is not that point either, which is why it is paired
-  // with isIdle() exactly as bin/fm-spawn.sh's busy-state owner pairs it.) It is no longer a doorbell in front of the
-  // captain, so nothing folds into it and the next wake is delivered on its
-  // own. The record itself stays pending: only consumption or the replacement
-  // handoff retires it.
+  // extension's fresh run is not that point either, and neither is one with a
+  // message still queued: both mean a run carrying the follow-up may still be
+  // ahead, so isIdle() is paired with hasPendingMessages() exactly as this
+  // repo's sibling owner pairs them - fm-primary-growth.ts handleHard, "a
+  // queued wake or a non-idle context means the boundary this handler was
+  // called at is not the quiet moment it looked like".) It is no longer a
+  // doorbell in front of the captain, so nothing folds into it and the next
+  // wake is delivered on its own. The record itself stays pending: only
+  // consumption or the replacement handoff retires it.
   pi.on?.("agent_settled", (_event, ctx) => {
     if (ctx && typeof ctx.isIdle === "function" && !ctx.isIdle()) return;
+    if (ctx && typeof ctx.hasPendingMessages === "function" && ctx.hasPendingMessages()) return;
     generation.outstandingWake = null;
+    generation.foldedWakes = 0;
   });
 
   pi.on?.("session_start", async () => {

@@ -66,19 +66,37 @@ export function runCommandAsync(
       resolve({ status, stdout, stderr: detail ? `${stderr}${detail}` : stderr });
     };
     let child;
+    // A shell wrapper is a process group leader here, so a wedged GRANDCHILD
+    // (a `ps` liveness fallback, say) cannot outlive the kill still holding
+    // the inherited stdout/stderr pipes: the whole group goes. Windows has no
+    // process groups to lead and would give a detached child its own console,
+    // so it keeps the plain spawn and the direct kill.
+    const ownsGroup = process.platform !== "win32";
     try {
       child = spawn(command, [...args], {
         cwd: options.cwd,
         env: options.env,
         stdio: ["pipe", "pipe", "pipe"],
+        detached: ownsGroup,
       });
     } catch (error) {
       finish(null, error instanceof Error ? error.message : String(error));
       return;
     }
+    const kill = (signal?: NodeJS.Signals): void => {
+      if (ownsGroup && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, signal ?? "SIGTERM");
+          return;
+        } catch {
+          // The group is already gone, or was never ours to signal.
+        }
+      }
+      child.kill(signal);
+    };
     if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
       timer = setTimeout(() => {
-        child.kill("SIGKILL");
+        kill("SIGKILL");
         finish(null, `timed out after ${options.timeoutMs}ms`);
       }, options.timeoutMs);
       timer.unref?.();
@@ -88,7 +106,7 @@ export function runCommandAsync(
       if (settled) return;
       const bytes = Buffer.byteLength(chunk, "utf8");
       if (stdoutBytes + bytes > maxBuffer) {
-        child.kill();
+        kill();
         finish(null, `stdout exceeded ${maxBuffer} bytes`);
         return;
       }
@@ -100,7 +118,7 @@ export function runCommandAsync(
       if (settled) return;
       const bytes = Buffer.byteLength(chunk, "utf8");
       if (stderrBytes + bytes > maxBuffer) {
-        child.kill();
+        kill();
         finish(null, `stderr exceeded ${maxBuffer} bytes`);
         return;
       }
