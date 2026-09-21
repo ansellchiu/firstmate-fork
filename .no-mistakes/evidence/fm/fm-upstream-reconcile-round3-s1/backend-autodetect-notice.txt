@@ -1,0 +1,10 @@
+### auto-detected backend selection: stderr as the operator sees it
+
+$ env HERDR_ENV=1  (no config/backend, no --backend)  -> resolved backend / stderr
+resolved: herdr
+stderr:  (silent)
+
+$ env CMUX_WORKSPACE_ID=ws-42  (no config/backend, no --backend)  -> resolved backend / stderr
+resolved: cmux
+stderr:
+  | NOTICE: auto-detected cmux runtime (CMUX_WORKSPACE_ID) - spawning into the EXPERIMENTAL cmux backend. Set config/backend or pass --backend tmux to opt out.

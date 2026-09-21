@@ -1,0 +1,19 @@
+# bin/fm-contributions.sh poll - forge read concurrency on one user token
+# (captured from tests/fm-contributions.test.sh::test_pull_observation_bounds_concurrent_forge_reads)
+
+gh api calls issued by one pull observation:
+  gh api repos/o/r/pulls/8
+  gh api repos/o/r/pulls/8/reviews?per_page=100 --paginate --slurp
+  gh api repos/o/r/issues/8/comments?per_page=100 --paginate --slurp
+  gh api repos/o/r/pulls/8/comments?per_page=100 --paginate --slurp
+  gh api repos/o/r/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/statuses?per_page=100 --paginate --slurp
+  gh api repos/o/r
+  gh api repos/o/r/commits/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/check-runs?filter=all&per_page=100 --paginate --slurp
+  gh pr view https://github.com/o/r/pull/8 --json headRefOid,reviewDecision
+concurrent-in-flight samples (one per gh call): 1 3 3 3 3 3 3 1 
+peak concurrency on one user token: 3
+ok - a pull observation keeps at most three forge reads in flight on one token
+ok - a later URL waits when fewer than fifteen seconds remain for its observation
+ok - eight 3-second PR reads complete fresh within one 20-second poll cycle
+ok - a genuinely unavailable forge records an error and wakes once per failure episode
+ok - a late owner does not restart a shared forge failure episode

@@ -1,0 +1,16 @@
+# Remote secondmate charter: steering-inbox path rendered host-local
+# (captured live from tests/fm-remote-secondmate-lifecycle-e2e.test.sh during remote home seeding)
+
+--- parent (local) brief, inbox lines ---
+39:A request arriving through the instruction inbox below follows the same marker and reply rules.
+41:# Firstmate instruction inbox
+42:Firstmate steers you through durable message files in '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/parent/state/ios.inbox'.
+43:When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/parent/state/ios.inbox'/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: `mv '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/parent/state/ios.inbox'/NNN.msg '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/parent/state/ios.inbox'/handled/`.
+
+--- remote charter as published to the build Mac ---
+39:A request arriving through the instruction inbox below follows the same marker and reply rules.
+41:# Firstmate instruction inbox
+42:Firstmate steers you through durable message files in '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/remote-home/state/parent-route/ios.inbox'.
+43:When a terminal message says an instruction is waiting there - and at any natural checkpoint when you are unsure - list '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/remote-home/state/parent-route/ios.inbox'/*.msg, read and act on each message in numeric order, then acknowledge each handled message by moving it: `mv '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/remote-home/state/parent-route/ios.inbox'/NNN.msg '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-remote-secondmate-e2e.rhAkD7/remote-home/state/parent-route/ios.inbox'/handled/`.
+CHARTER-DUMP-DONE
+ok - remote seed registers the route and provisions the whole home and project clone on that host

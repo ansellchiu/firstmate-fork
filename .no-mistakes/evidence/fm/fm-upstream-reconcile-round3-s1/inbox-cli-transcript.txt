@@ -1,0 +1,39 @@
+# fm-inbox.sh captain capture surface - live CLI transcript
+# FM_HOME=<throwaway home>
+
+$ fm-inbox.sh note --request-id deploy-q1 --json check the overnight deploy
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1790014060-An25fL","request_id":"deploy-q1","saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-inbox-demo.C0Psel/state/inbox/1790014060-An25fL.note"}
+(exit 0)
+
+--- retry of the SAME request id (idempotent capture) ---
+$ fm-inbox.sh note --request-id deploy-q1 --json check the overnight deploy
+{"schema":"fm-inbox-note.v1","outcome":"replay","id":"1790014060-An25fL","request_id":"deploy-q1","saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-inbox-demo.C0Psel/state/inbox/1790014060-An25fL.note"}
+(exit 0)
+
+$ fm-inbox.sh note a second, plain human note
+queued 1790014060-SefVqc
+  a second, plain human note
+  firstmate will pick this up at its next check.
+(exit 0)
+
+--- primary publishes an answer against note 1 ---
+note id: 1790014060-An25fL
+$ fm-inbox.sh reply --json 1790014060-An25fL deploy is green, nothing to do
+{"schema":"fm-inbox-reply.v1","outcome":"created","id":"1790014060-An25fL","path":"/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-inbox-demo.C0Psel/state/inbox/.replies/1790014060-An25fL"}
+(exit 0)
+
+$ fm-inbox.sh receipts
+{"schema":"fm-inbox-receipts.v1","home":"T/fm-inbox-demo.C0Psel","generated":"2026-09-21T18:07:40Z","pending":[{"id":"1790014060-SefVqc","at":"2026-09-21T18:07:40Z","source":"text","request_id":null,"body":"a second, plain human note","acknowledged":false,"announced":true,"reply":null},{"id":"1790014060-An25fL","at":"2026-09-21T18:07:40Z","source":"text","request_id":"deploy-q1","body":"check the overnight deploy","acknowledged":false,"announced":true,"reply":{"id":"1790014060-An25fL","at":"2026-09-21T18:07:40Z","body":"deploy is green, nothing to do","cursor":"000000000001"}}],"handled":[],"replies":[{"id":"1790014060-An25fL","at":"2026-09-21T18:07:40Z","body":"deploy is green, nothing to do","cursor":"000000000001"}],"reply_cursor":"000000000001","omitted":[]}
+(exit 0)
+
+$ fm-inbox.sh ready
+{"schema":"fm-primary-ready.v1","home":"T/fm-inbox-demo.C0Psel","observed_at":"2026-09-21T18:07:40Z","lock":{"state":"free","pid":null,"live_harness":false},"wake_consumer":{"state":"unknown","reason":"supervision-model-unknown-for-home","beacon_age_seconds":null},"posture":{"state":"present"},"can_receive":false}
+(exit 0)
+
+$ fm-inbox.sh list
+1790014060-An25fL
+    check the overnight deploy
+1790014060-SefVqc
+    a second, plain human note
+(exit 0)
+
