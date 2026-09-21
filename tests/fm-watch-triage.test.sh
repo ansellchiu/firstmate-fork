@@ -5865,6 +5865,97 @@ if [ -n "${FM_TEST_ONLY:-}" ]; then
   exit 0
 fi
 
+
+# --- catch-up burst: one queued row per changed file, each bounded to itself ---
+# The 2026-09-19 incident: a home that lost monitoring for hours resumed with
+# ~130 changed status logs, and every one of the ~130 queued rows carried a
+# payload listing EVERY status file in the home. The rows stay per-file and
+# individually sequenced, but a row's payload names only the file that
+# triggered it.
+
+# The status file a burst row must NOT name: a sibling changed in the same cycle.
+other_burst_file() {  # <index>
+  case "$1" in
+    1) printf 'burst2.status' ;;
+    *) printf 'burst1.status' ;;
+  esac
+}
+
+test_signal_burst_rows_are_bounded_to_their_own_file() {
+  local dir state fakebin out drain_out pid rows i payload
+  dir=$(make_case signal-burst); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; drain_out="$dir/drain.out"
+  for i in 1 2 3; do
+    printf 'working: step\nneeds-decision: pick A or B for task %s\n' "$i" > "$state/burst$i.status"
+  done
+  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
+  watch_bg "$state" "$fakebin" "$out"
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "watcher did not surface a multi-file catch-up burst"
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null \
+    || fail "drain after the catch-up burst failed"
+  rows=$(grep -c "$(printf '\tsignal\t')" "$drain_out")
+  [ "$rows" -eq 3 ] || fail "expected one queued row per changed file, got $rows"
+  for i in 1 2 3; do
+    # Field 5 alone: the payload this bound is about, read apart from the key
+    # field that names the same file on every row.
+    payload=$(awk -F'\t' -v key="burst$i.status" '$3 == "signal" && $4 == key { print $5 }' "$drain_out")
+    case "$payload" in
+      *"/burst$i.status") ;;
+      *) fail "burst$i.status's row payload does not name its own file: '$payload'" ;;
+    esac
+    case "$payload" in
+      *"$(other_burst_file "$i")"*)
+        fail "burst$i.status's row payload enumerated another task's status file: '$payload'" ;;
+    esac
+  done
+  # Distinct sequence numbers are what keep each row acknowledgeable through the
+  # ordinary drain contract rather than as one blob.
+  [ "$(awk -F'\t' '$3 == "signal" { print $2 }' "$drain_out" | sort -u | wc -l | tr -d ' ')" -eq 3 ] \
+    || fail "queued burst rows did not carry distinct sequence numbers"
+  ack_stopped_cycle "$state" || fail "the burst rows could not be acknowledged through the drain"
+  pass "a catch-up burst queues one row per changed file and bounds each payload to that file"
+}
+
+# The same bound on the second append path: a batch absorbed as benign whose
+# classified-position commit failed re-queues the batch, and those rows must be
+# per-file too - this is the path the catch-up burst actually took for every
+# task whose marker commit lost its race.
+test_signal_commit_error_rows_are_bounded_to_their_own_file() {
+  local dir state fakebin out drain_out pid rows i other payload
+  dir=$(make_case signal-commit-error); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; drain_out="$dir/drain.out"
+  for i in 1 2; do
+    printf 'working: compiling step %s\n' "$i" > "$state/fallback$i.status"
+    # An unwritable seen marker fails this cycle's classified-position commit,
+    # which is what sends an otherwise absorbed benign batch to the fallback.
+    mkdir "$state/.seen-fallback${i}_status"
+  done
+  export FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)'
+  watch_bg "$state" "$fakebin" "$out"
+  pid=$!
+  wait_for_exit "$pid" 100 \
+    || { reap "$pid"; fail "an absorbed batch whose position commit failed did not re-queue: $(cat "$out")"; }
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null \
+    || fail "drain after the commit-error fallback failed"
+  rows=$(grep -c "$(printf '\tsignal\t')" "$drain_out")
+  [ "$rows" -eq 2 ] || fail "expected one re-queued row per changed file, got $rows"
+  for i in 1 2; do
+    other=$((3 - i))
+    payload=$(awk -F'\t' -v key="fallback$i.status" '$3 == "signal" && $4 == key { print $5 }' "$drain_out")
+    case "$payload" in
+      *"/fallback$i.status") ;;
+      *) fail "fallback$i.status's re-queued row payload does not name its own file: '$payload'" ;;
+    esac
+    case "$payload" in
+      *"fallback$other.status"*)
+        fail "the commit-error fallback row for fallback$i.status enumerated another task's status file: '$payload'" ;;
+    esac
+  done
+  unset FM_FAKE_CREW_STATE
+  pass "a re-queued benign batch bounds each row's payload to that row's file"
+}
+
 test_status_span_actionable_classifier
 test_status_span_survives_a_later_routine_append
 test_status_span_respects_decision_closure
@@ -5994,3 +6085,5 @@ test_afk_one_shot_never_hands_off_captain_held_under_away_record
 test_paused_until_near_future_is_quiet_before_the_cadence
 test_paused_until_wrong_year_is_bounded_by_the_cadence
 test_paused_until_that_passed_is_rechecked_before_the_cadence
+test_signal_burst_rows_are_bounded_to_their_own_file
+test_signal_commit_error_rows_are_bounded_to_their_own_file

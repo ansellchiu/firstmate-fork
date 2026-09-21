@@ -41,6 +41,7 @@ install_pi_watch_extension_fixture() {
   mkdir -p "$repo/bin"
   cp "$ROOT/bin/fm-operational-input.sh" "$repo/bin/fm-operational-input.sh"
   chmod +x "$repo/bin/fm-operational-input.sh"
+  cp "$ROOT/bin/fm-wake-lib.sh" "$repo/bin/fm-wake-lib.sh"
   cat > "$repo/node_modules/@earendil-works/pi-coding-agent/package.json" <<'JSON'
 {"name":"@earendil-works/pi-coding-agent","type":"module","exports":"./index.js"}
 JSON
@@ -1718,7 +1719,7 @@ EOF
 }
 
 test_pi_late_unretired_close_resumes_supervision() {
-  local kind repo home plugin log ready retired release stop out status
+  local kind repo home plugin log ready retired release release2 stop out status
   for kind in actionable non-actionable; do
     repo="$TMP_ROOT/pi-late-$kind-root"
     home="$TMP_ROOT/pi-late-$kind-home"
@@ -1726,6 +1727,7 @@ test_pi_late_unretired_close_resumes_supervision() {
     ready="$TMP_ROOT/pi-late-$kind.ready"
     retired="$TMP_ROOT/pi-late-$kind.retired"
     release="$TMP_ROOT/pi-late-$kind.release"
+    release2="$TMP_ROOT/pi-late-$kind.release2"
     stop="$TMP_ROOT/pi-late-$kind.stop"
     mkdir -p "$repo/bin" "$home/state" "$home/config"
     install_pi_watch_extension_fixture "$repo"
@@ -1746,12 +1748,18 @@ if [ "$count" -eq 2 ]; then
   [ "$FM_LATE_KIND" = actionable ] && printf 'signal: late wake\n'
   exit 0
 fi
+if [ "$count" -eq 3 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  while [ ! -e "$FM_RELEASE2_FILE" ] && [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+  printf 'signal: post-consume wake\n'
+  exit 0
+fi
 printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
 trap 'exit 0' TERM INT
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
     chmod +x "$repo/bin/fm-watch-arm.sh"
-    out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_UNRETIRED_READY_FILE="$ready" FM_UNRETIRED_RETIRE_FILE="$retired" FM_RELEASE_FILE="$release" FM_STOP_FILE="$stop" FM_LATE_KIND="$kind" FM_PI_ARM_READY_TIMEOUT_MS="$ARM_READY_TIMEOUT_MS" FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+    out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_UNRETIRED_READY_FILE="$ready" FM_UNRETIRED_RETIRE_FILE="$retired" FM_RELEASE_FILE="$release" FM_RELEASE2_FILE="$release2" FM_STOP_FILE="$stop" FM_LATE_KIND="$kind" FM_PI_ARM_READY_TIMEOUT_MS="$ARM_READY_TIMEOUT_MS" FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -1798,14 +1806,29 @@ if (rows().length !== 2) throw new Error(`unretired arm overlapped before fallba
 if (!prompts[0]?.includes("original wake")) throw new Error(`missing original fallback: ${prompts.join(" | ")}`);
 writeFileSync(process.env.FM_RELEASE_FILE, "release\n");
 for (let i = 0; i < 500; i += 1) {
-  if (rows().length >= 3 && (process.env.FM_LATE_KIND !== "actionable" || prompts.some((message) => message.includes("late wake")))) break;
+  if (rows().length >= 3) break;
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
+await new Promise((resolve) => setTimeout(resolve, 80));
 if (rows().length !== 3) throw new Error(`late close did not restore one successor: ${rows().join(" | ")}`);
-if (process.env.FM_LATE_KIND === "actionable") {
-  if (prompts.length !== 2 || !prompts[1].includes("late wake")) throw new Error(`late actionable close was not delivered: ${prompts.join(" | ")}`);
-} else if (prompts.length !== 1) {
-  throw new Error(`late non-actionable close sent an extra wake: ${prompts.join(" | ")}`);
+// Nothing has consumed the first follow-up yet, so a late actionable close
+// folds into it rather than queueing a second message (fm-primary-pi-watch.ts
+// sendWake owns the fold).
+if (prompts.length !== 1) {
+  throw new Error(`late ${process.env.FM_LATE_KIND} close sent an extra wake: ${prompts.join(" | ")}`);
+}
+// Consuming the outstanding follow-up runs the drain, which presents and
+// acknowledges every row waiting - including the one a folded late wake
+// enqueued. The next notification therefore names no folded cycles: those
+// cycles are cleared, not pending.
+handlers.get("before_agent_start")?.({ prompt: prompts[0] });
+writeFileSync(process.env.FM_RELEASE2_FILE, "release\n");
+await waitFor(() => prompts.length >= 2, "wake after the outstanding follow-up was consumed");
+if (/further watcher cycle\(s\) were folded into the previous notification/.test(prompts[1])) {
+  throw new Error(`a ${process.env.FM_LATE_KIND} close claimed folded cycles the drain already cleared: ${prompts[1]}`);
+}
+if (!prompts[1].includes("post-consume wake")) {
+  throw new Error(`the wake after consumption was lost: ${prompts[1]}`);
 }
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 await new Promise((resolve) => setTimeout(resolve, 80));
@@ -2698,26 +2721,28 @@ await waitFor(() => prompts.length === 1, "first wake delivered while main strea
 if (wakes("signal: streaming chain wake 1") !== 1) throw new Error(`wrong first wake: ${prompts.join(" | ")}`);
 await waitFor(() => arms() === 2, "successor after the streaming-time delivery");
 writeFileSync(`${process.env.FM_TRIGGER_FILE}.2`, "close\n");
-await waitFor(() => prompts.length === 2, "second wake delivered while main still streams");
-if (wakes("signal: streaming chain wake 2") !== 1) throw new Error(`wrong second wake: ${prompts.join(" | ")}`);
+// The first follow-up is still unconsumed, so the second close folds into it
+// (fm-primary-pi-watch.ts sendWake) instead of queueing a second message. The
+// successor chain must advance exactly as it does for a delivered wake.
 await waitFor(() => arms() === 3, "successor after the second streaming-time delivery");
+await new Promise((resolve) => setTimeout(resolve, 80));
+if (prompts.length !== 1) throw new Error(`folded wake queued a second message: ${prompts.join(" | ")}`);
 if (beforeAgentStarts !== 0) throw new Error(`streaming follow-ups raised before_agent_start ${beforeAgentStarts} times`);
 
-// The run reaches the first queued follow-up; the second is still queued when
-// the captain replaces the session, so only the second rides the handoff.
-consumeQueued(prompts[0]);
+// The captain replaces the session before the run reaches the queued
+// follow-up, so the still-unconsumed wake rides the handoff.
 await handlers.get("session_shutdown")?.({ type: "session_shutdown", reason: "new" }, {});
 const handoffPath = `${process.env.FM_HOME}/state/extensions/pi-primary-watch/session-replacement-actionable.json`;
 const handoff = JSON.parse(readFileSync(handoffPath, "utf8"));
-if (handoff.pending.length !== 1 || handoff.pending[0].delivered || !handoff.pending[0].message.includes("signal: streaming chain wake 2")) {
+if (handoff.pending.length !== 1 || handoff.pending[0].delivered || !handoff.pending[0].message.includes("signal: streaming chain wake 1")) {
   throw new Error(`replacement handoff did not carry exactly the unconsumed wake: ${JSON.stringify(handoff)}`);
 }
 streaming = false;
 const replacementMod = await import(`${pathToFileURL(process.env.PLUGIN).href}?replacement=streaming-chain`);
 replacementMod.default(pi);
 await handlers.get("session_start")?.({ type: "session_start", reason: "new" }, {});
-await waitFor(() => prompts.length === 3, "replacement replay of the unconsumed wake");
-if (wakes("signal: streaming chain wake 2") !== 2 || wakes("signal: streaming chain wake 1") !== 1) {
+await waitFor(() => prompts.length === 2, "replacement replay of the unconsumed wake");
+if (wakes("signal: streaming chain wake 1") !== 2 || wakes("signal: streaming chain wake 2") !== 0) {
   throw new Error(`replacement replayed the wrong wakes: ${prompts.join(" | ")}`);
 }
 if (beforeAgentStarts !== 1) throw new Error(`idle replay raised before_agent_start ${beforeAgentStarts} times`);
@@ -3628,6 +3653,11 @@ await waitFor(() => logRows("late=") === 1, "the retired arm's late wake row");
 // still blocked on its first delivery.
 await new Promise((resolve) => setTimeout(resolve, 250));
 releaseFirstDelivery();
+// The run reaches the inherited wake, so the late wake is delivered on its own
+// rather than folded into an outstanding follow-up (fm-primary-pi-watch.ts
+// sendWake): this case is about the outcome that wake carries.
+await waitFor(() => prompts.length === 1, "the inherited wake was accepted");
+handlers.get("before_agent_start")?.({ prompt: prompts[0] });
 await waitFor(() => prompts.length === 2, "the late wake delivered by the replacement");
 if (!prompts[1].includes("signal: late row")) {
   throw new Error(`the late wake lost its outcome: ${prompts[1]}`);
@@ -4917,6 +4947,431 @@ EOF
   pass "OpenCode healthy arm output does not suppress the turn-end guard"
 }
 
+# --- catch-up burst: one message, every row still queued ----------------------
+# The 2026-09-19 incident: monitoring resumed after a gap with ~140 durable rows
+# waiting, and every watcher cycle queued its own main follow-up, so clearing
+# the catch-up cost the captain one firstmate turn per queued message. A wake
+# arriving while Pi still holds an unconsumed follow-up is folded into it: one
+# message, naming how many rows are waiting, and not one durable row retired.
+test_pi_catch_up_burst_delivers_one_followup() {
+  local repo home plugin log stop resume out status
+  repo="$TMP_ROOT/pi-burst-root"
+  home="$TMP_ROOT/pi-burst-home"
+  log="$TMP_ROOT/pi-burst.log"
+  stop="$TMP_ROOT/pi-burst.stop"
+  resume="$TMP_ROOT/pi-burst.resume"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  # Eight durable rows the catch-up left waiting. Three of them repeat a task
+  # whose status changed again, and one drain presents a repeated task once
+  # (bin/fm-wake-lib.sh fm_wake_actor_pending_count / fm_wake_print_deduped), so
+  # the burst the captain is told about is five notifications, not eight rows.
+  : > "$home/state/.wake-queue"
+  for seq in 1 2 3 4 5; do
+    printf '1789797077\t%s\tsignal\tburst%s.status\tsignal: %s/burst%s.status\n' \
+      "$seq" "$seq" "$home/state" "$seq" >> "$home/state/.wake-queue"
+  done
+  for seq in 6 7 8; do
+    printf '1789797078\t%s\tsignal\tburst%s.status\tsignal: %s/burst%s.status\n' \
+      "$seq" "$((seq - 5))" "$home/state" "$((seq - 5))" >> "$home/state/.wake-queue"
+  done
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --handling-delivered ]; then
+  exit 0
+fi
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+if [ "$count" -le 5 ]; then
+  printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+  printf 'signal: %s/burst%s.status\n' "${FM_STATE_DIR:?}" "$count"
+  exit 0
+fi
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+while [ ! -e "$FM_BURST_RESUME_FILE" ] && [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+if [ -e "$FM_BURST_RESUME_FILE" ] && [ "$count" -eq 6 ]; then
+  printf '1789797079\t9\tsignal\tburst9.status\tsignal: %s/burst9.status\n' \
+    "${FM_STATE_DIR:?}" >> "$FM_STATE_DIR/.wake-queue"
+  printf 'signal: %s/burst1.status\n' "${FM_STATE_DIR:?}"
+  exit 0
+fi
+trap 'exit 0' TERM INT
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" \
+    FM_STATE_DIR="$home/state" FM_STOP_FILE="$stop" FM_BURST_RESUME_FILE="$resume" \
+    node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const sent = [];
+const handlers = new Map();
+const pi = {
+  on(event, handler) {
+    handlers.set(event, handler);
+  },
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  // Pi accepts every follow-up and the model never consumes one, which is
+  // exactly the burst window.
+  sendUserMessage: async (content) => {
+    sent.push(content);
+  },
+};
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("tool-call-burst", {}, undefined, undefined, {});
+for (let i = 0; i < 300; i += 1) {
+  const rows = existsSync(process.env.FM_ARM_LOG)
+    ? readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n")
+    : [];
+  if (rows.length >= 6) break;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+await new Promise((resolve) => setTimeout(resolve, 150));
+const armRows = readFileSync(process.env.FM_ARM_LOG, "utf8").trim().split("\n")
+  .filter((row) => row.startsWith("arm="));
+if (armRows.length < 6) throw new Error(`burst did not run its cycles: ${armRows.length}`);
+if (sent.length !== 1) {
+  throw new Error(`catch-up burst queued ${sent.length} follow-ups, expected exactly 1`);
+}
+if (!/(^|[^0-9])5 notification\(s\) were waiting when this was queued/.test(sent[0])) {
+  throw new Error(`the single follow-up did not name the waiting burst: ${sent[0]}`);
+}
+const queue = readFileSync(`${process.env.FM_HOME}/state/.wake-queue`, "utf8")
+  .split("\n").filter((line) => line.length > 0);
+if (queue.length !== 8) {
+  throw new Error(`folding retired durable rows: ${queue.length} of 8 left`);
+}
+for (let seq = 1; seq <= 8; seq += 1) {
+  if (!queue.some((row) => row.split("\t")[1] === String(seq))) {
+    throw new Error(`row ${seq} is no longer individually acknowledgeable`);
+  }
+}
+// Folding must not blind the captain permanently: once the model consumes the
+// outstanding follow-up, the next actionable cycle notifies again. The
+// consumed follow-up's single drain presents and acknowledges all eight rows,
+// and one row lands after it; the resumed cycle enqueues a ninth.
+handlers.get("before_agent_start")({ prompt: sent[0] });
+writeFileSync(
+  `${process.env.FM_HOME}/state/.wake-queue`,
+  `1789797080\t10\tsignal\tburst10.status\tsignal: ${process.env.FM_HOME}/state/burst10.status\n`,
+);
+writeFileSync(process.env.FM_BURST_RESUME_FILE, "resume\n");
+for (let i = 0; i < 500; i += 1) {
+  if (sent.length >= 2) break;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+if (sent.length !== 2) {
+  throw new Error(`a wake after consumption did not notify again: ${sent.length} follow-ups`);
+}
+// The folded cycles rode the follow-up the drain just cleared, so this
+// notification must not point the captain back at cycles he already retired.
+if (/further watcher cycle\(s\) were folded into the previous notification/.test(sent[1])) {
+  throw new Error(`the next follow-up claimed cycles the drain already cleared: ${sent[1]}`);
+}
+// Every later notification states the burst at ITS own delivery, not the
+// first one's: two rows survive the drain, not the five it presented.
+if (!/(^|[^0-9])2 notification\(s\) were waiting when this was queued/.test(sent[1])) {
+  throw new Error(`the next follow-up did not re-read the burst size: ${sent[1]}`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+  )
+  status=$?
+  expect_code 0 "$status" "a catch-up burst must reach the captain as one follow-up naming its size"
+  [ -z "$out" ] || fail "Pi catch-up burst test printed output: $out"
+  pass "a catch-up burst delivers one follow-up and leaves every durable row queued"
+}
+
+# --- folding is bounded: an unconsumed follow-up can never mute the captain ---
+# Folding assumes the accepted follow-up will be consumed. Pi can drop a queued
+# follow-up (the captain cancels the streaming run) or deliver it as text the
+# consumption match no longer recognises, and then nothing ever clears the
+# outstanding record. The captain must still hear about later cycles: after a
+# bounded number of folds the next wake is delivered on its own, and a run that
+# settles without consuming the follow-up stops the folding immediately.
+test_pi_unconsumed_followup_cannot_mute_the_captain() {
+  local repo home plugin log stop out status
+  repo="$TMP_ROOT/pi-fold-bound-root"
+  home="$TMP_ROOT/pi-fold-bound-home"
+  log="$TMP_ROOT/pi-fold-bound.log"
+  stop="$TMP_ROOT/pi-fold-bound.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --handling-delivered ]; then
+  exit 0
+fi
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+if [ "$count" -le 60 ] && [ ! -e "$FM_STOP_FILE" ]; then
+  printf 'signal: %s/fold%s.status\n' "${FM_STATE_DIR:?}" "$count"
+  exit 0
+fi
+trap 'exit 0' TERM INT
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" \
+    FM_STATE_DIR="$home/state" FM_STOP_FILE="$stop" \
+    node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const sent = [];
+const handlers = new Map();
+const pi = {
+  on(event, handler) {
+    handlers.set(event, handler);
+  },
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  // Pi accepts the follow-up and the model never consumes one: the stuck
+  // window this bound exists for. The one exception is the follow-up that
+  // escapes the bound, which main goes idle and consumes while Pi is still
+  // accepting it - the interleaving that must not leave the stuck record in
+  // front of the captain.
+  sendUserMessage: async (content) => {
+    sent.push(content);
+    if (sent.length === 2) handlers.get("before_agent_start")?.({ prompt: content });
+  },
+};
+const arms = () => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith("arm=")).length
+  : 0;
+async function waitFor(predicate, message) {
+  for (let i = 0; i < 1000; i += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(message);
+}
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+await tool.execute("tool-call-fold-bound", {}, undefined, undefined, {});
+await waitFor(() => sent.length >= 2, "the fold bound never let a later wake through");
+if (sent.length !== 2) throw new Error(`the bound released ${sent.length} follow-ups at once`);
+const boundedAt = arms();
+if (boundedAt < 11) throw new Error(`the bound fired after only ${boundedAt} cycles, so nothing folded`);
+if (!/10 further watcher cycle\(s\) were folded into the previous notification/.test(sent[1])) {
+  throw new Error(`the bounded re-notification did not account for the folded cycles: ${sent[1]}`);
+}
+// The escaping follow-up was consumed inside its own send, so it supersedes the
+// one Pi never consumed and leaves nothing in front of the captain: the next
+// cycle notifies instead of folding another bound's worth into a stale record.
+const supersededAt = boundedAt;
+await waitFor(() => sent.length >= 3, "consuming the escaping follow-up did not reopen notification");
+if (arms() - supersededAt >= 10) {
+  throw new Error(`a stale accepted follow-up still folded ${arms() - supersededAt} cycles after consumption`);
+}
+// That third follow-up is accepted and never consumed, so folding resumes
+// against it - and consuming it reopens notification the ordinary way.
+const consumedAt = arms();
+handlers.get("before_agent_start")?.({ prompt: sent[2] });
+await waitFor(() => sent.length >= 4, "consuming the live follow-up did not reopen notification");
+if (arms() - consumedAt >= 10) {
+  throw new Error(`a consumed follow-up still folded ${arms() - consumedAt} cycles`);
+}
+// A run that settles without consuming the follow-up stops folding at once,
+// so the very next cycle notifies rather than waiting out another bound. The
+// settled event is the one that means no queued continuation is still coming;
+// an agent_end still has one ahead of it.
+const settled = handlers.get("agent_settled");
+if (!settled) throw new Error("the extension never subscribed to the Pi settled event");
+// A settle that raced another extension's fresh run is not the end of the run
+// carrying the follow-up, so it disarms nothing: folding continues.
+const racedAt = arms();
+settled({ type: "agent_settled" }, { isIdle: () => false });
+await waitFor(() => arms() >= racedAt + 3, "the watcher stopped cycling after a raced settle");
+if (sent.length !== 4) {
+  throw new Error(`a settle raced by a busy run disarmed the fold: ${sent.length} follow-ups`);
+}
+// Nor is a settle that reports idle while a message is still queued: the
+// follow-up is about to be delivered, and one drain covers the cycles folding
+// behind it. Disarming here would cost the captain one turn per later cycle.
+const queuedAt = arms();
+settled({ type: "agent_settled" }, { isIdle: () => true, hasPendingMessages: () => true });
+await waitFor(() => arms() >= queuedAt + 3, "the watcher stopped cycling after a queued-message settle");
+if (sent.length !== 4) {
+  throw new Error(`a settle with a queued message disarmed the fold: ${sent.length} follow-ups`);
+}
+// A context that cannot answer both questions is not evidence of a quiet
+// moment: no context at all, and one that reports idle but cannot say whether
+// a message is queued, both leave folding armed rather than guessing.
+for (const [shape, degraded] of [
+  ["a settle with no context", undefined],
+  ["a settle whose context cannot report queued messages", { isIdle: () => true }],
+]) {
+  // Consume the outstanding follow-up first so the next one arrives with a
+  // full fold budget: what follows must be decided by the settle, not by the
+  // bound the earlier cycles had nearly spent.
+  handlers.get("before_agent_start")?.({ prompt: sent[sent.length - 1] });
+  const armed = sent.length + 1;
+  await waitFor(() => sent.length >= armed, `no follow-up to fold into before ${shape}`);
+  const degradedAt = arms();
+  settled({ type: "agent_settled" }, degraded);
+  await waitFor(() => arms() >= degradedAt + 3, `the watcher stopped cycling after ${shape}`);
+  if (sent.length !== armed) {
+    throw new Error(`${shape} disarmed the fold: ${sent.length - armed} extra follow-ups`);
+  }
+}
+const released = sent.length + 1;
+settled({ type: "agent_settled" }, { isIdle: () => true, hasPendingMessages: () => false });
+const settledAt = arms();
+await waitFor(() => sent.length >= released, "a run settling without consumption never released a wake");
+if (arms() - settledAt >= 10) {
+  throw new Error(`a settled run still folded ${arms() - settledAt} cycles before notifying`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+  )
+  status=$?
+  expect_code 0 "$status" "an unconsumed follow-up must not mute later actionable wakes"
+  [ -z "$out" ] || fail "Pi fold-bound test printed output: $out"
+  pass "an accepted but unconsumed follow-up cannot mute the captain"
+}
+
+# --- the count decorates the doorbell; it never gates it ---------------------
+# The burst size is display data read from a child process, and that child
+# reaches a process-liveness check that can fall back to `ps`. A wedged read
+# must cost the captain the number, never the notification: an unbounded wait
+# here leaves the delivery loop mid-flight, and every later actionable close is
+# dropped behind its own re-entry guard.
+test_pi_wake_survives_a_wedged_burst_count() {
+  local kind repo home plugin log stop out status
+  # Two ways the number can fail to arrive: a count that never returns, and a
+  # queue that is present but cannot be counted at all. Neither may cost the
+  # captain the notification, and neither may put a number in it.
+  for kind in wedged unreadable; do
+  repo="$TMP_ROOT/pi-count-$kind-root"
+  home="$TMP_ROOT/pi-count-$kind-home"
+  log="$TMP_ROOT/pi-count-$kind.log"
+  stop="$TMP_ROOT/pi-count-$kind.stop"
+  mkdir -p "$repo/bin" "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  # Rows enough that a working count would name a burst, so the missing number
+  # is the only difference this test can be reading.
+  : > "$home/state/.wake-queue"
+  for seq in 1 2 3; do
+    printf '1789797077\t%s\tsignal\twedge%s.status\tsignal: %s/wedge%s.status\n' \
+      "$seq" "$seq" "$home/state" "$seq" >> "$home/state/.wake-queue"
+  done
+  if [ "$kind" = wedged ]; then
+    cat > "$repo/bin/fm-wake-lib.sh" <<'SH'
+sleep 120
+SH
+  else
+    chmod 000 "$home/state/.wake-queue" || fail "could not make the queue unreadable"
+    if [ -r "$home/state/.wake-queue" ]; then
+      chmod 600 "$home/state/.wake-queue"
+      continue
+    fi
+  fi
+  cat > "$repo/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --handling-delivered ]; then
+  exit 0
+fi
+printf 'arm=%s\n' "$$" >> "${FM_ARM_LOG:?}"
+count=$(grep -c '^arm=' "$FM_ARM_LOG")
+printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
+if [ "$count" -le 60 ] && [ ! -e "$FM_STOP_FILE" ]; then
+  printf 'signal: %s/wedge%s.status\n' "${FM_STATE_DIR:?}" "$count"
+  exit 0
+fi
+trap 'exit 0' TERM INT
+while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+SH
+  chmod +x "$repo/bin/fm-watch-arm.sh"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" \
+    FM_STATE_DIR="$home/state" FM_STOP_FILE="$stop" \
+    node --input-type=module 2>&1 <<'EOF'
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+let tool = null;
+const sent = [];
+const handlers = new Map();
+const pi = {
+  on(event, handler) {
+    handlers.set(event, handler);
+  },
+  registerCommand() {},
+  registerTool(candidate) {
+    if (candidate.name === "fm_watch_arm_pi") tool = candidate;
+  },
+  sendUserMessage: async (content) => {
+    sent.push(content);
+  },
+};
+const arms = () => existsSync(process.env.FM_ARM_LOG)
+  ? readFileSync(process.env.FM_ARM_LOG, "utf8").split("\n").filter((row) => row.startsWith("arm=")).length
+  : 0;
+async function waitFor(predicate, message) {
+  for (let i = 0; i < 2000; i += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(message);
+}
+writeFileSync(`${process.env.FM_HOME}/state/.lock`, `${process.pid}\n`);
+const mod = await import(pathToFileURL(process.env.PLUGIN).href);
+mod.default(pi);
+const started = Date.now();
+await tool.execute("tool-call-count-wedge", {}, undefined, undefined, {});
+await waitFor(() => sent.length >= 1, "a burst count nobody could take swallowed the wake entirely");
+const elapsed = Date.now() - started;
+if (elapsed > 10000) {
+  throw new Error(`the wake waited ${elapsed}ms on a count that never arrived`);
+}
+if (/notification\(s\) were waiting/.test(sent[0])) {
+  throw new Error(`a count nobody could take still named a number: ${sent[0]}`);
+}
+if (!sent[0].includes("signal: ")) {
+  throw new Error(`the delivered wake lost its own outcome: ${sent[0]}`);
+}
+// Nothing consumes that follow-up, so later cycles fold into it until the
+// bound releases one on its own. That notification carries a folded-cycle
+// line, which is the message shape that renders the burst count at all - so
+// this is where a fabricated number would be shown to the captain.
+await waitFor(() => arms() >= 3, "the watcher stopped cycling behind the first wake");
+await waitFor(() => sent.length >= 2, "a wake after the fold never reached the captain");
+if (!/further watcher cycle\(s\) were folded into the previous notification/.test(sent[1])) {
+  throw new Error(`expected a folded-cycle notification to read the burst count: ${sent[1]}`);
+}
+if (/notification\(s\) were waiting/.test(sent[1])) {
+  throw new Error(`a count nobody could take was rendered as a number: ${sent[1]}`);
+}
+writeFileSync(process.env.FM_STOP_FILE, "stop\n");
+process.exit(0);
+EOF
+  )
+  status=$?
+  [ "$kind" = wedged ] || chmod 600 "$home/state/.wake-queue"
+  expect_code 0 "$status" "a $kind burst count must not delay, drop, or invent a number for the wake it decorates"
+  [ -z "$out" ] || fail "Pi $kind-count test printed output: $out"
+  done
+  pass "a wake is delivered without its burst count when the count wedges or cannot be taken"
+}
+
+
 test_pi_extension_reports_external_healthy_watcher
 test_pi_tool_returns_agent_tool_result
 test_pi_redundant_tool_call_is_owned_noop
@@ -4973,3 +5428,6 @@ test_opencode_established_empty_close_honors_retry_limit
 test_opencode_actionable_close_rechecks_session_lock
 test_opencode_watch_arm_coordinates_with_turnend_guard
 test_opencode_healthy_arm_output_does_not_suppress_guard
+test_pi_catch_up_burst_delivers_one_followup
+test_pi_unconsumed_followup_cannot_mute_the_captain
+test_pi_wake_survives_a_wedged_burst_count

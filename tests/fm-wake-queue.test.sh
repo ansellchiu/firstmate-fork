@@ -963,15 +963,22 @@ test_main_drain_excludes_rows_already_granted_to_branch() {
 # that could only print nothing - no row, no acknowledgement command - on every
 # guarded command, for as long as the branch held the grant.
 test_main_is_never_told_to_drain_rows_only_the_branch_owns() {
-  local dir state out err sequence generation
+  local dir state out err sequence generation held
   dir=$(make_case main-not-told-to-drain-branch-rows)
   state="$dir/state"
   printf 'window=test:fm-x\nkind=ship\n' > "$state/x.meta"
 
   append_wake "$state" stale "fleet:w2:p3" "stale: fleet:w2:p3 (paused, awaiting external)" \
     || fail "stale append failed"
+  # Two further rows for the SAME task and kind - the catch-up shape a drain
+  # presents as one notification. The notice names rows, so its number must
+  # agree with the sequence list printed beside it.
+  append_wake "$state" stale "fleet:w2:p3" "stale: fleet:w2:p3 (paused, awaiting external)" \
+    || fail "second stale append failed"
+  append_wake "$state" stale "fleet:w2:p3" "stale: fleet:w2:p3 (paused, awaiting external)" \
+    || fail "third stale append failed"
   FM_STATE_OVERRIDE="$state" "$GRANT" activate "$$" held-by-branch || fail "branch owner activation failed"
-  FM_STATE_OVERRIDE="$state" "$GRANT" publish held-by-branch 1 || fail "branch grant publication failed"
+  FM_STATE_OVERRIDE="$state" "$GRANT" publish held-by-branch 1 2 3 || fail "branch grant publication failed"
 
   out="$dir/main-drain.out"
   err="$dir/main-drain.err"
@@ -979,6 +986,9 @@ test_main_is_never_told_to_drain_rows_only_the_branch_owns() {
   ! grep -Fq "$(printf '\tstale\tfleet:w2:p3\t')" "$out" || fail "main drain presented a branch-granted row"
   grep -Fq 'WAKE ROWS HELD BY SUPERVISION BRANCH' "$out" \
     || fail "main drain went silent instead of naming who holds the queued rows"
+  held=$(sed -n 's/^WAKE ROWS HELD BY SUPERVISION BRANCH: \([0-9][0-9]*\) queued row(s) (\([0-9,]*\)).*/\1 \2/p' "$out")
+  [ "$held" = "3 1,2,3" ] \
+    || fail "the held notice's row count disagrees with the rows it lists: '$held'"
   ! grep -Fq 'WAKE_ACK_REQUIRED' "$err" || fail "main drain offered an acknowledgement for a row it never presented"
   ! grep -Fq 'queued wakes pending' "$err" \
     || fail "main was told to drain rows only the branch can present"
@@ -1013,6 +1023,64 @@ test_main_is_never_told_to_drain_rows_only_the_branch_owns() {
   [ ! -s "$state/.wake-queue" ] || fail "the acknowledged row stayed queued"
 
   pass "a branch-held row raises no queued-wake warning for main, and the same row is presented and acknowledged once the grant clears"
+}
+
+# --- a presented count is shown to a person; every number it prints was counted
+# The two counters answer the same queue for different consumers. The row count
+# drives an alarm, so an uncountable queue must still read as "something is
+# waiting". The presented count is rendered into a message a human reads, so an
+# uncountable queue must read as "no number", never as the row count's alarm
+# sentinel - otherwise a queue nobody could count is reported as exactly one
+# waiting notification.
+presented_count() {  # <state>
+  FM_STATE_OVERRIDE="$1" bash -c '. "$1"; fm_wake_actor_presented_count main' _ \
+    "$ROOT/bin/fm-wake-lib.sh"
+}
+
+pending_count() {  # <state>
+  FM_STATE_OVERRIDE="$1" bash -c '. "$1"; fm_wake_actor_pending_count main' _ \
+    "$ROOT/bin/fm-wake-lib.sh"
+}
+
+test_presented_count_never_invents_a_number() {
+  local dir state
+  dir=$(make_case presented-count-contract)
+  state="$dir/state"
+
+  [ "$(presented_count "$state")" = 0 ] || fail "an absent queue is not zero notifications"
+
+  append_wake "$state" signal only.status "signal: $state/only.status" \
+    || fail "single row append failed"
+  [ "$(presented_count "$state")" = 1 ] \
+    || fail "one presented row must report 1, got '$(presented_count "$state")'"
+
+  # The catch-up shape: the same task's status changed three more times, and one
+  # drain presents that task once.
+  append_wake "$state" signal only.status "signal: $state/only.status" || fail "repeat append failed"
+  append_wake "$state" signal only.status "signal: $state/only.status" || fail "repeat append failed"
+  append_wake "$state" heartbeat heartbeat heartbeat || fail "heartbeat append failed"
+  append_wake "$state" heartbeat heartbeat heartbeat || fail "heartbeat append failed"
+  [ "$(presented_count "$state")" = 2 ] \
+    || fail "the presented count did not collapse what the drain collapses: '$(presented_count "$state")'"
+  [ "$(pending_count "$state")" = 5 ] \
+    || fail "the row count must still count rows: '$(pending_count "$state")'"
+
+  # A queue that is present but cannot be read at all.
+  chmod 000 "$state/.wake-queue" || fail "could not make the queue unreadable"
+  if [ -r "$state/.wake-queue" ]; then
+    chmod 600 "$state/.wake-queue"
+    pass "presented and row counts answer an uncountable queue differently (unreadable-file case skipped: running with read override)"
+    return
+  fi
+  case "$(presented_count "$state")" in
+    ''|*[!0-9]*) ;;
+    *) chmod 600 "$state/.wake-queue"
+       fail "an uncountable queue was reported to a human as a counted number" ;;
+  esac
+  [ "$(pending_count "$state")" = 1 ] \
+    || fail "the row count stopped raising its alarm on an uncountable queue"
+  chmod 600 "$state/.wake-queue"
+  pass "a presented count reports only numbers it counted, while the row count keeps its alarm"
 }
 
 # The pending-warning condition must also survive a queue nobody could read: a
@@ -2069,6 +2137,7 @@ test_slow_annotation_does_not_block_append_and_deleted_file_fails_open
 test_branch_actor_scoped_ack_never_swallows_a_main_owned_row
 test_main_drain_excludes_rows_already_granted_to_branch
 test_main_is_never_told_to_drain_rows_only_the_branch_owns
+test_presented_count_never_invents_a_number
 test_uncountable_queue_still_raises_the_pending_alarm
 test_unconsumable_rows_are_retired_instead_of_wedging_the_queue
 test_branch_grant_refuses_rows_already_claimed_by_main

@@ -2569,11 +2569,17 @@ EOF
     # shellcheck disable=SC2086  # $files is a space-separated status-path list (ids carry no spaces)
     signal_files_actionable $files
     signal_actionable=$?
-    # A decision-owned file's queued row payload is marked "needs-decision:"
-    # instead of the ordinary "signal:" below (other files in the same batch
-    # keep the ordinary payload). The wake reason line itself, and every
-    # harness-arm consumer that pattern-matches it, stays byte-identical -
-    # only the per-row payload changes. Two readers branch on that payload:
+    # A queued row's payload names ONLY the file that triggered that row, never
+    # the whole batch: a catch-up burst enqueues one row per changed file, and a
+    # payload repeating every status file in the home made each of those rows
+    # cost its size again. The row's key already identifies the file, so the
+    # payload stays display text (fm-wake-lib.sh's fm_wake_status_key_map owns
+    # why payload text is never a path authority).
+    # A decision-owned file's payload is marked "needs-decision:" instead of the
+    # ordinary "signal:" below (other files in the same batch keep the ordinary
+    # payload). The wake reason line itself, and every harness-arm consumer that
+    # pattern-matches it, stays byte-identical and still carries the whole batch
+    # - only the per-row payload is per-file. Two readers branch on that payload:
     # docs/pi-supervision-branch.md's Pi-only branch dispatcher, to keep a
     # decision-owned row off the supervision branch (fm-branch-dispatch.ts,
     # fm-primary-pi-watch.ts), and the away daemon, whose handle_durable_wakes
@@ -2584,8 +2590,8 @@ EOF
       || { ! signal_crew_provably_working $files && ! signal_turnend_panes_churned $files; }; then
       while IFS=$(printf '\t') read -r sf sig f; do
         [ -n "$sf" ] || continue
-        file_reason="$reason"
-        case " $FM_SIGNAL_NEEDS_DECISION_FILES " in *" $f "*) file_reason="needs-decision:$files" ;; esac
+        file_reason="signal: $f"
+        case " $FM_SIGNAL_NEEDS_DECISION_FILES " in *" $f "*) file_reason="needs-decision: $f" ;; esac
         fm_wake_append signal "$(basename "$f")" "$file_reason" || exit 1
       done <<EOF
 $pending
@@ -2631,9 +2637,15 @@ EOF
 $FM_SIGNAL_SURFACE_ENDPOINTS
 EOF
       if [ "$signal_commit_error" -ne 0 ]; then
+        # Same per-file payload as the primary path above, and the same
+        # "needs-decision:" marking: a decision-owned row re-queued here is
+        # main-owned like every other one (docs/pi-supervision-branch.md), and
+        # only this path ever left that marking off.
         while IFS=$(printf '\t') read -r sf sig f; do
           [ -n "$sf" ] || continue
-          fm_wake_append signal "$(basename "$f")" "$reason" || exit 1
+          file_reason="signal: $f"
+          case " $FM_SIGNAL_NEEDS_DECISION_FILES " in *" $f "*) file_reason="needs-decision: $f" ;; esac
+          fm_wake_append signal "$(basename "$f")" "$file_reason" || exit 1
         done <<EOF
 $pending
 EOF
