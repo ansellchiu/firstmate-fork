@@ -2198,42 +2198,97 @@ fm_wake_branch_grant_live() {  # <rows-file> <owner-file>
   fm_wake_grant_rows_valid "$1" && fm_wake_branch_owner_matches "$2"
 }
 
-# How many queued rows <actor> can act on right now - exactly the rows a drain
-# by that actor would present or retire, and therefore the only rows worth
-# telling that actor to drain. Main owns every structurally valid row a live
-# branch grant does not reserve, plus every structurally invalid row. The branch
-# owns exactly the rows its live grant names. Read without the queue lock: a
-# torn read can only mis-count one poll, and the drain re-derives the set under
-# the lock before it presents or mutates anything.
-fm_wake_actor_pending_count() {  # <actor> [<rows-file> <owner-file>]
-  local actor=${1:-main} rows=${2:-$STATE/.branch-eligible-rows}
-  local owner=${3:-$STATE/.branch-eligible-owner} grant='' count=''
+# Two numbers about the same queue, with one owner each, because the callers
+# want different facts: how many ROWS an actor holds (what a row list, a grant
+# snapshot, or a "nothing was swallowed" notice is about) versus how many
+# NOTIFICATIONS a drain by that actor would actually show (what a message to a
+# human is about). Main owns every structurally valid row a live branch grant
+# does not reserve, plus every structurally invalid row. The branch owns exactly
+# the rows its live grant names. Both read without the queue lock: a torn read
+# can only mis-count one poll, and the drain re-derives the set under the lock
+# before it presents or mutates anything.
+_fm_wake_actor_count() {  # <actor> <rows|presented> <rows-file> <owner-file>
+  local actor=$1 mode=$2 rows=$3 owner=$4 grant='' count=''
   [ -f "$FM_WAKE_QUEUE" ] || { printf '0\n'; return 0; }
   if fm_wake_branch_grant_live "$rows" "$owner"; then
     grant=$rows
   fi
   if [ "$actor" = branch ]; then
     [ -n "$grant" ] || { printf '0\n'; return 0; }
-    count=$(awk -F '\t' -v seqs="$grant" '
+    count=$(awk -F '\t' -v seqs="$grant" -v mode="$mode" '
+      function presented(kind, key) {
+        return (kind == "heartbeat") ? "heartbeat" : kind SUBSEP key
+      }
       BEGIN { while ((getline line < seqs) > 0) keep[line] = 1 }
-      NF >= 5 && $2 ~ /^[0-9]+$/ && ($2 in keep) { n++ }
+      NF >= 5 && $2 ~ /^[0-9]+$/ && ($2 in keep) {
+        if (mode != "presented") { n++; next }
+        if (presented($3, $4) in seen) next
+        seen[presented($3, $4)] = 1
+        n++
+      }
       END { print n + 0 }
     ' "$FM_WAKE_QUEUE") || count=''
   else
-    count=$(awk -F '\t' -v seqs="$grant" '
+    count=$(awk -F '\t' -v seqs="$grant" -v mode="$mode" '
+      function presented(kind, key) {
+        return (kind == "heartbeat") ? "heartbeat" : kind SUBSEP key
+      }
       BEGIN { if (seqs != "") while ((getline line < seqs) > 0) reserved[line] = 1 }
-      NF < 5 || $2 !~ /^[0-9]+$/ { n++; next }
-      !($2 in reserved) { n++ }
+      NF < 5 || $2 !~ /^[0-9]+$/ {
+        if (mode != "presented") { n++; next }
+        if (!unusable++) n++
+        next
+      }
+      !($2 in reserved) {
+        if (mode != "presented") { n++; next }
+        if (presented($3, $4) in seen) next
+        seen[presented($3, $4)] = 1
+        n++
+      }
       END { print n + 0 }
     ' "$FM_WAKE_QUEUE") || count=''
   fi
   # A queue that exists but cannot be counted (unreadable file, unreadable
-  # state/) is not evidence of an empty queue: report a pending row so callers
-  # still raise the alarm on a queue nobody can prove is drained. A failed count
-  # is decided by awk's exit status, not by what it printed, because an awk that
-  # reaches END after failing to open the queue would otherwise report 0 rows.
-  case "$count" in ''|*[!0-9]*) count=1 ;; esac
+  # state/) is not evidence of an empty queue. A failed count is decided by
+  # awk's exit status, not by what it printed, because an awk that reaches END
+  # after failing to open the queue would otherwise report 0 rows.
+  #
+  # The two modes answer it differently because their callers act on it
+  # differently. A row count drives an alarm, so it reports a pending row and
+  # keeps the alarm on a queue nobody can prove is drained. A presented count is
+  # shown to a person, so it says "unknown" rather than naming a number nobody
+  # counted: a presented count of 1 always means exactly one counted row.
+  case "$count" in
+    ''|*[!0-9]*)
+      [ "$mode" != presented ] || { printf 'unknown\n'; return 0; }
+      count=1
+      ;;
+  esac
   printf '%s\n' "$count"
+}
+
+# How many queued ROWS <actor> can act on right now - the rows a drain by that
+# actor would present or retire, counted one per row, and therefore the number
+# that belongs beside an enumerated row list or a "this actor still holds work"
+# test.
+fm_wake_actor_pending_count() {  # <actor> [<rows-file> <owner-file>]
+  _fm_wake_actor_count "${1:-main}" rows \
+    "${2:-$STATE/.branch-eligible-rows}" "${3:-$STATE/.branch-eligible-owner}"
+}
+
+# How many NOTIFICATIONS <actor> would actually be shown right now: the same
+# rows, counted the way the drain presents them. Rows the drain collapses into
+# one presented row (fm_wake_print_deduped: same kind and key, and every
+# heartbeat row) count once, and the structurally invalid rows the drain retires
+# behind a single summary line instead of presenting count once between them -
+# so a catch-up burst of near-identical rows is reported as the handful of
+# notifications it becomes. Never 0 while rows remain, so a caller that only
+# asks "is anything waiting" may use either owner. A queue that exists but
+# cannot be counted prints "unknown" instead of a number, because this number is
+# shown to a person: every number it prints was counted.
+fm_wake_actor_presented_count() {  # <actor> [<rows-file> <owner-file>]
+  _fm_wake_actor_count "${1:-main}" presented \
+    "${2:-$STATE/.branch-eligible-rows}" "${3:-$STATE/.branch-eligible-owner}"
 }
 
 # --- signal announcement signatures -----------------------------------------

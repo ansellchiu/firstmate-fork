@@ -20,7 +20,9 @@
 // not consumed. An idle main consumes at before_agent_start; a streaming main
 // consumes at the user message_start carrying the exact wake text; either
 // event finishes the pending record, and a still-unconsumed record rides the
-// replacement handoff.
+// replacement handoff. sendWake owns what happens to a wake that arrives while
+// an accepted follow-up is still unconsumed: it is folded into that one rather
+// than queueing a second message.
 //
 // Postures (stated once here; docs/pi-supervision-branch.md "Postures"):
 // the away-posture record state/.afk-contract is read as a file at every
@@ -44,6 +46,7 @@ import {
   afkPostureRecordPresent,
   createBranchDispatchOffer,
   FM_BRANCH_DISPATCH_EVENT,
+  mainDrainPendingCount,
   scopeForUnreadWake,
 } from "./lib/fm-branch-dispatch.ts";
 import {
@@ -125,6 +128,14 @@ type SessionGeneration = {
   // replacement began reads it to tell a main-queued wake (replayed) from a
   // branch-handled one (finished).
   unconsumedWakes: Map<string, UnconsumedWake>;
+  // The pending token of the one follow-up standing in front of the captain:
+  // the LAST one Pi accepted, which is the only one a later wake can fold into.
+  // A send still in flight is not a doorbell yet, and a newer accepted follow-up
+  // supersedes an older one that Pi queued but never handed to the model.
+  outstandingWake: string | null;
+  // Wakes folded into that follow-up. See sendWake for why folding loses
+  // nothing, and foldWakeLimit for why it can never mute the captain for good.
+  foldedWakes: number;
 };
 
 function refreshWatchToolShell(
@@ -169,6 +180,13 @@ const armReadyTimeoutMs = positiveInteger(
   process.platform === "win32" ? 35000 : 12000,
 );
 const armRetireTimeoutMs = positiveInteger("FM_WATCH_ARM_RETIRE_TIMEOUT_MS", 1000);
+// How many wakes fold into one outstanding follow-up before the next one is
+// delivered on its own. Folding assumes the accepted follow-up will be
+// consumed; nothing guarantees it (Pi can drop a queued follow-up, or deliver
+// it with text that no longer matches the record consumeWake looks for), so
+// the assumption is bounded: past this many folds the captain is notified
+// again, carrying the folded count with it.
+const foldWakeLimit = 10;
 const repairOnlyHint = "call fm_watch_arm_pi again only after a later notification says the cycle is missing, failed, or unhealthy";
 const shuttingDownMessage = "watcher: not armed - Pi session is shutting down";
 
@@ -447,6 +465,8 @@ function createGeneration(): SessionGeneration {
     cleanupFailure: "",
     continuityRestoration: null,
     unconsumedWakes: new Map(),
+    outstandingWake: null,
+    foldedWakes: 0,
   };
 }
 
@@ -536,21 +556,72 @@ export default function (pi: ExtensionAPI) {
     !calmPresentation.stockExportRendering &&
     !calmTranscriptClassIsVisible(itemClass);
 
+  // A catch-up burst closes the arm once per actionable cycle, and every close
+  // used to queue its own main follow-up - the captain then spent one firstmate
+  // turn per queued message to clear a burst he could have read in one. A
+  // follow-up Pi has accepted but not consumed is still an unread instruction
+  // to run the drain, and ONE drain presents and acknowledges every durable row
+  // waiting, so a wake arriving behind it is folded into it instead of queueing
+  // a second message. Folding retires nothing: the durable rows keep their own
+  // acknowledgement contract (bin/fm-wake-lib.sh), and it is the OUTSTANDING
+  // record, not the folded one, that rides a replacement handoff, so a replaced
+  // session still replays a doorbell covering the whole burst. A watcher
+  // failure is its own report and is never folded, and no more than
+  // foldWakeLimit wakes fold into one outstanding follow-up.
+  function foldsIntoOutstandingWake(
+    owner: SessionGeneration,
+    message: string,
+    pending?: PendingActionableClose,
+  ): boolean {
+    if (!pending) return false;
+    if (owner.foldedWakes >= foldWakeLimit) return false;
+    if (!owner.outstandingWake) return false;
+    return !message.split(/\r?\n/).some((line) => /^watcher: FAILED/.test(line));
+  }
+
   async function sendWake(
     owner: SessionGeneration,
     message: string,
     pending?: PendingActionableClose,
   ): Promise<boolean> {
     if (!generationIsLive(owner)) return false;
+    if (foldsIntoOutstandingWake(owner, message, pending)) {
+      owner.foldedWakes += 1;
+      return true;
+    }
+    const folded = owner.foldedWakes;
+    owner.foldedWakes = 0;
+    const waiting = await mainDrainPendingCount(state, fmRoot);
+    if (!generationIsLive(owner)) {
+      owner.foldedWakes += folded;
+      return false;
+    }
+    // The folded cycles were folded into the PREVIOUS notification, not this
+    // one. The count is re-read for every notification that is composed, so it
+    // is exactly what main's drain would present as this one is queued - and
+    // it says so, because the cycles that fold in behind it keep enqueueing
+    // rows this already-sent text can no longer restate. A count nobody could
+    // produce, or one that did not arrive inside its bound, names no number at
+    // all: the doorbell still goes out, without the number.
+    const foldNote = folded > 0
+      ? `${folded} further watcher cycle(s) were folded into the previous notification. `
+      : "";
+    const burst = folded > 0 || (waiting !== null && waiting > 1)
+      ? `\n\n${foldNote}${waiting !== null && waiting > 0 ? `${waiting} notification(s) were waiting when this was queued; the` : "The"} single drain below presents and acknowledges every notification waiting, including any that arrived since.`
+      : "";
     const content = encodeFirstmateOperationalInput(
       "watcher",
-      `FIRSTMATE WATCHER WAKE: ${message}\n\nRun bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.`,
+      `FIRSTMATE WATCHER WAKE: ${message}${burst}\n\nRun bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.`,
     );
     if (pending) owner.unconsumedWakes.set(pending.token, { content, pending });
     try {
       await pi.sendUserMessage(content, { deliverAs: "followUp" });
+      if (pending) {
+        owner.outstandingWake = owner.unconsumedWakes.has(pending.token) ? pending.token : null;
+      }
     } catch (error) {
       if (pending) owner.unconsumedWakes.delete(pending.token);
+      owner.foldedWakes += folded;
       throw error;
     }
     // Accepted by Pi. A generation replaced while Pi was accepting it may
@@ -565,6 +636,7 @@ export default function (pi: ExtensionAPI) {
     for (const [token, wake] of owner.unconsumedWakes) {
       if (wake.content !== text) continue;
       owner.unconsumedWakes.delete(token);
+      if (owner.outstandingWake === token) owner.outstandingWake = null;
       wake.pending.delivered = true;
       try {
         finishPendingActionable(owner, wake.pending);
@@ -1167,6 +1239,21 @@ export default function (pi: ExtensionAPI) {
   pi.on?.("message_start", (event) => {
     if (event.message.role !== "user") return;
     consumeWake(generation, userMessageText(event.message.content));
+  });
+  // A follow-up joins the run that was streaming when Pi accepted it, and a
+  // settle with nothing left running means no retry, compaction, or queued
+  // continuation is still coming - so a follow-up unconsumed at that point
+  // never will be: it was dropped, cancelled, or delivered as text consumeWake
+  // could not match. (An agent_end is not that point; the queued continuation
+  // carrying the follow-up runs after it. A settle that raced another
+  // extension's fresh run is not that point either, which is why it is paired
+  // with isIdle() exactly as bin/fm-spawn.sh's busy-state owner pairs it.) It is no longer a doorbell in front of the
+  // captain, so nothing folds into it and the next wake is delivered on its
+  // own. The record itself stays pending: only consumption or the replacement
+  // handoff retires it.
+  pi.on?.("agent_settled", (_event, ctx) => {
+    if (ctx && typeof ctx.isIdle === "function" && !ctx.isIdle()) return;
+    generation.outstandingWake = null;
   });
 
   pi.on?.("session_start", async () => {

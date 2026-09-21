@@ -35,6 +35,13 @@ export interface AsyncExecOptions {
    * maxBuffer. Defaults to 1 MiB.
    */
   maxBuffer?: number;
+  /**
+   * Upper bound on the child's whole lifetime, mirroring spawnSync's timeout:
+   * a child still running at the deadline is killed and reported with a null
+   * status, the same answer a signalled child already gives. Unbounded when
+   * omitted, so a caller that must not wait forever has to say so.
+   */
+  timeoutMs?: number;
 }
 
 const DEFAULT_MAX_BUFFER = 1024 * 1024;
@@ -51,9 +58,11 @@ export function runCommandAsync(
     let stderrBytes = 0;
     const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER;
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const finish = (status: number | null, detail = ""): void => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer);
       resolve({ status, stdout, stderr: detail ? `${stderr}${detail}` : stderr });
     };
     let child;
@@ -66,6 +75,13 @@ export function runCommandAsync(
     } catch (error) {
       finish(null, error instanceof Error ? error.message : String(error));
       return;
+    }
+    if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
+      timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        finish(null, `timed out after ${options.timeoutMs}ms`);
+      }, options.timeoutMs);
+      timer.unref?.();
     }
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
