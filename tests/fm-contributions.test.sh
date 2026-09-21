@@ -565,13 +565,16 @@ case "$fault" in concurrency)
   sleep 0.5
   rm -f "$FORGE/inflight/$$" ;;
 esac
+# Reads run in parallel, so the clock advances by APPENDING a delta rather than
+# by a read-modify-write of one shared file: two concurrent reads would
+# otherwise lose an update, or read the file mid-truncate and reset the clock
+# to the epoch, letting the budget look unlimited.
 case "$fault:$*" in
-  reserve:'api repos/o/r/'*)
-    printf '%s\n' "$(( $(cat "$FORGE/clock") + 6 ))" > "$FORGE/clock" ;;
+  reserve:'api repos/o/r/'*) printf '6\n' >> "$FORGE/clock-ticks" ;;
   exhaust:'api repos/o/r/issues/8/comments?'*)
-    printf '%s\n' "$(( $(cat "$FORGE/clock") + 100 ))" > "$FORGE/clock" ;;
+    printf '100\n' >> "$FORGE/clock-ticks" ;;
   fail-late:'api repos/o/r/pulls/8/reviews?'*)
-    printf '%s\n' "$(( $(cat "$FORGE/clock") + 100 ))" > "$FORGE/clock"
+    printf '100\n' >> "$FORGE/clock-ticks"
     printf 'HTTP 502\n' >&2; exit 1 ;;
   fail:'api repos/o/r/pulls/8/reviews?'*) printf 'HTTP 502\n' >&2; exit 1 ;;
   down:*) printf 'HTTP 502\n' >&2; exit 1 ;;
@@ -583,7 +586,13 @@ SH
   # A controllable clock lets the budget expire between two forge calls.
   cat > "$home/fakebin/date" <<'SH'
 #!/bin/sh
-if [ "$*" = +%s ] && [ -f "$FORGE/clock" ]; then cat "$FORGE/clock"; else exec /bin/date "$@"; fi
+if [ "$*" = +%s ] && [ -f "$FORGE/clock" ]; then
+  ticks=0
+  if [ -f "$FORGE/clock-ticks" ]; then ticks=$(awk '{ s += $1 } END { print s + 0 }' "$FORGE/clock-ticks"); fi
+  echo $(( $(cat "$FORGE/clock") + ticks ))
+else
+  exec /bin/date "$@"
+fi
 SH
   chmod +x "$home/fakebin/gh" "$home/fakebin/date"
 }
