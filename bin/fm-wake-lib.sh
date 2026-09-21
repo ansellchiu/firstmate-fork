@@ -1295,11 +1295,40 @@ fm_treehouse_project_lock_path() {  # <project-dir>
   printf '%s/.treehouse-project-%s.lock\n' "$root/state" "$hash"
 }
 
+# The origin identity of the repository a path lives in, or empty when the
+# repository declares none - or declares one that proves nothing. This is the
+# same identity bin/fm-claude-trust.sh's scope test uses, and it is deliberately
+# stricter than fm_treehouse_project_lock_path's: a lock path only has to be a
+# stable key, while this decides whether two different repositories are the same
+# project, so a relative origin is resolved against the checkout that DECLARES
+# it - the primary checkout, derived from that repository's git common dir - and
+# an unresolvable one yields nothing at all rather than a spelling two unrelated
+# repositories could share.
+fm_treehouse_origin_identity() {  # <path-inside-repo>
+  local dir=$1 url common base
+  url=$(git -C "$dir" remote get-url origin 2>/dev/null) || return 1
+  [ -n "$url" ] || return 1
+  case "$url" in
+    /*) [ -d "$url" ] && (CDPATH='' cd -- "$url" && pwd -P) || return 1 ;;
+    *://*|*:*) printf '%s\n' "$url" ;;
+    *)
+      common=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+      base=$(dirname "$common")
+      [ -d "$base/$url" ] && (CDPATH='' cd -- "$base/$url" && pwd -P) || return 1
+      ;;
+  esac
+}
+
 # A Treehouse slot has the managed pool's fixed <pool>/<slot>/<repo> layout.
-# Require both its pool state and the same Git common directory as the recorded
-# project; an ordinary linked worktree is not evidence that Treehouse owns it.
+# Require its pool state, plus either the same Git common directory as the
+# recorded project or the same proven origin identity; an ordinary linked
+# worktree is not evidence that Treehouse owns it. The origin arm is what lets
+# the accounting see the slots the pool already hands across clones of one
+# origin - a secondmate home with its own clone is handed the primary home
+# clone's worktree - so those slots are claimed at spawn and ownership-checked
+# at teardown exactly like a same-clone slot instead of being invisible to both.
 fm_treehouse_pool_slot() {  # <project-dir> <worktree>
-  local project=$1 worktree=$2 slot pool state project_common slot_common
+  local project=$1 worktree=$2 slot pool state project_common slot_common project_origin slot_origin
   [ -d "$project" ] && [ -d "$worktree" ] || return 1
   slot=$(CDPATH='' cd -- "$worktree" 2>/dev/null && pwd -P) || return 1
   pool=$(dirname "$(dirname "$slot")")
@@ -1309,7 +1338,10 @@ fm_treehouse_pool_slot() {  # <project-dir> <worktree>
   slot_common=$(git -C "$slot" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   project_common=$(CDPATH='' cd -- "$project_common" 2>/dev/null && pwd -P) || return 1
   slot_common=$(CDPATH='' cd -- "$slot_common" 2>/dev/null && pwd -P) || return 1
-  [ "$project_common" = "$slot_common" ]
+  [ "$project_common" = "$slot_common" ] && return 0
+  project_origin=$(fm_treehouse_origin_identity "$project") || return 1
+  slot_origin=$(fm_treehouse_origin_identity "$slot") || return 1
+  [ -n "$project_origin" ] && [ "$project_origin" = "$slot_origin" ]
 }
 
 # Slot-owner claim: which task a Treehouse pool slot currently belongs to.

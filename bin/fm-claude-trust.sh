@@ -251,17 +251,26 @@ common_dir_of() {
 # unresolved path as a key, which only has to be stable, this proves NO identity
 # at all, because an unresolved local path is only meaningful relative to the
 # repository that declares it and two unrelated repositories can spell the same
-# one. Trust has to be proven, not merely keyed. A remote URL is absolute by
+# one. Trust has to be proven, not merely keyed. A relative one is therefore
+# resolved against the checkout that DECLARES the remote - the primary checkout
+# of the repository the argument lives in, derived from its git common dir -
+# never against the argument itself, which on the worktree side is a linked
+# worktree parked anywhere in the pool and would resolve the spelling against a
+# directory the declaring repository never names. A remote URL is absolute by
 # nature, so it is the one form compared verbatim, which errs toward refusing
 # rather than trusting.
 origin_identity() {  # <path-inside-repo>
-  local dir=$1 url
+  local dir=$1 url common base
   url=$(git -C "$dir" remote get-url origin 2>/dev/null) || return 1
   [ -n "$url" ] || return 1
   case $url in
     /*) [ -d "$url" ] && (cd -P -- "$url" && pwd -P) || return 1 ;;
     *://*|*:*) printf '%s\n' "$url" ;;
-    *) [ -d "$dir/$url" ] && (cd -P -- "$dir/$url" && pwd -P) || return 1 ;;
+    *)
+      common=$(common_dir_of "$dir") || return 1
+      base=$(real_dir "$(dirname -- "$common")") || return 1
+      [ -n "$base" ] && [ -d "$base/$url" ] && (cd -P -- "$base/$url" && pwd -P) || return 1
+      ;;
   esac
 }
 
@@ -347,31 +356,28 @@ if [ "$MODE" = worktree ]; then
   [ -n "$PROJ_GIT_DIR" ] || refuse "project '$PROJ_REAL' has no resolvable git directory"
   PROJ_GIT_DIR=$(real_dir "$PROJ_GIT_DIR") || true
   [ -n "$PROJ_GIT_DIR" ] || refuse "project '$PROJ_REAL' has an unresolvable git directory"
-  if [ "$PROJ_GIT_DIR" = "$PROJ_COMMON" ]; then
+  #
+  # The same-origin allowance above lets the worktree belong to a DIFFERENT
+  # clone than <project>. Claude Code's canonicalization collapses that worktree
+  # to ITS OWN primary checkout, never <project>'s, so the common dir the
+  # canonical is derived from is the worktree's own whenever the two differ, and
+  # <project>'s otherwise. It is picked once and the single derive-and-verify
+  # below runs against it.
+  if [ "$WT_COMMON" != "$PROJ_COMMON" ]; then
+    CANON_COMMON=$WT_COMMON
+    CANON_REFUSAL="'$TARGET_REAL' belongs to a clone whose primary checkout could not be resolved"
+  else
+    CANON_COMMON=$PROJ_COMMON
+    CANON_REFUSAL="project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
+  fi
+  if [ "$PROJ_GIT_DIR" = "$CANON_COMMON" ]; then
     PROJ_CANON=$PROJ_REAL
   else
-    PROJ_CANON=$(real_dir "$(dirname -- "$PROJ_COMMON")") || true
-    [ -n "$PROJ_CANON" ] \
-      || refuse "project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
+    PROJ_CANON=$(real_dir "$(dirname -- "$CANON_COMMON")") || true
+    [ -n "$PROJ_CANON" ] || refuse "$CANON_REFUSAL"
     CANON_GIT_DIR=$(git -C "$PROJ_CANON" rev-parse --absolute-git-dir 2>/dev/null) || true
     CANON_GIT_DIR=$(real_dir "${CANON_GIT_DIR:-}") || true
-    [ -n "$CANON_GIT_DIR" ] && [ "$CANON_GIT_DIR" = "$PROJ_COMMON" ] \
-      || refuse "project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
-  fi
-  # The same-origin allowance above lets the worktree belong to a DIFFERENT
-  # clone than <project>. Claude Code's git-root canonicalization collapses
-  # that worktree to ITS OWN primary checkout, never <project>'s, and the
-  # external-imports flags are read only from the canonical entry - so when the
-  # two common dirs differ the canonical is resolved from the worktree's own
-  # common dir instead, and verified the same way as above rather than guessed.
-  if [ "$WT_COMMON" != "$PROJ_COMMON" ]; then
-    PROJ_CANON=$(real_dir "$(dirname -- "$WT_COMMON")") || true
-    [ -n "$PROJ_CANON" ] \
-      || refuse "'$TARGET_REAL' belongs to a clone whose primary checkout could not be resolved"
-    CANON_GIT_DIR=$(git -C "$PROJ_CANON" rev-parse --absolute-git-dir 2>/dev/null) || true
-    CANON_GIT_DIR=$(real_dir "${CANON_GIT_DIR:-}") || true
-    [ -n "$CANON_GIT_DIR" ] && [ "$CANON_GIT_DIR" = "$WT_COMMON" ] \
-      || refuse "'$TARGET_REAL' belongs to a clone whose primary checkout could not be resolved"
+    [ -n "$CANON_GIT_DIR" ] && [ "$CANON_GIT_DIR" = "$CANON_COMMON" ] || refuse "$CANON_REFUSAL"
   fi
 else
   # The seed evidence, in the order that names the most useful reason first: the

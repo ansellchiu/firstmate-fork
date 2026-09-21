@@ -946,7 +946,10 @@ test_unresolvable_relative_origin_collision_is_refused() {
     || fail "the relative-origin case was vacuous: both repositories share a history"
   [ "$(git -C "$main_wt" remote get-url origin)" = "$(git -C "$mate_proj" remote get-url origin)" ] \
     || fail "the relative-origin case was vacuous: the two origins are spelled differently"
-  [ ! -d "$main_wt/../project.git" ] && [ ! -d "$mate_proj/../project.git" ] \
+  # Each relative origin resolves from the checkout that DECLARES it - the
+  # primary checkout of that repository - so those are the paths that must not
+  # exist for this to be an unresolvable collision.
+  [ ! -d "$(dirname -- "$main_proj")/project.git" ] && [ ! -d "$(dirname -- "$mate_proj")/project.git" ] \
     || fail "the relative-origin case was vacuous: a relative origin actually resolved"
   out=$(run_trust "$config" "$main_wt" "$mate_proj")
   expect_code 1 $? "an unresolvable relative origin must not prove a shared identity: $out"
@@ -954,6 +957,40 @@ test_unresolvable_relative_origin_collision_is_refused() {
   assert_not_trusted "$config/.claude.json" "$main_wt" \
     "an unrelated repository's worktree was trusted on a colliding relative origin"
   pass "fm-claude-trust.sh: refuses two unrelated repos sharing an unresolvable relative origin"
+}
+
+# A relative origin resolved against the WORKTREE argument rather than against
+# the checkout that declares it names a directory the declaring repository never
+# refers to - and in the pool layout that directory sits beside the worktree,
+# where an unrelated mate clone's own `../project.git` lands too. Both sides then
+# resolve to one existing bare repository and an unrelated project's worktree is
+# granted workspace trust. Each side must resolve from its own primary checkout,
+# so the two identities stay distinct and this is refused.
+test_relative_origin_resolves_from_the_declaring_checkout() {
+  local case_dir config main_proj main_wt mate_proj out
+  case_dir="$TMP_ROOT/relative-origin-base"
+  config="$case_dir/claude-config"
+  main_proj="$case_dir/main/project"
+  main_wt="$case_dir/pool/project"
+  mate_proj="$case_dir/pool/clone"
+  mkdir -p "$config" "$(dirname -- "$main_wt")"
+  fm_git_init_commit "$main_proj"
+  git -C "$main_proj" remote add origin ../project.git
+  git -C "$main_proj" worktree add --quiet -b wt-relative-base "$main_wt"
+  fm_git_init_commit "$mate_proj"
+  git -C "$mate_proj" remote add origin ../project.git
+  # The main clone's origin, and the unrelated bare repository that sits beside
+  # the pool worktree - the path the worktree-based resolution wrongly lands on.
+  git clone --quiet --bare "$main_proj" "$case_dir/main/project.git"
+  git clone --quiet --bare "$mate_proj" "$case_dir/pool/project.git"
+  [ -d "$case_dir/pool/project.git" ] \
+    || fail "the relative-origin base case was vacuous: the colliding bare repository is missing"
+  out=$(run_trust "$config" "$main_wt" "$mate_proj")
+  expect_code 1 $? "a relative origin resolved from the worktree must not prove a shared identity: $out"
+  assert_contains "$out" "is not a worktree of project" "the refusal did not name the project mismatch"
+  assert_not_trusted "$config/.claude.json" "$main_wt" \
+    "an unrelated repository's worktree was trusted on a relative origin resolved from the wrong base"
+  pass "fm-claude-trust.sh: resolves a relative origin from the checkout that declares it"
 }
 
 # The reported production failure, driven end to end through the spawn: a
@@ -1051,6 +1088,7 @@ test_same_origin_clone_worktree_refreshes_the_worktrees_own_canonical_import_con
 test_different_origin_clone_worktree_is_refused
 test_originless_clone_worktree_is_refused
 test_unresolvable_relative_origin_collision_is_refused
+test_relative_origin_resolves_from_the_declaring_checkout
 test_worktree_subdirectory_is_refused
 test_project_argument_that_is_itself_a_worktree_resolves_to_the_primary_checkout
 test_unrelated_store_content_is_preserved
