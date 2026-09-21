@@ -34,6 +34,34 @@ $1
 EOF
 }
 
+# make_same_origin_clones <name>: a bare origin, the primary home's clone with a
+# linked worktree on it (the shape the shared treehouse pool hands out), and a
+# SECOND clone of the same origin standing in for a secondmate home's own clone.
+# Both clones spell the origin identically, so only the repo identity differs.
+# Echoes "<case>|<main>|<wt>|<mate>|<config>".
+make_same_origin_clones() {
+  local name=$1 case_dir origin main mate wt config
+  case_dir="$TMP_ROOT/$name"
+  origin="$case_dir/origin.git"
+  main="$case_dir/main/project"
+  wt="$case_dir/pool/project"
+  mate="$case_dir/mate/projects/project"
+  config="$case_dir/claude-config"
+  mkdir -p "$config" "$(dirname -- "$wt")" "$(dirname -- "$mate")"
+  fm_git_init_commit "$main"
+  fm_git_add_origin "$main" "$origin"
+  git -C "$main" worktree add --quiet -b "wt-$name" "$wt"
+  git clone --quiet "$origin" "$mate"
+  git -C "$mate" remote set-url origin "file://$(cd -- "$origin" && pwd)"
+  printf '%s|%s|%s|%s|%s\n' "$case_dir" "$main" "$wt" "$mate" "$config"
+}
+
+read_clone_case() {
+  IFS='|' read -r CASE_DIR CLONE_MAIN CLONE_WT CLONE_MATE CLONE_CONFIG <<EOF
+$1
+EOF
+}
+
 # run_trust <config> <worktree> <project> [home]: invoke with an isolated store.
 run_trust() {
   local config=$1 wt=$2 proj=$3 home=${4:-$1}
@@ -813,6 +841,195 @@ test_secondmate_spawn_fails_closed_when_home_trust_cannot_be_recorded() {
   pass "fm-spawn.sh: a claude secondmate spawn refuses when home trust cannot be recorded"
 }
 
+# The shared treehouse pool is keyed on repo identity, so a secondmate home
+# holding its OWN clone of a project is handed a linked worktree of the PRIMARY
+# home's clone. That worktree's common dir is the other clone's, so the
+# exact-common-dir test refused a worktree the allocator itself treats as the
+# same project, and no claude worker in that class of work ever started.
+test_same_origin_clone_worktree_is_trusted() {
+  local rec out
+  rec=$(make_same_origin_clones same-origin)
+  read_clone_case "$rec"
+  out=$(run_trust "$CLONE_CONFIG" "$CLONE_WT" "$CLONE_MATE")
+  expect_code 0 $? "a worktree of a same-origin clone of the project must be trusted: $out"
+  assert_trusted "$CLONE_CONFIG/.claude.json" "$CLONE_WT" \
+    "a same-origin clone's worktree was not registered as trusted"
+  pass "fm-claude-trust.sh: trusts a worktree of a same-origin clone of the project"
+}
+
+# The external-imports flags are read only from the checkout Claude Code's own
+# git-root canonicalization collapses the worktree to, which for a same-origin
+# worktree is the OTHER clone's primary checkout - not the <project> argument.
+# Refreshing them at <project> would put them at a key the running app never
+# reads for this worktree, so the worker would meet the imports dialog the trust
+# registration just cleared the way to.
+test_same_origin_clone_worktree_refreshes_the_worktrees_own_canonical_import_consent() {
+  local rec out
+  rec=$(make_same_origin_clones same-origin-canonical)
+  read_clone_case "$rec"
+  # The primary home's checkout already carries the human's explicit "Yes, allow".
+  node -e 'const fs=require("node:fs"),p=process.argv[2];fs.writeFileSync(process.argv[1],JSON.stringify({projects:{[p]:{hasTrustDialogAccepted:true,hasClaudeMdExternalIncludesApproved:true,hasClaudeMdExternalIncludesWarningShown:false}}}));' \
+    "$CLONE_CONFIG/.claude.json" "$CLONE_MAIN"
+  out=$(run_trust "$CLONE_CONFIG" "$CLONE_WT" "$CLONE_MATE")
+  expect_code 0 $? "a same-origin clone's worktree must be trusted when consent already exists: $out"
+  assert_all_flags "$CLONE_CONFIG/.claude.json" "$CLONE_MAIN" \
+    "the import-consent refresh did not land on the checkout Claude reads for this worktree"
+  assert_trusted "$CLONE_CONFIG/.claude.json" "$CLONE_WT" \
+    "a same-origin clone's worktree was not registered as trusted"
+  pass "fm-claude-trust.sh: refreshes import consent on the worktree's own canonical checkout"
+}
+
+# The allowance is an origin identity, not a relaxation of the scope test: a
+# clone of a DIFFERENT origin is a different project and must still be refused.
+test_different_origin_clone_worktree_is_refused() {
+  local rec out other_origin
+  rec=$(make_same_origin_clones different-origin)
+  read_clone_case "$rec"
+  other_origin="$CASE_DIR/other-origin.git"
+  git clone --quiet --bare "$CLONE_MAIN" "$other_origin"
+  git -C "$CLONE_MATE" remote set-url origin "file://$(cd -- "$other_origin" && pwd)"
+  out=$(run_trust "$CLONE_CONFIG" "$CLONE_WT" "$CLONE_MATE")
+  expect_code 1 $? "a worktree of a different-origin clone must be refused: $out"
+  assert_contains "$out" "is not a worktree of project" "the refusal did not name the project mismatch"
+  assert_not_trusted "$CLONE_CONFIG/.claude.json" "$CLONE_WT" \
+    "a different-origin clone's worktree was trusted on its shared git shape alone"
+  pass "fm-claude-trust.sh: refuses a worktree of a clone with a different origin"
+}
+
+# An origin-less repository has no identity to prove, in either direction, so it
+# must fall back to the exact-common-dir test and refuse.
+test_originless_clone_worktree_is_refused() {
+  local rec out second_rec
+  rec=$(make_same_origin_clones originless-project)
+  read_clone_case "$rec"
+  git -C "$CLONE_MATE" remote remove origin
+  out=$(run_trust "$CLONE_CONFIG" "$CLONE_WT" "$CLONE_MATE")
+  expect_code 1 $? "a project clone with no origin must be refused: $out"
+  assert_not_trusted "$CLONE_CONFIG/.claude.json" "$CLONE_WT" "an origin-less project clone's worktree was trusted"
+
+  second_rec=$(make_same_origin_clones originless-worktree)
+  read_clone_case "$second_rec"
+  git -C "$CLONE_MAIN" remote remove origin
+  out=$(run_trust "$CLONE_CONFIG" "$CLONE_WT" "$CLONE_MATE")
+  expect_code 1 $? "a worktree whose owning clone has no origin must be refused: $out"
+  assert_not_trusted "$CLONE_CONFIG/.claude.json" "$CLONE_WT" "an origin-less owning clone's worktree was trusted"
+  pass "fm-claude-trust.sh: refuses an origin-less repository with no shared identity to prove"
+}
+
+# The same relative origin spelling names a different place in each repository
+# that declares it, so an unresolved one proves no shared identity. Two entirely
+# unrelated repositories both declaring `../project.git`, with neither path
+# resolving, must still be refused.
+test_unresolvable_relative_origin_collision_is_refused() {
+  local case_dir config main_proj main_wt mate_proj out
+  case_dir="$TMP_ROOT/relative-origin"
+  config="$case_dir/claude-config"
+  main_proj="$case_dir/main/projects/project"
+  main_wt="$case_dir/main/pool/project"
+  mate_proj="$case_dir/mate/projects/project"
+  mkdir -p "$config" "$(dirname -- "$main_wt")" "$(dirname -- "$mate_proj")"
+  fm_git_init_commit "$main_proj"
+  git -C "$main_proj" remote add origin ../project.git
+  git -C "$main_proj" worktree add --quiet -b wt-relative "$main_wt"
+  fm_git_init_commit "$mate_proj"
+  printf 'mate\n' > "$mate_proj/mate-only.txt"
+  git -C "$mate_proj" add mate-only.txt
+  git -C "$mate_proj" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' \
+    commit -qm mate-only
+  git -C "$mate_proj" remote add origin ../project.git
+  # Prove the case is not vacuous: the two repositories are genuinely separate
+  # (different common dirs, unrelated histories), both origins are the same
+  # unresolvable relative spelling, and neither path resolves.
+  [ "$(git -C "$main_wt" rev-parse --git-common-dir)" != "$(git -C "$mate_proj" rev-parse --git-common-dir)" ] \
+    || fail "the relative-origin case was vacuous: both paths share one common dir"
+  [ "$(git -C "$main_wt" rev-parse HEAD)" != "$(git -C "$mate_proj" rev-parse HEAD)" ] \
+    || fail "the relative-origin case was vacuous: both repositories share a history"
+  [ "$(git -C "$main_wt" remote get-url origin)" = "$(git -C "$mate_proj" remote get-url origin)" ] \
+    || fail "the relative-origin case was vacuous: the two origins are spelled differently"
+  [ ! -d "$main_wt/../project.git" ] && [ ! -d "$mate_proj/../project.git" ] \
+    || fail "the relative-origin case was vacuous: a relative origin actually resolved"
+  out=$(run_trust "$config" "$main_wt" "$mate_proj")
+  expect_code 1 $? "an unresolvable relative origin must not prove a shared identity: $out"
+  assert_contains "$out" "is not a worktree of project" "the refusal did not name the project mismatch"
+  assert_not_trusted "$config/.claude.json" "$main_wt" \
+    "an unrelated repository's worktree was trusted on a colliding relative origin"
+  pass "fm-claude-trust.sh: refuses two unrelated repos sharing an unresolvable relative origin"
+}
+
+# The reported production failure, driven end to end through the spawn: a
+# secondmate home holding its OWN clone of a project spawns a crewmate, and the
+# shared pool hands that spawn a linked worktree of the PRIMARY home's clone of
+# the same origin. The trust pre-registration refused it outright, so no worker
+# ever started and the task produced no metadata and no change.
+test_secondmate_home_spawn_accepts_a_same_origin_pool_worktree() {
+  local case_dir origin primary_clone pool_wt home id config fakebin launch_log out
+  case_dir="$TMP_ROOT/sm-same-origin-spawn"
+  origin="$case_dir/origin.git"
+  primary_clone="$case_dir/primary/projects/agent-skills"
+  pool_wt="$case_dir/pool/agent-skills"
+  home="$case_dir/fm-homes/sm-n1"
+  config="$case_dir/claude-config"
+  id="smorigin$$"
+  launch_log="$case_dir/launch.log"
+  mkdir -p "$config" "$(dirname -- "$pool_wt")" "$(dirname -- "$primary_clone")"
+  seed_secondmate_home "$home" sm-n1 clone
+  fm_git_init_commit "$primary_clone"
+  fm_git_add_origin "$primary_clone" "$origin"
+  git -C "$primary_clone" worktree add --quiet -b wt-pool "$pool_wt"
+  git clone --quiet "$origin" "$home/projects/agent-skills"
+  git -C "$home/projects/agent-skills" remote set-url origin "file://$(cd -- "$origin" && pwd)"
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
+  fm_test_spawn_brief "$home" "$id"
+  out=$(FM_TEST_CLAUDE_CONFIG_DIR="$config" FM_FAKE_LAUNCH_LOG="$launch_log" \
+    fm_test_run_spawn "$home" "$pool_wt" "$fakebin" "$id" "$home/projects/agent-skills" claude \
+    --mode no-mistakes --yolo off)
+  expect_code 0 $? "a crewmate spawn into a same-origin pool worktree must succeed: $out"
+  assert_trusted "$config/.claude.json" "$pool_wt" \
+    "the second mate spawn did not pre-register trust for the pool worktree it was handed"
+  assert_present "$launch_log" "the second mate spawn sent no launch command"
+  assert_grep 'claude --dangerously-skip-permissions' "$launch_log" \
+    "the second mate launch command was not the claude worker launch"
+  assert_grep "$home/data/$id/launch-brief.md" "$launch_log" \
+    "the second mate launch command did not carry the brief the worker must read"
+  assert_grep "CLAUDE_CONFIG_DIR='$config'" "$launch_log" \
+    "the second mate launch did not point the worker at the store that was trusted"
+  pass "fm-spawn.sh: a second mate spawn pre-trusts a same-origin pool worktree and reaches the brief"
+}
+
+# The same second-mate path must still refuse a worktree of an unrelated
+# repository: the origin allowance widens which clone may own the worktree, never
+# which project.
+test_secondmate_home_spawn_still_refuses_a_foreign_pool_worktree() {
+  local case_dir origin primary_clone home id config fakebin launch_log out foreign foreign_wt
+  case_dir="$TMP_ROOT/sm-foreign-spawn"
+  origin="$case_dir/origin.git"
+  primary_clone="$case_dir/primary/projects/agent-skills"
+  home="$case_dir/fm-homes/sm-n1"
+  config="$case_dir/claude-config"
+  foreign="$case_dir/foreign/other-project"
+  foreign_wt="$case_dir/foreign/pool/other-project"
+  id="smforeign$$"
+  launch_log="$case_dir/launch.log"
+  mkdir -p "$config" "$(dirname -- "$primary_clone")"
+  seed_secondmate_home "$home" sm-n1 clone
+  fm_git_init_commit "$primary_clone"
+  fm_git_add_origin "$primary_clone" "$origin"
+  git clone --quiet "$origin" "$home/projects/agent-skills"
+  git -C "$home/projects/agent-skills" remote set-url origin "file://$(cd -- "$origin" && pwd)"
+  fm_git_worktree "$foreign" "$foreign_wt" wt-foreign
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
+  fm_test_spawn_brief "$home" "$id"
+  out=$(FM_TEST_CLAUDE_CONFIG_DIR="$config" FM_FAKE_LAUNCH_LOG="$launch_log" \
+    fm_test_run_spawn "$home" "$foreign_wt" "$fakebin" "$id" "$home/projects/agent-skills" claude \
+    --mode no-mistakes --yolo off)
+  expect_code 1 $? "a spawn into a foreign project's worktree must be refused: $out"
+  assert_contains "$out" "workspace trust" "the spawn did not report the trust refusal"
+  assert_absent "$launch_log" "a worker was launched into a foreign project's worktree"
+  assert_not_trusted "$config/.claude.json" "$foreign_wt" \
+    "a foreign project's worktree was trusted"
+  pass "fm-spawn.sh: a second mate spawn still refuses a foreign project's worktree"
+}
+
 test_fresh_worktree_is_trusted
 test_fresh_worktree_also_trusts_the_project_root_without_import_consent
 test_registration_carries_forward_existing_import_consent
@@ -829,6 +1046,11 @@ test_relative_config_dir_is_refused
 test_non_git_directory_is_refused
 test_missing_directory_is_refused
 test_foreign_project_worktree_is_refused
+test_same_origin_clone_worktree_is_trusted
+test_same_origin_clone_worktree_refreshes_the_worktrees_own_canonical_import_consent
+test_different_origin_clone_worktree_is_refused
+test_originless_clone_worktree_is_refused
+test_unresolvable_relative_origin_collision_is_refused
 test_worktree_subdirectory_is_refused
 test_project_argument_that_is_itself_a_worktree_resolves_to_the_primary_checkout
 test_unrelated_store_content_is_preserved
@@ -844,3 +1066,5 @@ test_secondmate_leased_worktree_home_is_trusted
 test_secondmate_home_trust_refuses_everything_unseeded
 test_worktree_mode_still_refuses_a_secondmate_home
 test_secondmate_spawn_fails_closed_when_home_trust_cannot_be_recorded
+test_secondmate_home_spawn_accepts_a_same_origin_pool_worktree
+test_secondmate_home_spawn_still_refuses_a_foreign_pool_worktree
