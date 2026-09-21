@@ -58,6 +58,7 @@ A Pi primary can notice that nothing has reached its terminal for a long time an
 This home-local, gitignored toggle arms only the observing half of that: the value `observe`, alone on the line, turns it on, and an absent file or any other value leaves the session exactly as it is today.
 It is not inherited into secondmate homes.
 The toggle takes effect at the next Pi session: the value is read when the session subscribes its raw terminal listener, and the observer never arms without that listener, so a value written mid-session cannot produce a countdown only a submitted message could cancel.
+Taking it away is immediate in the safe direction: the file is re-read every time the observer acts, so an armed session stands down at its next byte or timer wakeup.
 
 The observer watches, reports, and stops there.
 It never writes `state/.afk-contract` or the legacy `state/.afk`, never calls the away-posture scripts or the `/afk` path, and never sends the model a message.

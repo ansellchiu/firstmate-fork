@@ -21,8 +21,8 @@ LOCK_PID=$$
 
 cat > "$TMP_ROOT/driver.mjs" <<'JS'
 // Drives the extension against a stub Pi and prints one trace line per
-// observable effect. ACTIONS is a comma list: wait:<ms>, raw:<bytes>,
-// input:<source>:<text>, lock:self, shutdown.
+// observable effect. ACTIONS is a comma list: wait:<ms>, block:<ms>,
+// raw:<bytes>, input:<source>:<text>, lock:self, shutdown.
 import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -70,6 +70,14 @@ fire("session_start");
 for (const action of (process.env.ACTIONS || "").split(",").filter(Boolean)) {
   const [verb, ...rest] = action.split(":");
   if (verb === "wait") await new Promise((r) => setTimeout(r, Number(rest[0])));
+  else if (verb === "block") {
+    // Starve the event loop the way a slow subprocess in another extension
+    // does, so the repaint interval fires late and coalesced. A countdown that
+    // decrements a counter cannot tell this happened; one that recomputes
+    // against an absolute deadline can.
+    const until = Date.now() + Number(rest[0]);
+    while (Date.now() < until) {}
+  }
   else if (verb === "raw") {
     const result = terminalHandler?.(rest.join(":"));
     if (result !== undefined) trace.push(`raw-altered ${JSON.stringify(result)}`);
@@ -143,6 +151,23 @@ test_countdown() {
     || fail "countdown status not shown: $out"
   log_of "$home" | grep -q 'observe	countdown-start' || fail "countdown start not recorded: $(log_of "$home")"
   pass "on an opted-in home the idle deadline opens a visible countdown and records it"
+}
+
+# --- 2b. the display follows absolute time, not a decremented counter --------
+test_delayed_repaint() {
+  local home out
+  home=$(fixture repaint observe)
+  # Countdown opens at t0+200ms showing 5s, then the event loop is blocked for
+  # 3s. The coalesced repaint that follows must report the ~2s actually left.
+  # A counter decremented once per callback would report 4s, and would still be
+  # painting 3s and 2s frames seconds after the deadline had passed.
+  out=$(drive "$home" 0.2 5 "wait:400,block:3000,wait:300") || fail "delayed-repaint driver failed"
+  printf '%s\n' "$out" | grep -q 'Auto-AFK in 5s' || fail "countdown never opened: $out"
+  printf '%s\n' "$out" | grep -qE 'Auto-AFK in [43]s' \
+    && fail "a delayed repaint reported time a decremented counter would show, not the time left: $out"
+  printf '%s\n' "$out" | grep -q 'Auto-AFK in 2s' \
+    || fail "the repaint after a 3s stall did not report the remaining 2s: $out"
+  pass "a repaint delayed by a blocked event loop reports the real time left, not a decremented count"
 }
 
 # --- 3. any Pi input cancels -------------------------------------------------
@@ -260,6 +285,7 @@ test_lifecycle() {
 
 test_off_is_inert
 test_countdown
+test_delayed_repaint
 test_input_cancels
 test_expiry_enters_nothing
 test_scope_gates
