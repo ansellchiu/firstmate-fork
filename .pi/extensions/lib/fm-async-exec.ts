@@ -66,12 +66,15 @@ export function runCommandAsync(
       resolve({ status, stdout, stderr: detail ? `${stderr}${detail}` : stderr });
     };
     let child;
-    // A shell wrapper is a process group leader here, so a wedged GRANDCHILD
+    // A bounded child leads its own process group, so a wedged GRANDCHILD
     // (a `ps` liveness fallback, say) cannot outlive the kill still holding
-    // the inherited stdout/stderr pipes: the whole group goes. Windows has no
-    // process groups to lead and would give a detached child its own console,
-    // so it keeps the plain spawn and the direct kill.
-    const ownsGroup = process.platform !== "win32";
+    // the inherited stdout/stderr pipes: the whole group goes. Only a caller
+    // that asked for a bound gets that group - an unbounded child keeps the
+    // caller's group, where a group-directed signal still reaches it. Windows
+    // has no process groups to lead and would give a detached child its own
+    // console, so it keeps the plain spawn and the direct kill.
+    const bounded = options.timeoutMs !== undefined && options.timeoutMs > 0;
+    const ownsGroup = bounded && process.platform !== "win32";
     try {
       child = spawn(command, [...args], {
         cwd: options.cwd,
@@ -94,7 +97,7 @@ export function runCommandAsync(
       }
       child.kill(signal);
     };
-    if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
+    if (bounded) {
       timer = setTimeout(() => {
         kill("SIGKILL");
         finish(null, `timed out after ${options.timeoutMs}ms`);

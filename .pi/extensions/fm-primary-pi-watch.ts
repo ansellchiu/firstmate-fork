@@ -1256,11 +1256,13 @@ export default function (pi: ExtensionAPI) {
   // queued wake or a non-idle context means the boundary this handler was
   // called at is not the quiet moment it looked like".) It is no longer a
   // doorbell in front of the captain, so nothing folds into it and the next
-  // wake is delivered on its own. The record itself stays pending: only
+  // wake is delivered on its own. Disarming is the destructive branch, so it
+  // takes positive evidence: a context that cannot answer both questions is
+  // not proof of a quiet moment, and folding stays armed. The record itself stays pending: only
   // consumption or the replacement handoff retires it.
   pi.on?.("agent_settled", (_event, ctx) => {
-    if (ctx && typeof ctx.isIdle === "function" && !ctx.isIdle()) return;
-    if (ctx && typeof ctx.hasPendingMessages === "function" && ctx.hasPendingMessages()) return;
+    if (typeof ctx?.isIdle !== "function" || typeof ctx.hasPendingMessages !== "function") return;
+    if (!ctx.isIdle() || ctx.hasPendingMessages()) return;
     generation.outstandingWake = null;
     generation.foldedWakes = 0;
   });

@@ -5210,9 +5210,30 @@ await waitFor(() => arms() >= queuedAt + 3, "the watcher stopped cycling after a
 if (sent.length !== 4) {
   throw new Error(`a settle with a queued message disarmed the fold: ${sent.length} follow-ups`);
 }
+// A context that cannot answer both questions is not evidence of a quiet
+// moment: no context at all, and one that reports idle but cannot say whether
+// a message is queued, both leave folding armed rather than guessing.
+for (const [shape, degraded] of [
+  ["a settle with no context", undefined],
+  ["a settle whose context cannot report queued messages", { isIdle: () => true }],
+]) {
+  // Consume the outstanding follow-up first so the next one arrives with a
+  // full fold budget: what follows must be decided by the settle, not by the
+  // bound the earlier cycles had nearly spent.
+  handlers.get("before_agent_start")?.({ prompt: sent[sent.length - 1] });
+  const armed = sent.length + 1;
+  await waitFor(() => sent.length >= armed, `no follow-up to fold into before ${shape}`);
+  const degradedAt = arms();
+  settled({ type: "agent_settled" }, degraded);
+  await waitFor(() => arms() >= degradedAt + 3, `the watcher stopped cycling after ${shape}`);
+  if (sent.length !== armed) {
+    throw new Error(`${shape} disarmed the fold: ${sent.length - armed} extra follow-ups`);
+  }
+}
+const released = sent.length + 1;
 settled({ type: "agent_settled" }, { isIdle: () => true, hasPendingMessages: () => false });
 const settledAt = arms();
-await waitFor(() => sent.length >= 5, "a run settling without consumption never released a wake");
+await waitFor(() => sent.length >= released, "a run settling without consumption never released a wake");
 if (arms() - settledAt >= 10) {
   throw new Error(`a settled run still folded ${arms() - settledAt} cycles before notifying`);
 }
