@@ -52,6 +52,10 @@ const ctx = {
   },
 };
 
+// A Pi build without the raw terminal hook: the observer must stay inert
+// rather than run with only a submitted message able to cancel it.
+if (process.env.NO_RAW) delete ctx.ui.onTerminalInput;
+
 extension.default({
   on(event, handler) {
     handlers.set(event, handler);
@@ -191,6 +195,14 @@ test_scope_gates() {
   out=$(drive "$home" 0.1 0.1 "wait:400") || fail "foreign-lock driver failed"
   [ "$out" = "subscriptions=0" ] || fail "a session that does not hold the home lock armed the observer: $out"
   pass "a worker that does not hold the home lock stays inert"
+
+  home=$(fixture scope-no-raw observe)
+  out=$(drive "$home" 0.2 5 "wait:600,input:interactive:hello,wait:600" NO_RAW=1) \
+    || fail "no-raw-listener driver failed"
+  [ "$out" = "subscriptions=0" ] || fail "an armed home without a raw listener still showed a countdown: $out"
+  [ -e "$home/state/.pi-auto-afk-observations" ] \
+    && fail "an armed home without a raw listener recorded observations"
+  pass "without the raw listener the observer stays inert rather than running half-armed"
 
   home=$(fixture scope-secondmate observe)
   : >"$home/.fm-secondmate-home"

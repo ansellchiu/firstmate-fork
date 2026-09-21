@@ -57,6 +57,7 @@ A no-change heartbeat outcome explicitly reported with `task=fleet` and `silent=
 A Pi primary can notice that nothing has reached its terminal for a long time and run a short countdown toward the away posture.
 This home-local, gitignored toggle arms only the observing half of that: the value `observe`, alone on the line, turns it on, and an absent file or any other value leaves the session exactly as it is today.
 It is not inherited into secondmate homes.
+The toggle takes effect at the next Pi session: the observer arms only when it holds the raw terminal listener it subscribes at session start, so a value written mid-session does not produce a countdown that only a submitted message could cancel.
 
 The observer watches, reports, and stops there.
 It never writes `state/.afk-contract` or the legacy `state/.afk`, never calls the away-posture scripts or the `/afk` path, and never sends the model a message.

@@ -27,7 +27,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { lockOwnership } from "./lib/fm-primary-session-lock.ts";
+import { lockOwnership, readLockPid } from "./lib/fm-primary-session-lock.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fmHome = process.env.FM_HOME || process.env.FM_ROOT_OVERRIDE || root;
@@ -54,20 +54,44 @@ function awayStateExists(): boolean {
   );
 }
 
-// A secondmate is deliberately idle with no captain in its pane, so idleness
-// there means nothing. Lock ownership only separates the helm-owning primary
-// from a worker in another worktree; it does not separate main from a
-// secondmate primary, which is why both checks are required.
-function enabled(ctx: ExtensionContext): boolean {
-  if (ctx.mode !== "tui") return false;
-  if (existsSync(resolve(fmHome, ".fm-secondmate-home"))) return false;
-  if (lockOwnership(state) !== "owned") return false;
-  if (awayStateExists()) return false;
+function observeRequested(): boolean {
   try {
     return readFileSync(resolve(config, "pi-auto-afk"), "utf8").trim() === "observe";
   } catch {
     return false;
   }
+}
+
+// The home's lock can change hands inside a session, so the ancestry walk's
+// answer is cached against the lock file's own contents: the hot path costs one
+// file read, and the walk - which forks a `ps` per ancestor - is redone only
+// when the recorded owner changes. An absent or unreadable lock still resolves
+// toward inert and is still re-read next time rather than latching.
+let cachedLockPid: string | null = null;
+let ownershipCached = false;
+let ownsLock = false;
+function ownsHomeLock(): boolean {
+  const lockPid = readLockPid(state);
+  if (!ownershipCached || lockPid !== cachedLockPid) {
+    cachedLockPid = lockPid;
+    ownershipCached = true;
+    ownsLock = lockOwnership(state) === "owned";
+  }
+  return ownsLock;
+}
+
+// A secondmate is deliberately idle with no captain in its pane, so idleness
+// there means nothing. Lock ownership only separates the helm-owning primary
+// from a worker in another worktree; it does not separate main from a
+// secondmate primary, which is why both checks are required. Cheapest gate
+// first, ownership last: this runs on every observed byte, and a home that
+// never opted in must not reach a process spawn at all.
+function enabled(ctx: ExtensionContext): boolean {
+  if (ctx.mode !== "tui") return false;
+  if (!observeRequested()) return false;
+  if (existsSync(resolve(fmHome, ".fm-secondmate-home"))) return false;
+  if (awayStateExists()) return false;
+  return ownsHomeLock();
 }
 
 export default function extension(pi: ExtensionAPI): void {
@@ -80,6 +104,7 @@ export default function extension(pi: ExtensionAPI): void {
   let countdownTimer: ReturnType<typeof setInterval> | undefined;
   let expiryTimer: ReturnType<typeof setTimeout> | undefined;
   let countdownDueAt = 0;
+  let lastInputAt = 0;
   let removeTerminalInput: (() => void) | undefined;
   // Whether OUR status key is currently set. An off home must not touch the
   // status bar at all, not even to clear a key it never wrote, so every clear
@@ -143,17 +168,19 @@ export default function extension(pi: ExtensionAPI): void {
     ctx.ui.notify("Auto-AFK would enter now (observe mode; no away posture entered)", "info");
   }
 
-  function arm(ctx: ExtensionContext): void {
-    revision += 1;
-    clearTimers();
-    countdownDueAt = 0;
-    clearStatus(ctx);
-    if (!enabled(ctx)) return;
-    const generation = revision;
+  function waitForIdle(ctx: ExtensionContext, generation: number): void {
     idleTimer = setTimeout(() => {
       if (generation !== revision) return;
       if (!enabled(ctx)) {
         standDown(ctx);
+        return;
+      }
+      // The idle deadline is absolute too: a timer that fired early or late -
+      // event-loop delay, laptop sleep - re-arms for the time actually left
+      // rather than opening the countdown at the wrong moment.
+      const remaining = lastInputAt + idleSeconds * 1000 - Date.now();
+      if (remaining > 0) {
+        waitForIdle(ctx, generation);
         return;
       }
       countdownDueAt = Date.now() + countdownSeconds * 1000;
@@ -169,8 +196,23 @@ export default function extension(pi: ExtensionAPI): void {
       countdownTimer.unref();
       expiryTimer.unref();
       tick(ctx, generation);
-    }, idleSeconds * 1000);
+    }, Math.max(0, lastInputAt + idleSeconds * 1000 - Date.now()));
     idleTimer.unref();
+  }
+
+  function arm(ctx: ExtensionContext): void {
+    revision += 1;
+    clearTimers();
+    countdownDueAt = 0;
+    clearStatus(ctx);
+    // Refuse to run half-armed: without the raw listener only a submitted
+    // message could cancel, which would fill the observation log with
+    // would-enter records the fully armed configuration would have cancelled.
+    // A flag written mid-session therefore takes effect at the next session.
+    if (!removeTerminalInput) return;
+    if (!enabled(ctx)) return;
+    lastInputAt = Date.now();
+    waitForIdle(ctx, revision);
   }
 
   /** Observed Pi-local interaction: reset synchronously, before returning. */
@@ -186,9 +228,9 @@ export default function extension(pi: ExtensionAPI): void {
     removeTerminalInput = undefined;
     // A replacement session starts a fresh observation generation; no deadline
     // is persisted across reload, so stale state cannot trigger a countdown.
-    arm(ctx);
+    standDown(ctx);
     if (!enabled(ctx)) return;
-    removeTerminalInput = ctx.ui.onTerminalInput((data) => {
+    removeTerminalInput = ctx.ui.onTerminalInput?.((data) => {
       // Every nonempty byte counts, including terminal protocol replies and
       // anything written to the PTY by another process. Cancelling on
       // ambiguous activity is the safe direction. The data is returned
@@ -196,6 +238,7 @@ export default function extension(pi: ExtensionAPI): void {
       if (data.length > 0) observedInput(ctx);
       return undefined;
     });
+    arm(ctx);
   });
 
   // Backup for a submitted message when the raw listener is unavailable.
