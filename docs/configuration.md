@@ -52,6 +52,27 @@ The branch prompt's "Verdict: routine or captain" section owns the distinction b
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns main's event ownership, acknowledgement duty, and conversational treatment for merged outcomes, while the persisted entry itself owns captain visibility.
 A no-change heartbeat outcome explicitly reported with `task=fleet` and `silent=true` is delivered silently with no rendered note, while every other routine outcome appends a rendered, sailboat-prefixed note unless it repeats a fact the captain has already read: an unchanged routine fact about one task is stored every time but presented once per `FM_BRANCH_OUTCOME_DEDUPE_WINDOW` window, and [docs/pi-supervision-branch.md](pi-supervision-branch.md) "Repeat suppression" owns that boundary.
 
+## Pi idle observer (config/pi-auto-afk)
+
+A Pi primary can notice that nothing has reached its terminal for a long time and run a short countdown toward the away posture.
+This home-local, gitignored toggle arms only the observing half of that: the value `observe`, alone on the line, turns it on, and an absent file or any other value leaves the session exactly as it is today.
+It is not inherited into secondmate homes.
+The toggle takes effect at the next Pi session: the value is read when the session subscribes its raw terminal listener, and the observer never arms without that listener, so a value written mid-session cannot produce a countdown only a submitted message could cancel.
+Taking it away is immediate in the safe direction: the file is re-read every time the observer acts, so an armed session stands down at its next byte or timer wakeup.
+
+The observer watches, reports, and stops there.
+It never writes `state/.afk-contract` or the legacy `state/.afk`, never calls the away-posture scripts or the `/afk` path, and never sends the model a message.
+The reason is what the signal can and cannot say: Pi reports that input arrived through the interactive terminal, not that a human typed it, and it cannot see the captain working in another window.
+So the countdown reaching zero is evidence that the captain is ABSENT, while the away posture requires their CONSENT - the read-back of their own away words that [`bin/fm-afk-contract.sh`](../bin/fm-afk-contract.sh) confirms - and absence is not consent.
+Automatic entry would need a captain product decision that adds an explicit advance-consent grant and a new validated transition in that record owner; until then this toggle cannot produce one.
+
+Lock ownership and away state are re-checked whenever the observer acts rather than sampled at session start, so a session that takes the home lock or returns from the away posture mid-session picks the observer up without a restart.
+
+While armed on a TUI Pi session that holds this home's fleet lock, is not a secondmate home, and has no away posture, legacy flag, or unfinished return in progress, the observer waits 1,740 seconds with no observed Pi-local input, then shows a 60-second countdown in the Pi status bar.
+Any nonempty byte reaching the terminal cancels it and is returned to Pi unchanged, as does a submitted interactive message that arrived without one; Firstmate's own `pi.sendUserMessage` traffic is reported as extension-sourced and deliberately does not count as the captain.
+Countdown starts, cancellations with their remaining seconds, and would-have-entered expiries append one line each to `state/.pi-auto-afk-observations`, which is the prototype's whole output - it exists so a real week of use can answer how often terminal replies or other processes writing to the terminal cancel the countdown falsely.
+[`.pi/extensions/fm-pi-auto-afk-observe.ts`](../.pi/extensions/fm-pi-auto-afk-observe.ts) owns the detection, the gates, and that consent boundary, and `data/fm-auto-afk-idle-detect-s1/report.md` holds the investigation behind them.
+
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 
 Supervision is an easier job than the captain's own conversation, so the branch can run on a cheaper model than main.

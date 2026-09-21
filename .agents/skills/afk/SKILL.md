@@ -14,6 +14,7 @@ Away mode is a POSTURE of the one supervision session, not a second architecture
 Being away changes exactly two things: how the captain is informed, and what happens at a captain-owned decision point (hold for return, or later a pre-answered clause).
 It never changes the authority set.
 The posture is a file, `state/.afk-contract`, written only by `bin/fm-afk-contract.sh` after the captain confirms a read-back; nothing infers the posture from chat.
+Nothing infers it from silence either: a home that arms the default-off Pi idle observer (`config/pi-auto-afk`) may show an idle countdown in the status bar, but that observer only reports and never enters, so a countdown or an expiry in `state/.pi-auto-afk-observations` is never this posture and never authority to write it.
 Hold-for-return is the default and the only reach profile this release records: there is no phone channel, and the entry announcement says so aloud every time.
 
 ## Entering: `/afk [words]`
