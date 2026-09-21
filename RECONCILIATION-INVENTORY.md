@@ -685,3 +685,58 @@ readable - and takes `--force-with-lease` against the exact public SHA it read i
 public `main` that moved is refused rather than overwritten.
 
 This branch's worker never ran it in push mode and never contacted `ansellchiu/firstmate-fork`.
+
+## Phase 0 upstream catch-up (round 3)
+
+Recorded on branch `fm/fm-upstream-reconcile-round3-s1` against public fork origin
+`ansellchiu/firstmate-fork` at `e03a46e6`, after `git fetch upstream`.
+
+| Property | Value |
+| --- | --- |
+| merge-base with `upstream/main` | `2bcb88c3` (Route B seed) |
+| `upstream/main` tip | `259a669f` |
+| upstream commits not in fork tip | **20** (none were `git cherry` patch-equivalent) |
+| Phase 0 accepted | **6** |
+| deferred to Phase 1 | **14** |
+
+Classification rule used here: accept only when the commit is independent of unresolved
+shared-core work and either (a) touches no contended / retain-disposition surface, or
+(b) applies cleanly as an orthogonal additive or label-only change that leaves every
+`docs/private-divergence.json` retain intent intact. Conflict on apply, or a clean apply
+that still edits unresolved shared-core / retain-disposition behavior, is deferred - never
+forced.
+
+### Accepted (Phase 0)
+
+| Upstream | Subject | Why accepted |
+| --- | --- | --- |
+| `1b1b6e05` | stop labeling Herdr as experimental (#4972) | Clean apply. Comment/notice/docs alignment only; orthogonal to retain herdr intents (native submit, idle-unknown, relaunch identity). |
+| `a0b2f343` | authorize isolated Herdr lab validation (#4998) | Independent; only `.no-mistakes.yaml`. |
+| `90cd351a` | vendor-semantics and 9k AGENTS ceiling (#5001) | Independent; only `VISION.md`. |
+| `804394e8` | remote charter steering-inbox path host-local (#5049) | Clean apply; mechanical remote-seed path rewrite + docs/test. |
+| `b8ab7354` | fit pull observation within contribution poll budget (#5107) | Independent; `fm-contributions` only (not contended). |
+| `631bc26d` | idempotent inbox capture, replies, receipts, readiness (#5103) | Clean apply; Relay/voice-inbox priority. Session-lock change is additive `fm_session_lock_inspect` only; private capitalized-harness case-fold (`session-lock-harness-case`) preserved. |
+
+Landed on this branch as cherry-picks with `-x` (local tips `37ba0194` … `c19c966d`).
+
+### Deferred (Phase 1)
+
+| Upstream | Subject | Why deferred |
+| --- | --- | --- |
+| `b6930db7` | keep supervisor status closes from waking the same home (#4895) | Clean apply, but edits retain-disposition wake/send/captain-hold shared-core (`wake-lib`, `fm-send`, `fm-captain-hold`). |
+| `dd9b2ef2` | treat a live no-mistakes run as current after rebase (#4973) | Clean apply, but edits uncovered shared-core `fm-nm-run-lib` / contended `fm-crew-state`. |
+| `a452a79e` | prevent long worker launch command truncation (#4994) | Conflict; spawn/teardown retain-disposition shared-core. |
+| `9aabe3b4` | defer wedge escalation at supervisor-owed gate (#4974) | Conflict; classify/watch/crew-state shared-core. |
+| `1b1b3cd4` | reclaim task whose herdr endpoint was destroyed (#5007) | Conflict; herdr/control/spawn retain-disposition. |
+| `a09090d1` | stamp status events with emission time (#3764) | Conflict; broad status/wake/send shared-core rewrite. |
+| `c443d8c2` | unify Lavish host and disconnect handling (#5060) | Conflict; Relay-priority but coupled to brief/spawn/process-event contended and uncovered paths. |
+| `dee119b4` | act on captain's away words during AFK supervision (#5076) | Conflict; AFK/branch/pr-merge shared-core. |
+| `bd65e4ae` | route Lavish feedback directly to owning workers (#5099) | Conflict; Relay-priority but coupled to procevent/brief/task-inbox shared-core. |
+| `d08e327d` | stop harness footer rows reading as pending text (#5118) | Conflict; herdr/composer contested. |
+| `fcbaa735` | append optional home-local include to briefs (#5115) | Conflict; brief/AGENTS/configuration contested. |
+| `43bf6d3d` | report no validation run as absent (#5114) | Clean apply, but depends on `fm-nm-run-lib` / `fm-crew-state` shared-core (pairs with `dd9b2ef2`). |
+| `dbc0bc4b` | require non-draft PR before PR-based done report (#5141) | Conflict; uncovered `fm-pr-*` / dod shared-core. |
+| `259a669f` | support quota-axi schema 6 snapshots (#4904) | Conflict; contended `quota-array-dispatch` / dispatch-auth shared-core. |
+
+Phase 1 owes a semantic pass over the 14 deferred commits (and the inventory's still-open
+`upstream-unreviewed-change` / uncovered contended paths), not a blind replay.
