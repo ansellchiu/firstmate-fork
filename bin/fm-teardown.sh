@@ -1561,6 +1561,27 @@ EOF
   return 1
 }
 
+# Whether a child worktree is a worktree of the project its record names.
+#
+# The recorded project's own `worktree list` is the direct answer and stays the
+# first one asked. It is not the only one: the shared treehouse pool is keyed on
+# repo identity, so a home holding its own clone of a project is handed a slot
+# owned by ANOTHER clone of the same origin, and that slot is registered only in
+# the clone that owns it. Such a child is recognised by asking its OWN
+# repository whether it lists the path as a worktree - the registration question
+# put to the repository that can actually answer it - and then requiring that
+# repository to prove the same origin identity the slot accounting uses
+# (fm_treehouse_pool_slot). A path no repository lists as a worktree, and a
+# clone that cannot prove the recorded project's origin, are refused as before.
+child_worktree_registered_for_project() {
+  local project=$1 target=$2 project_origin target_origin
+  worktree_registered_for_project "$project" "$target" && return 0
+  worktree_registered_for_project "$target" "$target" || return 1
+  project_origin=$(fm_treehouse_origin_identity "$project") || return 1
+  target_origin=$(fm_treehouse_origin_identity "$target") || return 1
+  [ -n "$project_origin" ] && [ "$project_origin" = "$target_origin" ]
+}
+
 inspectable_git_worktree() {
   local target=$1 top
   [ -n "$target" ] || return 1
@@ -2439,7 +2460,7 @@ validate_child_worktree_for_removal() {
     echo "REFUSED: unsafe child worktree removal target $target is inside the firstmate repo" >&2
     return 1
   fi
-  if ! worktree_registered_for_project "$project" "$target"; then
+  if ! child_worktree_registered_for_project "$project" "$target"; then
     echo "REFUSED: unsafe child worktree removal target $target is not a git worktree for ${project:-the recorded project}" >&2
     return 1
   fi

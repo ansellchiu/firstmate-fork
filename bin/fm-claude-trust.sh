@@ -94,11 +94,16 @@
 # second mate home holding its OWN clone of a project is handed a linked
 # worktree of the primary home's clone, and the exact-common-dir test refused a
 # worktree the allocator itself treats as the same project.
-# bin/fm-wake-lib.sh's fm_treehouse_project_lock_path keys its one shared
-# project lock on that same identity, so the allowance matches the allocator
-# rather than inventing a second notion of project; an unrelated repository has
-# its own origin and is still refused, and the shared pool stays a single
-# allocator with its slot accounting untouched. The comparison is deliberately
+# The allowance borrows the allocator's NOTION of project - the origin the
+# treehouse pool and bin/fm-wake-lib.sh's fm_treehouse_project_lock_path are
+# keyed on - rather than inventing a second one, but it is deliberately a
+# strictly narrower test than the lock's key: a lock path only has to be stable,
+# so it may key off an origin spelling it never resolved, while this must PROVE
+# two repositories are one project and yields nothing when it cannot (see
+# origin_identity below). Every identity this accepts the lock also keys
+# together, never the reverse. An unrelated repository has its own origin and is
+# still refused, and the shared pool stays a single allocator, its slot
+# accounting reading the same proven identity (fm_treehouse_pool_slot). The comparison is deliberately
 # fail-closed: a remote URL proves sameness only on an exact match, so a
 # differently-spelled URL to the one remote refuses rather than wrongly trusts,
 # and an unresolved local-path origin proves nothing at all - the same relative
@@ -241,13 +246,13 @@ common_dir_of() {
 }
 
 # The origin identity of the repository a path lives in, or empty when the
-# repository declares no origin. This is the identity bin/fm-wake-lib.sh's
-# fm_treehouse_project_lock_path uses to give separate clones of one origin a
-# single project lock, and it is why the shared treehouse pool hands one clone's
-# worktree to another clone of the same project; sharing it here keeps the
-# allowance consistent with the allocator. A local path origin is resolved to
-# its real directory the way the lock resolves one, so two clones that name the
-# same directory differently still compare equal - but where the lock keeps the
+# repository declares no origin - or declares one that proves nothing. Origin is
+# the notion of project bin/fm-wake-lib.sh's fm_treehouse_project_lock_path keys
+# its single project lock on, and it is why the shared treehouse pool hands one
+# clone's worktree to another clone of the same project. What this computes is
+# strictly narrower than that key: a local path origin is resolved to its real
+# directory the way the lock resolves one, so two clones that name the same
+# directory differently still compare equal - but where the lock keeps an
 # unresolved path as a key, which only has to be stable, this proves NO identity
 # at all, because an unresolved local path is only meaningful relative to the
 # repository that declares it and two unrelated repositories can spell the same

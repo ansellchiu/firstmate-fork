@@ -2456,6 +2456,86 @@ SH
   pass "forced secondmate teardown holds every descendant lifecycle and metadata lock"
 }
 
+# The class this change enables: the shared treehouse pool is keyed on repo
+# identity, so a secondmate home holding its OWN clone of a project is handed a
+# slot that is a linked worktree of ANOTHER clone of the same origin. The child
+# record then names the home's clone as its project while its worktree is
+# registered only in the clone that owns it.
+configure_secondmate_with_cross_clone_child() {  # <case-dir>
+  local case_dir=$1 home="$1/secondmate-home" child=child-pool child_wt
+  mkdir -p "$home/state" "$home/data" "$home/config" "$home/projects"
+  printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
+  printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
+  git clone -q "$case_dir/origin.git" "$home/projects/project"
+  child_wt="$case_dir/$child-wt"
+  git -C "$case_dir/project" worktree add -q -b "fm/$child" "$child_wt" main
+  fm_write_meta "$home/state/$child.meta" \
+    "window=firstmate:fm-$child" \
+    "endpoint_task_id=$child" \
+    "worktree=$child_wt" \
+    "project=$home/projects/project" \
+    "kind=ship" \
+    "mode=local-only"
+  : > "$home/state/$child.status"
+}
+
+test_secondmate_teardown_accepts_a_cross_clone_child_worktree() {
+  local case_dir home child_wt rc
+  case_dir=$(make_case cross-clone-child)
+  write_meta "$case_dir" local-only secondmate
+  configure_secondmate_with_cross_clone_child "$case_dir"
+  home="$case_dir/secondmate-home"
+  child_wt="$case_dir/child-pool-wt"
+  [ "$(git -C "$child_wt" rev-parse --path-format=absolute --git-common-dir)" \
+    != "$(git -C "$home/projects/project" rev-parse --path-format=absolute --git-common-dir)" ] \
+    || fail "cross-clone-child: the fixture's child worktree and recorded project share one repository"
+  : > "$case_dir/treehouse.log"
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+exit 0
+SH
+  chmod +x "$case_dir/fakebin/treehouse"
+
+  rc=0
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 0 "$rc" "cross-clone-child: teardown refused a child worktree of a same-origin clone"$'\n'"$(cat "$case_dir/stderr")"
+  ! grep -q "is not a git worktree for" "$case_dir/stderr" \
+    || fail "cross-clone-child: teardown reported the child as unregistered: $(cat "$case_dir/stderr")"
+  [ ! -d "$home" ] || fail "cross-clone-child: the secondmate home survived its own teardown"
+  [ ! -e "$case_dir/state/task-x1.meta" ] \
+    || fail "cross-clone-child: teardown retained the parent record"
+  grep -Fq "$child_wt" "$case_dir/treehouse.log" \
+    || fail "cross-clone-child: the child's pool slot was never returned: $(cat "$case_dir/treehouse.log")"
+  pass "secondmate teardown removes a child worktree owned by a same-origin clone of its project"
+}
+
+# The widened question is still a registration question: a path no repository
+# lists as a worktree is never removed, and --force - which is what lets a home
+# teardown proceed past its own in-flight children at all - does not override it.
+test_secondmate_teardown_still_refuses_an_unregistered_child_worktree() {
+  local case_dir home child_wt rc
+  case_dir=$(make_case unregistered-child)
+  write_meta "$case_dir" local-only secondmate
+  configure_secondmate_with_cross_clone_child "$case_dir"
+  home="$case_dir/secondmate-home"
+  child_wt="$case_dir/child-pool-wt"
+  # The same recorded path, but a plain directory no repository registers.
+  git -C "$case_dir/project" worktree remove --force "$child_wt"
+  mkdir -p "$child_wt"
+  : > "$child_wt/not-a-worktree"
+
+  rc=0
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] \
+    || fail "unregistered-child: forced teardown accepted a child worktree no repository registers"
+  assert_grep "is not a git worktree for" "$case_dir/stderr" \
+    "unregistered-child: refusal did not name the registration failure: $(cat "$case_dir/stderr")"
+  [ -d "$home" ] || fail "unregistered-child: refusal removed the secondmate home"
+  [ -e "$child_wt/not-a-worktree" ] || fail "unregistered-child: refusal removed the unregistered directory"
+  pass "secondmate teardown still refuses a child worktree no repository registers, even forced"
+}
+
 test_forced_secondmate_herdr_child_retains_records_when_close_unconfirmed() {
   local case_dir home log closed rc
   case_dir=$(make_case herdr-child-unconfirmed-close)
@@ -4160,6 +4240,8 @@ test_herdr_flat_teardown_refuses_records_on_unparseable_presence
 test_herdr_flat_teardown_preflight_refuses_before_changes
 test_forced_secondmate_herdr_child_preflight_refuses_before_changes
 test_forced_secondmate_teardown_holds_descendant_lifecycle_locks
+test_secondmate_teardown_accepts_a_cross_clone_child_worktree
+test_secondmate_teardown_still_refuses_an_unregistered_child_worktree
 test_forced_secondmate_herdr_child_retains_records_when_close_unconfirmed
 test_forced_teardown_retains_nested_secondmate_home_when_grandchild_close_unconfirmed
 test_herdr_projection_teardown_retires_journal_only_after_confirmed_close
