@@ -211,10 +211,7 @@ export default function extension(pi: ExtensionAPI): void {
   }
 
   function arm(ctx: ExtensionContext): void {
-    revision += 1;
-    clearTimers();
-    countdownDueAt = 0;
-    clearStatus(ctx);
+    standDown(ctx);
     // Refuse to run half-armed: without the raw listener only a submitted
     // message could cancel, which would fill the observation log with
     // would-enter records the fully armed configuration would have cancelled.

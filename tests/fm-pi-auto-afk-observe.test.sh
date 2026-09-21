@@ -158,8 +158,13 @@ test_input_cancels() {
 
   # Firstmate's own pi.sendUserMessage traffic is source=extension and must not
   # look like the captain; a submitted interactive message must.
+  # Fired while the countdown is already visible, so the two hypotheses differ:
+  # counting it as the captain would clear the countdown and record a
+  # cancellation, and push expiry past the end of the scripted window.
   home=$(fixture cancel-extension observe)
-  out=$(drive "$home" 0.3 0.1 "input:extension:watcher wake,wait:800") || fail "extension-source driver failed"
+  out=$(drive "$home" 0.2 1 "wait:400,input:extension:watcher wake,wait:1100") \
+    || fail "extension-source driver failed"
+  log_of "$home" | grep -q 'cancelled' && fail "extension input cancelled the countdown: $(log_of "$home")"
   log_of "$home" | grep -q 'would-enter' || fail "extension input reset the idle timer: $out"
   pass "extension-sourced input does not count as the captain"
 
@@ -245,7 +250,9 @@ test_scope_gates() {
 test_lifecycle() {
   local home out
   home=$(fixture lifecycle observe)
-  out=$(drive "$home" 0.2 5 "wait:600,shutdown,wait:900") || fail "lifecycle driver failed"
+  # The countdown is short enough that a timer surviving shutdown would reach
+  # expiry inside the scripted window rather than after the driver exits.
+  out=$(drive "$home" 0.2 1 "wait:400,shutdown,wait:1200") || fail "lifecycle driver failed"
   printf '%s\n' "$out" | grep -q '^unsubscribe$' || fail "shutdown did not unsubscribe: $out"
   log_of "$home" | grep -q 'would-enter' && fail "a timer survived session shutdown and reached expiry"
   pass "session shutdown drops the listener and every pending timer"
