@@ -1,0 +1,20 @@
+##### BEFORE (base e03a46e): every row's payload restates the whole batch #####
+=== before: queued rows a 3-file catch-up burst produced (tab-separated: ts, seq, kind, key, payload) ===
+1790004145	4	signal	burst1.status	needs-decision: <home>/state/burst1.status <home>/state/burst2.status <home>/state/burst3.status
+1790004145	5	signal	burst2.status	needs-decision: <home>/state/burst1.status <home>/state/burst2.status <home>/state/burst3.status
+1790004145	6	signal	burst3.status	needs-decision: <home>/state/burst1.status <home>/state/burst2.status <home>/state/burst3.status
+--- payload size per row (bytes) ---
+  burst1.status: 378 bytes
+  burst2.status: 378 bytes
+  burst3.status: 378 bytes
+
+##### AFTER (3b9d076): each row's payload names only the file that changed #####
+=== after: queued rows a 3-file catch-up burst produced (tab-separated: ts, seq, kind, key, payload) ===
+1790004150	4	signal	burst1.status	needs-decision: <home>/state/burst1.status
+1790004150	5	signal	burst2.status	needs-decision: <home>/state/burst2.status
+1790004150	6	signal	burst3.status	needs-decision: <home>/state/burst3.status
+--- payload size per row (bytes) ---
+  burst1.status: 135 bytes
+  burst2.status: 135 bytes
+  burst3.status: 135 bytes
+

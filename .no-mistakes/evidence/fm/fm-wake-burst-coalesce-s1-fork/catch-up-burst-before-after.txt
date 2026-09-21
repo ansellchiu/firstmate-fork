@@ -1,0 +1,52 @@
+############################################################
+# BEFORE (base e03a46e): one queued message per watcher cycle
+############################################################
+watcher cycles fired: 6
+follow-up messages queued in front of the captain: 6
+
+--- message 1 of 6 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/before-home/state/burst1.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+--- message 2 of 6 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/before-home/state/burst2.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+--- message 3 of 6 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/before-home/state/burst3.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+--- message 4 of 6 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/before-home/state/burst4.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+--- message 5 of 6 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/before-home/state/burst5.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+--- message 6 of 6 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/before-home/state/burst6.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+durable rows still queued and individually acknowledgeable: 8
+
+############################################################
+# AFTER (3b9d076): one bounded notification naming the burst
+############################################################
+watcher cycles fired: 6
+follow-up messages queued in front of the captain: 1
+
+--- message 1 of 1 (one firstmate turn to clear) ---
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-burst-demo.LXbyUO/after-home/state/burst1.status
+
+5 notification(s) were waiting when this was queued; the single drain below presents and acknowledges every notification waiting, including any that arrived since.
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+durable rows still queued and individually acknowledgeable: 8
