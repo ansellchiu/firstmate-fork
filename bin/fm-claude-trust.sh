@@ -100,8 +100,13 @@
 # strictly narrower test than the lock's key: a lock path only has to be stable,
 # so it may key off an origin spelling it never resolved, while this must PROVE
 # two repositories are one project and yields nothing when it cannot (see
-# origin_identity below). Every identity this accepts the lock also keys
-# together, never the reverse. An unrelated repository has its own origin and is
+# origin_identity below). For an absolute or URL origin - the ordinary case -
+# the two agree, so an accepted pair is also locked together. They can diverge
+# for a RELATIVE origin declared by a project that is itself a linked worktree:
+# the lock resolves that spelling against the worktree, while this resolves it
+# against the declaring primary checkout, so two homes this accepts may hold
+# two different lock paths. That divergence is the lock's to close, not this
+# test's. An unrelated repository has its own origin and is
 # still refused, and the shared pool stays a single allocator, its slot
 # accounting reading the same proven identity (fm_treehouse_pool_slot). The comparison is deliberately
 # fail-closed: a remote URL proves sameness only on an exact match, so a
@@ -258,7 +263,9 @@ common_dir_of() {
 # repository that declares it and two unrelated repositories can spell the same
 # one. Trust has to be proven, not merely keyed. A relative one is therefore
 # resolved against the checkout that DECLARES the remote - the primary checkout
-# of the repository the argument lives in, derived from its git common dir -
+# of the repository the argument lives in, derived from its git common dir,
+# resolved physically exactly as bin/fm-wake-lib.sh's fm_treehouse_origin_identity
+# resolves it, so the two copies answer identically for the same repository -
 # never against the argument itself, which on the worktree side is a linked
 # worktree parked anywhere in the pool and would resolve the spelling against a
 # directory the declaring repository never names. A remote URL is absolute by

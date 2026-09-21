@@ -1571,12 +1571,20 @@ EOF
 # repository whether it lists the path as a worktree - the registration question
 # put to the repository that can actually answer it - and then requiring that
 # repository to prove the same origin identity the slot accounting uses
-# (fm_treehouse_pool_slot). A path no repository lists as a worktree, and a
-# clone that cannot prove the recorded project's origin, are refused as before.
+# (fm_treehouse_pool_slot). That class is always a LINKED worktree, so a primary
+# checkout (its own git dir equal to its own common dir) stays refused here just
+# as bin/fm-claude-trust.sh refuses one: another clone's whole checkout is never
+# a removable child. A path no repository lists as a worktree, and a clone that
+# cannot prove the recorded project's origin, are refused as before.
 child_worktree_registered_for_project() {
-  local project=$1 target=$2 project_origin target_origin
+  local project=$1 target=$2 project_origin target_origin target_git_dir target_common
   worktree_registered_for_project "$project" "$target" && return 0
   worktree_registered_for_project "$target" "$target" || return 1
+  target_git_dir=$(git -C "$target" rev-parse --path-format=absolute --absolute-git-dir 2>/dev/null) || return 1
+  target_common=$(git -C "$target" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  target_git_dir=$(CDPATH='' cd -P -- "$target_git_dir" 2>/dev/null && pwd -P) || return 1
+  target_common=$(CDPATH='' cd -P -- "$target_common" 2>/dev/null && pwd -P) || return 1
+  [ "$target_git_dir" != "$target_common" ] || return 1
   project_origin=$(fm_treehouse_origin_identity "$project") || return 1
   target_origin=$(fm_treehouse_origin_identity "$target") || return 1
   [ -n "$project_origin" ] && [ "$project_origin" = "$target_origin" ]

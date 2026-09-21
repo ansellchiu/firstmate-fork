@@ -2536,6 +2536,32 @@ test_secondmate_teardown_still_refuses_an_unregistered_child_worktree() {
   pass "secondmate teardown still refuses a child worktree no repository registers, even forced"
 }
 
+# A same-origin clone's own PRIMARY CHECKOUT is registered in its own repository,
+# but it is another home's whole checkout rather than a pool slot, so the
+# cross-clone arm must keep refusing it.
+test_secondmate_teardown_still_refuses_a_same_origin_clone_root() {
+  local case_dir home child_wt rc
+  case_dir=$(make_case clone-root-child)
+  write_meta "$case_dir" local-only secondmate
+  configure_secondmate_with_cross_clone_child "$case_dir"
+  home="$case_dir/secondmate-home"
+  child_wt="$case_dir/child-pool-wt"
+  git -C "$case_dir/project" worktree remove --force "$child_wt"
+  git clone -q "$case_dir/origin.git" "$child_wt"
+  : > "$child_wt/sibling-home-marker"
+
+  rc=0
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] \
+    || fail "clone-root-child: forced teardown accepted a same-origin clone's primary checkout"
+  assert_grep "is not a git worktree for" "$case_dir/stderr" \
+    "clone-root-child: refusal did not name the registration failure: $(cat "$case_dir/stderr")"
+  [ -d "$home" ] || fail "clone-root-child: refusal removed the secondmate home"
+  [ -e "$child_wt/sibling-home-marker" ] \
+    || fail "clone-root-child: refusal removed the sibling clone's checkout"
+  pass "secondmate teardown still refuses a same-origin clone's own primary checkout"
+}
+
 test_forced_secondmate_herdr_child_retains_records_when_close_unconfirmed() {
   local case_dir home log closed rc
   case_dir=$(make_case herdr-child-unconfirmed-close)
@@ -4242,6 +4268,7 @@ test_forced_secondmate_herdr_child_preflight_refuses_before_changes
 test_forced_secondmate_teardown_holds_descendant_lifecycle_locks
 test_secondmate_teardown_accepts_a_cross_clone_child_worktree
 test_secondmate_teardown_still_refuses_an_unregistered_child_worktree
+test_secondmate_teardown_still_refuses_a_same_origin_clone_root
 test_forced_secondmate_herdr_child_retains_records_when_close_unconfirmed
 test_forced_teardown_retains_nested_secondmate_home_when_grandchild_close_unconfirmed
 test_herdr_projection_teardown_retires_journal_only_after_confirmed_close
