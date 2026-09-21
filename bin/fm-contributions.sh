@@ -32,12 +32,16 @@
 #
 # poll consumes fm-fleet-snapshot.sh --contribution-input, a local-only read,
 # and spends at most FM_CONTRIBUTIONS_BUDGET seconds on forge reads (default 20,
-# 1..25). Every read is capped at five seconds. A pull observation has three
-# dependent waves: core, six independent reads, then the closing head read;
-# an issue has two waves. Parallelizing each independent wave bounds either
-# observation to 3 * 5 = 15 seconds. poll reserves min(the configured budget,
-# 15) before starting a URL, so an in-progress normal-budget observation gets
-# all three waves and a later URL waits for the next oldest-checked-first poll.
+# 1..25). Every read is capped at five seconds. A pull observation has four
+# dependent waves: core, two independent waves of at most three reads each,
+# then the closing head read; an issue has two waves. One user token never
+# issues more than three concurrent forge reads, because GitHub asks for
+# per-user requests to stay serial enough to avoid a secondary rate limit,
+# whose failure would be recorded as a genuine outage rather than an
+# unmeasured read. poll reserves min(the configured budget, 15) before
+# starting a URL, so a later URL waits for the next oldest-checked-first poll;
+# a pull whose every read runs to the five-second cap can still be cut short,
+# which is unmeasured, not unavailable.
 # A deliberately smaller configured budget remains bounded and may be
 # unmeasured, rather than being mislabeled unavailable. Each distinct URL is
 # observed once per poll and applied to every owner. A final observation applies
@@ -226,13 +230,14 @@ observe() { # canonical GitHub URL -> normalized JSON
     local reviews_pid=$!
     FORGE_ERR="$TMP/inline.err" forge api "$endpoint/comments?per_page=100" --paginate --slurp > "$TMP/inline.json" &
     local inline_pid=$!
+    wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" || return 1
     FORGE_ERR="$TMP/checks.err" forge api "repos/$part/commits/$head/check-runs?filter=all&per_page=100" --paginate --slurp > "$TMP/checks.json" &
     local checks_pid=$!
     FORGE_ERR="$TMP/statuses.err" forge api "repos/$part/commits/$head/statuses?per_page=100" --paginate --slurp > "$TMP/statuses.json" &
     local statuses_pid=$!
     FORGE_ERR="$TMP/repo.err" forge api "repos/$part" > "$TMP/repo.json" &
     local repo_pid=$!
-    wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" "$checks_pid" "$statuses_pid" "$repo_pid" || return 1
+    wait_forges "$checks_pid" "$statuses_pid" "$repo_pid" || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null || return 1
     forge pr view "$url" --json headRefOid,reviewDecision > "$TMP/after.json" || return 1
     after=$(jq -er .headRefOid "$TMP/after.json")

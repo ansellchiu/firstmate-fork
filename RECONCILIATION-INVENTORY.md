@@ -696,8 +696,8 @@ Recorded on branch `fm/fm-upstream-reconcile-round3-s1` against public fork orig
 | merge-base with `upstream/main` | `2bcb88c3` (Route B seed) |
 | `upstream/main` tip | `259a669f` |
 | upstream commits not in fork tip | **20** (none were `git cherry` patch-equivalent) |
-| Phase 0 accepted | **6** |
-| deferred to Phase 1 | **14** |
+| Phase 0 accepted | **5** |
+| deferred to Phase 1 | **15** |
 
 Classification rule used here: accept only when the commit is independent of unresolved
 shared-core work and either (a) touches no contended / retain-disposition surface, or
@@ -712,12 +712,13 @@ forced.
 | --- | --- | --- |
 | `1b1b6e05` | stop labeling Herdr as experimental (#4972) | Clean apply. Comment/notice/docs alignment only; orthogonal to retain herdr intents (native submit, idle-unknown, relaunch identity). |
 | `a0b2f343` | authorize isolated Herdr lab validation (#4998) | Independent; only `.no-mistakes.yaml`. |
-| `90cd351a` | vendor-semantics and 9k AGENTS ceiling (#5001) | Independent; only `VISION.md`. |
 | `804394e8` | remote charter steering-inbox path host-local (#5049) | Clean apply; mechanical remote-seed path rewrite + docs/test. |
 | `b8ab7354` | fit pull observation within contribution poll budget (#5107) | Independent; `fm-contributions` only (not contended). |
-| `631bc26d` | idempotent inbox capture, replies, receipts, readiness (#5103) | Clean apply; Relay/voice-inbox priority. Session-lock change is additive `fm_session_lock_inspect` only; private capitalized-harness case-fold (`session-lock-harness-case`) preserved. |
+| `631bc26d` | idempotent inbox capture, replies, receipts, readiness (#5103) | Clean apply; Relay/voice-inbox priority. Adds `fm_session_lock_inspect` and reimplements `fm-lock.sh status` on it (a directory or symlink at `state/.lock` now reports unreadable instead of free); private capitalized-harness case-fold (`session-lock-harness-case`) preserved. |
 
 Landed on this branch as cherry-picks with `-x` (local tips `37ba0194` … `c19c966d`).
+The `90cd351a` cherry-pick (`20ed927c`) was reverted back out of this landing after review; nothing
+of it remains in the tree.
 
 ### Deferred (Phase 1)
 
@@ -737,6 +738,7 @@ Landed on this branch as cherry-picks with `-x` (local tips `37ba0194` … `c19c
 | `43bf6d3d` | report no validation run as absent (#5114) | Clean apply, but depends on `fm-nm-run-lib` / `fm-crew-state` shared-core (pairs with `dd9b2ef2`). |
 | `dbc0bc4b` | require non-draft PR before PR-based done report (#5141) | Conflict; uncovered `fm-pr-*` / dod shared-core. |
 | `259a669f` | support quota-axi schema 6 snapshots (#4904) | Conflict; contended `quota-array-dispatch` / dispatch-auth shared-core. |
+| `90cd351a` | vendor-semantics and 9k AGENTS ceiling (#5001) | Applies cleanly to `VISION.md` alone, but states a 9,000-word ceiling on the always-loaded contract; this fleet's `AGENTS.md` is ~12,533 words. Landing it would either document an intent the fleet already violates by ~39% or force a pruning decision. Pruning the always-loaded contract is a captain decision, so the whole commit waits for Phase 1. |
 
-Phase 1 owes a semantic pass over the 14 deferred commits (and the inventory's still-open
+Phase 1 owes a semantic pass over the 15 deferred commits (and the inventory's still-open
 `upstream-unreviewed-change` / uncovered contended paths), not a blind replay.
