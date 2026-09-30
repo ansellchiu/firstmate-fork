@@ -2210,7 +2210,7 @@ crew_is_never_started() {  # <task> <state>
     if grep -qE '^[[:space:]]*working:' "$statusf" 2>/dev/null; then
       return 1
     fi
-    if grep -qE '^[[:space:]]*(done|needs-decision|blocked|paused):' "$statusf" 2>/dev/null; then
+    if grep -qE '^[[:space:]]*(done|failed|needs-decision|blocked|paused):' "$statusf" 2>/dev/null; then
       return 1
     fi
   fi

@@ -176,14 +176,16 @@
 #   the record still reads as a legacy record, so the endpoint gate runs again
 #   and the retry still needs --legacy-record.
 #   --standdown declares that this dispatch never became work: it is how the
-#   watcher's auto-standdown stands a never-started worker down. Its ONLY effect
-#   is on the structural receipt gate below, which otherwise refuses a ship task
-#   with no completion receipt on the premise that the work already landed. A
-#   never-started dispatch has no landing and no report to receipt, exactly like
-#   a cleanup_recovery=orca record, so there is nothing for it to produce. It
-#   relaxes nothing else - every dirty and unlanded-work refusal still applies,
-#   which is what keeps a worker that did commit something from being stood down,
-#   and only --force can authorize discarding that.
+#   watcher's auto-standdown stands a never-started worker down. It is NOT a
+#   second --force. Its ONLY effect is to lift the structural receipt gate below,
+#   which otherwise refuses a ship task with no completion receipt, and only
+#   when teardown itself confirms live that the task never started: no
+#   completion receipt exists, the status log carries no done: or failed:
+#   declaration, and the worktree is clean with no commits beyond its base
+#   (crew_is_never_started in bin/fm-classify-lib.sh, the same check the
+#   watcher applies). When any of those fail, the flag is ignored and teardown
+#   refuses exactly as it would without it. It never relaxes the dirty-worktree
+#   or unlanded-work refusals; only --force can authorize discarding work.
 #
 # Transient / stale worktree git lock recovery (teardown-lock-race): a crew process
 # killed mid-git-operation can leave a .git/worktrees/<wt>/index.lock (or, for a
@@ -3350,11 +3352,16 @@ fi
 # receipt is written here at completion. The archive is append-once and both
 # steps are idempotent, and they run BEFORE the pending-close record below,
 # so an interrupted cleanup always retries safely. Not for kind=secondmate, an
-# Orca allocation-cleanup record, or a --standdown: cleanup_recovery=orca and
-# --standdown both represent a launch that never became work and therefore has no
-# landing or report to receipt.
+# Orca allocation-cleanup record, or a --standdown that teardown confirms never
+# started: both represent a launch that never became work and therefore has no
+# landing or report to receipt. An unconfirmed --standdown is ignored here.
+STANDDOWN_CONFIRMED=0
+if [ "$STANDDOWN" -eq 1 ] && [ ! -e "$STATE/$ID.receipt" ] \
+   && crew_is_never_started "$ID" "$STATE"; then
+  STANDDOWN_CONFIRMED=1
+fi
 if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
-   && [ "$CLEANUP_RECOVERY" != orca ] && [ "$STANDDOWN" -eq 0 ]; then
+   && [ "$CLEANUP_RECOVERY" != orca ] && [ "$STANDDOWN_CONFIRMED" -eq 0 ]; then
   if [ "$KIND" = ship ] && [ "$FORCE" != "--force" ]; then
     RECEIPT_GATE_RC=0
     FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \

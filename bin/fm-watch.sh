@@ -1150,22 +1150,6 @@ wedge_dead_record() {  # <window> <since-file> <triage-label> <idle-age> <pane-h
   wake "$reason"
 }
 
-# Repeat-poll wedge-timer bookkeeping for an already-classified stale hash
-# absorbed as provably-working - repairs a missing/corrupt timer (self-heals a
-# watcher restart between recording the hash and recording the timer), or
-# escalates once STALE_ESCALATE_SECS have elapsed. Never re-reads the crew
-# state (the costly check already ran once, at classification time). Shared by
-# both places a hash can be absorbed this way: the plain non-terminal path,
-# and the stale_is_terminal-overridden path (a captain-relevant status-log
-# line that an active run/busy pane outranked).
-# The wait-evidence consult (wedge_wait_evidence, one status-line read), the
-# worktree write probe, and the dead-record probe (wedge_dead_record) run ONLY
-# here, inside the at-threshold branch that is about to escalate: at most one each
-# per window per STALE_ESCALATE_SECS, never per poll. The wait consult runs first,
-# because a pane whose worker already said why it is quiet has nothing to prove
-# through its worktree. The dead-record probe runs last of the three, so the two
-# cheaper deferrals keep the panes they already own on their existing bounded
-# cadences and only a pane that would otherwise alarm pays for a backend read.
 # Auto-standdown for a worker that never genuinely started (introduced with the
 # stale-escalation tracking below, and dropped by a later reconciliation that kept
 # this call site). Tears the dispatch down through guarded teardown, preserves the
@@ -1215,6 +1199,22 @@ auto_standdown_task() {  # <task> <window> <blocker>
   wake "$loud_reason"
 }
 
+# Repeat-poll wedge-timer bookkeeping for an already-classified stale hash
+# absorbed as provably-working - repairs a missing/corrupt timer (self-heals a
+# watcher restart between recording the hash and recording the timer), or
+# escalates once STALE_ESCALATE_SECS have elapsed. Never re-reads the crew
+# state (the costly check already ran once, at classification time). Shared by
+# both places a hash can be absorbed this way: the plain non-terminal path,
+# and the stale_is_terminal-overridden path (a captain-relevant status-log
+# line that an active run/busy pane outranked).
+# The wait-evidence consult (wedge_wait_evidence, one status-line read), the
+# worktree write probe, and the dead-record probe (wedge_dead_record) run ONLY
+# here, inside the at-threshold branch that is about to escalate: at most one each
+# per window per STALE_ESCALATE_SECS, never per poll. The wait consult runs first,
+# because a pane whose worker already said why it is quiet has nothing to prove
+# through its worktree. The dead-record probe runs last of the three, so the two
+# cheaper deferrals keep the panes they already own on their existing bounded
+# cadences and only a pane that would otherwise alarm pays for a backend read.
 wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash>
   local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 since age n reason evidence
   local key sig_file cur_sig prev_sig cur_h cur_tail blocker

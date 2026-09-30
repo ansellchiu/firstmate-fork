@@ -2981,6 +2981,87 @@ test_ship_teardown_without_receipt_completes_under_force() {
   pass "--force lifts the no-receipt refusal without fabricating a receipt"
 }
 
+# --standdown lifts ONLY the receipt gate, and only for a task teardown itself
+# confirms never started. Each case removes the receipt write_meta seeds for
+# landed ship fixtures, so the gate is the one thing --standdown could lift.
+standdown_case() {  # <name>
+  local case_dir
+  case_dir=$(make_case "$1")
+  write_meta "$case_dir" local-only ship
+  rm -f "$case_dir/state/task-x1.receipt"
+  printf '%s\n' "$case_dir"
+}
+
+test_standdown_never_started_task_completes() {
+  local case_dir rc
+  case_dir=$(standdown_case standdown-never-started)
+
+  set +e
+  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 0 "$rc" "standdown-never-started: a clean, commit-free, receipt-less dispatch did not stand down: $(cat "$case_dir/stderr")"
+  assert_absent "$case_dir/state/task-x1.meta" \
+    "standdown-never-started: teardown left the task record behind"
+  assert_absent "$case_dir/state/receipts.jsonl" \
+    "standdown-never-started: --standdown fabricated a durable index row"
+  pass "--standdown stands down a never-started dispatch with no receipt"
+}
+
+test_standdown_dirty_worktree_refuses() {
+  local case_dir rc
+  case_dir=$(standdown_case standdown-dirty)
+  printf '%s\n' "uncommitted edit" > "$case_dir/wt/feature.txt"
+
+  set +e
+  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "standdown-dirty: --standdown tore down a dirty worktree"
+  assert_grep 'REFUSED' "$case_dir/stderr" "standdown-dirty: no REFUSED line in stderr"
+  assert_present "$case_dir/wt/feature.txt" "standdown-dirty: the uncommitted edit was discarded"
+  assert_present "$case_dir/state/task-x1.meta" "standdown-dirty: the refusal removed the task record"
+  pass "--standdown still refuses a dirty worktree"
+}
+
+test_standdown_commits_beyond_base_refuse() {
+  local case_dir rc
+  case_dir=$(standdown_case standdown-commits)
+  wt_commit "$case_dir" "unlanded work"
+
+  set +e
+  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "standdown-commits: --standdown tore down a worktree with commits beyond its base"
+  assert_grep 'REFUSED' "$case_dir/stderr" "standdown-commits: no REFUSED line in stderr"
+  assert_present "$case_dir/state/task-x1.meta" "standdown-commits: the refusal removed the task record"
+  pass "--standdown still refuses a worktree with commits beyond its base"
+}
+
+test_standdown_landed_ship_without_receipt_refuses() {
+  local case_dir rc
+  case_dir=$(standdown_case standdown-landed)
+  wt_commit "$case_dir" "fix the thing"
+  git -C "$case_dir/wt" push -q origin HEAD:main
+  git -C "$case_dir/project" fetch -q origin
+  printf '%s\n' "done: landed on main" > "$case_dir/state/task-x1.status"
+
+  set +e
+  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "standdown-landed: --standdown lifted the receipt gate for a landed ship"
+  assert_grep 'REFUSED: ship task task-x1 has no completion receipt' "$case_dir/stderr" \
+    "standdown-landed: the refusal did not name the missing receipt"
+  assert_present "$case_dir/state/task-x1.meta" "standdown-landed: the refusal removed the task record"
+  pass "--standdown does not lift the receipt gate for a landed ship"
+}
+
 # The merge poll can prove a merge while cleanup is still running, between the
 # archive and the discard of the per-task record. The index must not answer
 # "what landed" with the unverified state the record had already outgrown when
@@ -4082,6 +4163,10 @@ test_ship_teardown_with_unreadable_receipt_refuses_distinctly
 test_ship_teardown_without_jq_warns_and_proceeds
 test_receipt_steps_without_jq_warn_and_proceed
 test_ship_teardown_without_receipt_completes_under_force
+test_standdown_never_started_task_completes
+test_standdown_dirty_worktree_refuses
+test_standdown_commits_beyond_base_refuse
+test_standdown_landed_ship_without_receipt_refuses
 test_receipt_verified_during_teardown_still_reaches_the_index
 test_parked_run_with_mismatched_ledger_head_is_never_aborted
 test_parked_run_with_malformed_ledger_row_is_never_aborted
