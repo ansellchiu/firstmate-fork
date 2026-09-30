@@ -915,8 +915,8 @@ orphan_guard_check() {
     triage_log "absorbed orphaned-shell alarm (already reported this episode, pids $(printf '%s' "$sustained" | tr '\n' ' '))"
     return 0
   fi
-  reason="check: leaked worker probe - orphaned shell $(printf '%s\n' "$orphans" | awk -v fresh="$fresh" '
-    BEGIN { n = split(fresh, f, "\n"); for (i = 1; i <= n; i++) want[f[i]] = 1 }
+  reason="check: leaked worker probe - orphaned shell $(printf '%s\n' "$orphans" | awk -v fresh="$(printf '%s\n' "$fresh" | tr '\n' ' ')" '
+    BEGIN { n = split(fresh, f, " "); for (i = 1; i <= n; i++) want[f[i]] = 1 }
     ($1 in want) { why = $0; sub(/^[^ ]* /, "", why); printf "%spid %s (ppid 1, %s)", (k++ ? "; " : ""), $1, why }') matched on consecutive polls, and is starving every lane on this machine, including this watcher and any running suite. Hungriest: $(load_guard_offenders). Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
   # Enqueue before suppressing, like every other surface here: a failed append
   # must leave the episode unreported so the next poll tries again.

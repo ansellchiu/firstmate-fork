@@ -5461,12 +5461,17 @@ test_contended_orphaned_spinner_alarms_on_cumulative_cpu() {
   out="$dir/watch.out"
   # At the incident's load a spinner receives ~5% of a core: its instantaneous
   # share is below any sane floor, but its cumulative own CPU keeps accruing.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS='44467     1   5.0       06:00   0:18.00 /bin/zsh'
+  # Spinners from one probe cross the thresholds together, so both go fresh on
+  # the same poll and both must be named.
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS='44467     1   5.0       06:00   0:18.00 /bin/zsh
+44468     1   5.1       06:00   0:18.30 /bin/zsh'
   pid=$!
-  wait_for_exit "$pid" 100 || fail "a contended orphaned spinner at 5% of a core did not alarm"
+  wait_for_exit "$pid" 100 || fail "contended orphaned spinners at 5% of a core did not alarm"
   grep -F 'orphaned shell pid 44467 (ppid 1, cumulative path:' "$out" >/dev/null \
     || fail "the contended spinner was not reported through the cumulative-CPU path: $(cat "$out")"
-  pass "an orphaned spinner starved to 5% of a core still alarms on its cumulative CPU"
+  grep -F '; pid 44468 (ppid 1, cumulative path:' "$out" >/dev/null \
+    || fail "the second spinner fresh on the same poll was not named: $(cat "$out")"
+  pass "orphaned spinners starved to 5% of a core still alarm on cumulative CPU, all named"
 }
 
 test_quiet_or_young_orphaned_shell_is_not_an_alarm() {
