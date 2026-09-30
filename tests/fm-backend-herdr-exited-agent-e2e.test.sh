@@ -98,7 +98,9 @@ AGENT_PID=
 for _ in $(seq 1 100); do
   AGENT_PID=$(fm_backend_herdr_cli "$SESSION" pane process-info --pane "$PANE" 2>/dev/null \
     | jq -r --arg label "$AGENT_LABEL" \
-      '.result.process_info.foreground_processes[]? | select(.argv0 == $label) | .pid')
+      '.result.process_info.foreground_processes[]?
+      | select(((.argv0 // "") | split("/") | last) == $label or .name == $label)
+      | .pid')
   case "$AGENT_PID" in
     '') sleep 0.1 ;;
     *[!0-9]*) fail "more than one stand-in agent reached the lab pane: $AGENT_PID" ;;
@@ -137,8 +139,8 @@ STALE=$(fm_backend_herdr_cli "$SESSION" agent get "$PANE" 2>/dev/null \
   | jq -r '[.result.agent.agent, .result.agent.agent_status] | @tsv')
 [ "$STALE" = "$(printf '%s\tidle' "$AGENT_LABEL")" ] \
   || fail "the reproduction is wrong: real herdr no longer reports the exited agent's registration, got '$STALE'"
-[ "$(fm_backend_herdr_pane_agent_state "$SESSION" "$PANE")" = live ] \
-  || fail "the reproduction is wrong: the strict classifier no longer reads the exited agent's pane as live"
+[ "$(fm_backend_herdr_pane_agent_state "$SESSION" "$PANE")" = stale-agent ] \
+  || fail "the reproduction is wrong: the strict classifier did not identify the exited agent's stale registration"
 
 DEAD_STATE=$(fm_backend_herdr_agent_state "$TARGET")
 [ "$DEAD_STATE" = dead ] \

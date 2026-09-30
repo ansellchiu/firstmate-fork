@@ -156,16 +156,15 @@ pass "real herdr $HERDR_VERSION: a gone session reads recoverable while a live p
 
 FAKEBIN="$SCRATCH/fakebin"
 mkdir -p "$FAKEBIN"
+SLEEP_BIN=$(command -v sleep) || fail "sleep not found"
+ln -s "$SLEEP_BIN" "$FAKEBIN/codex-test-agent"
 cat > "$FAKEBIN/codex" <<EOF
 #!/usr/bin/env bash
 set -e
 : > "$SCRATCH/codex-launched"
-herdr pane report-agent "$PANE_ID" --source fm-control-smoke-relaunch \
-  --agent fm-control-smoke-relaunch --state idle --session "$SESSION" >/dev/null 2>&1
-sleep 1
-herdr pane release-agent "$PANE_ID" --source fm-control-smoke-relaunch \
-  --agent fm-control-smoke-relaunch --session "$SESSION" >/dev/null 2>&1
-: > "$SCRATCH/codex-released"
+"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane report-agent "$PANE_ID" \
+  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch --state idle >/dev/null 2>&1
+exec "$FAKEBIN/codex-test-agent" 2
 EOF
 chmod +x "$FAKEBIN/codex"
 printf -v FAKEBIN_Q '%q' "$FAKEBIN"
@@ -184,11 +183,11 @@ done
 OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a drifted, agent-free Herdr pane should be re-homed and relaunched: $OUT"
-for _ in $(seq 1 20); do
-  [ ! -e "$SCRATCH/codex-released" ] || break
-  sleep 0.1
-done
 [ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched"
+"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
+  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1 \
+  || fail "the replacement harness's registry identity could not be released"
+: > "$SCRATCH/codex-released"
 [ -e "$SCRATCH/codex-released" ] \
   || fail "the replacement harness did not release its temporary registry identity"
 [ "$(fm_backend_herdr_current_path "$SESSION:$PANE_ID" 2>/dev/null || true)" = "$WT_REAL" ] \
@@ -221,7 +220,6 @@ pass "real herdr: interrupt refuses when herdr's own agent registry reports no a
 # signing on macOS arm64; the symlink name is what the kernel records as argv[0]).
 AGENT_BIN="$SCRATCH/agentbin"
 mkdir -p "$AGENT_BIN"
-SLEEP_BIN=$(command -v sleep) || fail "sleep not found"
 ln -s "$SLEEP_BIN" "$AGENT_BIN/claude"
 printf -v AGENT_Q '%q' "$AGENT_BIN/claude"
 
@@ -236,7 +234,7 @@ wait_process_state() {  # <expected> <tries>
 }
 
 start_agent_process() {
-  fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "$AGENT_Q 900" \
+  fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "$AGENT_Q 10" \
     || fail "could not start the agent-named foreground process in the task pane"
   wait_process_state agent 50 \
     || version_fail "a real agent-named foreground process reads '$(fm_backend_herdr_pane_process_state "$SESSION" "$PANE_ID")' rather than 'agent' through pane process-info"
@@ -246,41 +244,6 @@ start_agent_process
 herdr pane report-agent "$PANE_ID" --source fm-control-smoke --agent fm-control-smoke-agent \
   --state idle --session "$SESSION" >/dev/null 2>&1 \
   || fail "could not register a live agent on the task pane"
-
-# The registration alone is not an agent: Herdr retains one after the agent
-# process exits, and the classifier reads that pane as stopped. Give this pane a
-# real long-lived process carrying the registered agent's command name, so the
-# registration is honest and the verbs below are exercised against a genuinely
-# live agent rather than a fiction.
-ln -sf /bin/sleep "$SCRATCH/fm-control-smoke-agent"
-READY_SAMPLES=0
-PANE_READY=false
-for _ in $(seq 1 200); do
-  if herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null | jq -e '
-    .result.process_info as $process
-    | ($process.foreground_processes | length == 1)
-      and ($process.foreground_processes[0].pid == $process.shell_pid)
-  ' >/dev/null 2>&1; then
-    READY_SAMPLES=$((READY_SAMPLES + 1))
-    [ "$READY_SAMPLES" -ge 10 ] && { PANE_READY=true; break; }
-  else
-    READY_SAMPLES=0
-  fi
-  sleep 0.1
-done
-[ "$PANE_READY" = true ] || fail "the task pane's shell did not become ready for the live-agent case"
-herdr pane run "$PANE_ID" "$SCRATCH/fm-control-smoke-agent 600" --session "$SESSION" >/dev/null 2>&1 \
-  || fail "could not start the live stand-in agent process on the task pane"
-AGENT_UP=false
-for _ in $(seq 1 100); do
-  if herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
-    | jq -e '[.result.process_info.foreground_processes[]? | select(.argv0 == "fm-control-smoke-agent")] | length == 1' >/dev/null 2>&1; then
-    AGENT_UP=true
-    break
-  fi
-  sleep 0.1
-done
-[ "$AGENT_UP" = true ] || fail "the live stand-in agent process never reached the task pane's foreground"
 
 STATE=$(fm_backend_agent_state herdr "$SESSION:$PANE_ID")
 [ "$STATE" = alive ] || fail "herdr should classify a registered agent with a live process as alive, got '$STATE'"
@@ -307,7 +270,14 @@ pass "real herdr: no control verb removed the endpoint or the task's local copy"
 AGENT_PID=$(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
   | jq -r '.result.process_info.foreground_processes[0].pid // empty')
 [ -n "$AGENT_PID" ] || fail "could not read the agent-named process pid from pane process-info"
-kill "$AGENT_PID" 2>/dev/null || fail "could not stop the agent-named process"
+for _ in $(seq 1 150); do
+  kill -0 "$AGENT_PID" 2>/dev/null || break
+  sleep 0.1
+done
+kill -0 "$AGENT_PID" 2>/dev/null \
+  && fail "the short-lived agent-named process did not exit"
+"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane run "$PANE_ID" ":" >/dev/null 2>&1 \
+  || fail "could not synchronize the pane after the short-lived agent exited"
 wait_process_state shell 50 \
   || version_fail "after the agent process exited the pane reads '$(fm_backend_herdr_pane_process_state "$SESSION" "$PANE_ID")' rather than 'shell' through pane process-info. Raw process-info: $(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>&1 | tr -d '\n')"
 
@@ -341,6 +311,11 @@ for _ in $(seq 1 20); do
   sleep 0.1
 done
 [ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched after the stale registration"
+"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
+  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1 \
+  || fail "the stale-registration replacement's registry identity could not be released"
+wait_process_state shell 50 \
+  || version_fail "the stale-registration replacement did not return to its shell"
 [ "$(sed -n 's/^window=//p' "$HOME_DIR/state/hsmoke.meta" | tail -1)" = "$SESSION:$PANE_ID" ] \
   || fail "the relaunch replaced its endpoint instead of reusing it"
 herdr pane get "$PANE_ID" --session "$SESSION" >/dev/null 2>&1 \

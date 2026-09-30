@@ -77,6 +77,8 @@ cleanup_all() {
 }
 trap cleanup_all EXIT
 fm_herdr_lab_prepare "$SESSION" || fail "could not prepare isolated Herdr lab session"
+herdr_test_agent_prepare "$TMP_ROOT/herdr-agent" "$ROOT/bin/fm-herdr-lab.sh" \
+  || fail "could not prepare the long-lived stand-in agent"
 
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-backend.sh"
@@ -131,7 +133,7 @@ PROJ2="$TMP_ROOT/scratch-project-2"; make_scratch_project "$PROJ2"
 
 CM1_OUT="$TMP_ROOT/cm1.out"; CM1_ERR="$TMP_ROOT/cm1.err"
 FM_SPAWN_NO_GUARD=1 FM_HOME="$PRIMARY_HOME" FM_ROOT_OVERRIDE="$ROOT" \
-  "$ROOT/bin/fm-spawn.sh" cm1 "$PROJ1" "sh -c 'echo primary-crew-ok'" --mode no-mistakes --yolo off --backend herdr \
+  "$ROOT/bin/fm-spawn.sh" cm1 "$PROJ1" "$(herdr_test_agent_command primary-crew-ok)" --mode no-mistakes --yolo off --backend herdr \
   >"$CM1_OUT" 2>"$CM1_ERR"
 rc=$?
 [ "$rc" -eq 0 ] || fail "primary-shaped crewmate spawn failed"$'\n'"--- stdout ---"$'\n'"$(cat "$CM1_OUT")"$'\n'"--- stderr ---"$'\n'"$(cat "$CM1_ERR")"
@@ -160,7 +162,7 @@ pass "real herdr E2E: the primary-shaped home's crewmate landed in the 'firstmat
 
 SM_OUT="$TMP_ROOT/sm.out"; SM_ERR="$TMP_ROOT/sm.err"
 FM_SPAWN_NO_GUARD=1 FM_HOME="$PRIMARY_HOME" FM_ROOT_OVERRIDE="$ROOT" \
-  "$ROOT/bin/fm-spawn.sh" e2esm1 "$SM_HOME" "sh -c 'echo secondmate-launch-ok'" --secondmate --backend herdr \
+  "$ROOT/bin/fm-spawn.sh" e2esm1 "$SM_HOME" "$(herdr_test_agent_command secondmate-launch-ok)" --secondmate --backend herdr \
   >"$SM_OUT" 2>"$SM_ERR"
 rc=$?
 [ "$rc" -eq 0 ] || fail "the primary's --secondmate spawn of e2esm1 failed"$'\n'"--- stdout ---"$'\n'"$(cat "$SM_OUT")"$'\n'"--- stderr ---"$'\n'"$(cat "$SM_ERR")"
@@ -186,7 +188,7 @@ pass "real herdr E2E: a --secondmate spawn by the PRIMARY lands in the SECONDMAT
 
 CM2_OUT="$TMP_ROOT/cm2.out"; CM2_ERR="$TMP_ROOT/cm2.err"
 FM_SPAWN_NO_GUARD=1 FM_HOME="$SM_HOME" FM_ROOT_OVERRIDE="$ROOT" \
-  "$ROOT/bin/fm-spawn.sh" cm2 "$PROJ2" "sh -c 'echo sm-crew-ok'" --mode no-mistakes --yolo off --backend herdr \
+  "$ROOT/bin/fm-spawn.sh" cm2 "$PROJ2" "$(herdr_test_agent_command sm-crew-ok)" --mode no-mistakes --yolo off --backend herdr \
   >"$CM2_OUT" 2>"$CM2_ERR"
 rc=$?
 [ "$rc" -eq 0 ] || fail "a crewmate spawned FROM the secondmate-shaped home failed"$'\n'"--- stdout ---"$'\n'"$(cat "$CM2_OUT")"$'\n'"--- stderr ---"$'\n'"$(cat "$CM2_ERR")"
@@ -225,6 +227,8 @@ pass "real herdr E2E: list_live from the secondmate's own context sees only task
 # --- 5. teardown closes the RIGHT tab, and no other ------------------------
 
 TD1_OUT="$TMP_ROOT/td1.out"
+herdr_test_write_landing_receipt "$ROOT" "$PRIMARY_HOME" cm1 \
+  || fail "could not record cm1's landing receipt"
 FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$PRIMARY_HOME/state" FM_DATA_OVERRIDE="$PRIMARY_HOME/data" \
   FM_CONFIG_OVERRIDE="$PRIMARY_HOME/config" \
   "$ROOT/bin/fm-teardown.sh" cm1 >"$TD1_OUT" 2>&1
@@ -244,6 +248,8 @@ WT1=
 pass "real herdr E2E: tearing down cm1 closes only its own tab - the secondmate's and cm2's tabs survive untouched"
 
 TD2_OUT="$TMP_ROOT/td2.out"
+herdr_test_write_landing_receipt "$ROOT" "$SM_HOME" cm2 \
+  || fail "could not record cm2's landing receipt"
 FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$SM_HOME/state" FM_DATA_OVERRIDE="$SM_HOME/data" \
   FM_CONFIG_OVERRIDE="$SM_HOME/config" \
   "$ROOT/bin/fm-teardown.sh" cm2 >"$TD2_OUT" 2>&1

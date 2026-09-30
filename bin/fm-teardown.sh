@@ -3338,8 +3338,11 @@ fi
 # exactly as it lifts those and never fabricates a receipt. A scout's report
 # receipt is written here at completion. The archive is append-once and both
 # steps are idempotent, and they run BEFORE the pending-close record below,
-# so an interrupted cleanup always retries safely. Not for kind=secondmate.
-if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
+# so an interrupted cleanup always retries safely. Not for kind=secondmate or
+# an Orca allocation-cleanup record: cleanup_recovery=orca represents a launch
+# that never became work and therefore has no landing or report to receipt.
+if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
+   && [ "$CLEANUP_RECOVERY" != orca ]; then
   if [ "$KIND" = ship ] && [ "$FORCE" != "--force" ]; then
     RECEIPT_GATE_RC=0
     FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
@@ -3646,6 +3649,16 @@ if [ "$KIND" = secondmate ]; then
     handoff_wake_retire_stage_restore \
       || echo "error: receiver wake restoration failed; recovery state remains at $HANDOFF_WAKE_RETIRE_STAGE" >&2
     exit "$rc"
+  fi
+  # A nested remote retirement addresses its control state inside the home it
+  # just removed. Nothing below is still owed there: attempting the generic
+  # task-record cleanup would recreate that retired home one state directory at
+  # a time. The parent-side remote teardown owns its route and reply cleanup.
+  if [ ! -e "$STATE" ] && [ ! -L "$STATE" ]; then
+    HANDOFF_WAKE_RETIRE_STAGE=
+    HANDOFF_WAKE_RETIRE_LOCK=
+    echo "teardown $ID complete (secondmate home $HOME_PATH)"
+    exit 0
   fi
   handoff_wake_retire_stage_commit \
     || { echo "error: receiver wake cleanup failed; preserving the secondmate route for retry" >&2; exit 1; }

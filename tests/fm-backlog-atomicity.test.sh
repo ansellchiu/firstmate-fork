@@ -615,9 +615,26 @@ run_ship_spawn() {  # <case-dir> <id>
 # worktree-return steps are then no-ops, which keeps these cases about the
 # backlog transition rather than re-testing tests/fm-teardown.test.sh's matrix.
 run_teardown() {  # <case-dir> <id> [args...]
-  local case_dir=$1
+  local case_dir=$1 id=$2 home state meta kind spawn_count cleanup_recovery
+  home=$(home_of "$case_dir")
+  state="$home/state"
+  meta="$state/$id.meta"
+  if [ -d "$state" ] && [ ! -L "$state" ] && [ -f "$meta" ] && [ ! -L "$meta" ]; then
+    kind=$(sed -n 's/^kind=//p' "$meta" | tail -1)
+    spawn_count=$(grep -c '^spawn_gen=' "$meta" || true)
+    cleanup_recovery=$(sed -n 's/^cleanup_recovery=//p' "$meta" | tail -1)
+    if [ "$kind" = ship ] && [ "$spawn_count" -eq 1 ] \
+       && [ "$cleanup_recovery" != orca ] && [ ! -e "$state/$id.receipt" ]; then
+      FM_HOME="$home" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$home/data" \
+        FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-receipt.sh" write-landing \
+          --task "$id" --project-fallback project \
+          --commit-sha 1111111111111111111111111111111111111111 \
+          --sha-source 'fixture commit' >/dev/null \
+        || fail "could not record $id's landing receipt"
+    fi
+  fi
   shift
-  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$(home_of "$case_dir")" \
+  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
     PATH="$case_dir/fakebin:$PATH" \
     "$TEARDOWN" "$@" 2>&1
 }
@@ -883,6 +900,12 @@ esac
 SH
   chmod +x "$case_dir/fakebin/tasks-axi"
   write_task_meta "$case_dir" "$id" ship local-only "spawn_gen=spawn-beads-done"
+  FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
+    "$ROOT/bin/fm-receipt.sh" write-landing --task "$id" \
+      --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not record the Beads teardown fixture's landing receipt"
 
   out=$(run_teardown "$case_dir" "$id") \
     || fail "Beads completion teardown failed without a markdown backlog: $out"
@@ -1091,6 +1114,12 @@ test_completion_targets_a_nested_relative_data_directory() {
   tasks-axi add "$id" "item for $id" --kind ship --file "$backlog" >/dev/null
   tasks-axi start "$id" --file "$backlog" >/dev/null
   write_task_meta "$case_dir" "$id" ship local-only "spawn_gen=spawn-relative-data"
+  FM_HOME="$(home_of "$case_dir")" FM_STATE_OVERRIDE="$(home_of "$case_dir")/state" \
+    "$ROOT/bin/fm-receipt.sh" write-landing --task "$id" \
+      --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not write relative-data teardown receipt"
 
   out=$(cd "$case_dir" && \
     FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$(home_of "$case_dir")" \
