@@ -157,14 +157,26 @@ pass "real herdr $HERDR_VERSION: a gone session reads recoverable while a live p
 FAKEBIN="$SCRATCH/fakebin"
 mkdir -p "$FAKEBIN"
 SLEEP_BIN=$(command -v sleep) || fail "sleep not found"
-ln -s "$SLEEP_BIN" "$FAKEBIN/codex-test-agent"
+# The replacement harness has to be a real live agent for the relaunch's launch
+# postcondition to accept it, and it has to keep its registration until the test
+# has finished asserting the relaunch - releasing on a timer instead would race
+# that read. So it stays in the foreground under its own registration (its
+# argv[0] basename is the harness name the classifier reads) and releases only
+# when the test says so, which is what keeps the release assertion below about
+# the harness rather than about the test.
 cat > "$FAKEBIN/codex" <<EOF
 #!/usr/bin/env bash
 set -e
 : > "$SCRATCH/codex-launched"
 "$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane report-agent "$PANE_ID" \
   --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch --state idle >/dev/null 2>&1
-exec "$FAKEBIN/codex-test-agent" 2
+for _ in \$(seq 1 900); do
+  if [ -e "$SCRATCH/codex-release-now" ]; then break; fi
+  sleep 0.1
+done
+"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
+  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1
+: > "$SCRATCH/codex-released"
 EOF
 chmod +x "$FAKEBIN/codex"
 printf -v FAKEBIN_Q '%q' "$FAKEBIN"
@@ -184,10 +196,11 @@ OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a drifted, agent-free Herdr pane should be re-homed and relaunched: $OUT"
 [ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched"
-"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
-  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1 \
-  || fail "the replacement harness's registry identity could not be released"
-: > "$SCRATCH/codex-released"
+: > "$SCRATCH/codex-release-now"
+for _ in $(seq 1 200); do
+  [ ! -e "$SCRATCH/codex-released" ] || break
+  sleep 0.1
+done
 [ -e "$SCRATCH/codex-released" ] \
   || fail "the replacement harness did not release its temporary registry identity"
 [ "$(fm_backend_herdr_current_path "$SESSION:$PANE_ID" 2>/dev/null || true)" = "$WT_REAL" ] \
@@ -234,7 +247,7 @@ wait_process_state() {  # <expected> <tries>
 }
 
 start_agent_process() {
-  fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "$AGENT_Q 10" \
+  fm_backend_herdr_send_text_line "$SESSION:$PANE_ID" "$AGENT_Q 900" \
     || fail "could not start the agent-named foreground process in the task pane"
   wait_process_state agent 50 \
     || version_fail "a real agent-named foreground process reads '$(fm_backend_herdr_pane_process_state "$SESSION" "$PANE_ID")' rather than 'agent' through pane process-info"
@@ -267,17 +280,26 @@ pass "real herdr: no control verb removed the endpoint or the task's local copy"
 # keeps the registration, which is exactly the shape a Pi crew leaves behind
 # when it exits under a nested shell. Before the fix this read `alive` forever:
 # exit waited out its timeout and refused, and relaunch was refused for good.
+# Select the agent-named process itself rather than whatever sits at index 0, so
+# the kill below can never land on the pane's own shell and take the endpoint
+# with it. Herdr reports argv0 as a path, so compare on its basename.
 AGENT_PID=$(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
-  | jq -r '.result.process_info.foreground_processes[0].pid // empty')
-[ -n "$AGENT_PID" ] || fail "could not read the agent-named process pid from pane process-info"
+  | jq -r '.result.process_info.foreground_processes[]?
+      | select(((.argv0 // "") | split("/") | last) == "claude" or .name == "claude")
+      | .pid')
+case "$AGENT_PID" in
+  '') fail "could not read the agent-named process pid from pane process-info" ;;
+  *[!0-9]*) fail "more than one agent-named process is in the task pane: $AGENT_PID" ;;
+esac
+kill "$AGENT_PID" 2>/dev/null || fail "could not stop the agent-named process"
 for _ in $(seq 1 150); do
   kill -0 "$AGENT_PID" 2>/dev/null || break
   sleep 0.1
 done
 kill -0 "$AGENT_PID" 2>/dev/null \
-  && fail "the short-lived agent-named process did not exit"
+  && fail "the agent-named process did not exit after being stopped"
 "$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane run "$PANE_ID" ":" >/dev/null 2>&1 \
-  || fail "could not synchronize the pane after the short-lived agent exited"
+  || fail "could not synchronize the pane after the agent process exited"
 wait_process_state shell 50 \
   || version_fail "after the agent process exited the pane reads '$(fm_backend_herdr_pane_process_state "$SESSION" "$PANE_ID")' rather than 'shell' through pane process-info. Raw process-info: $(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>&1 | tr -d '\n')"
 
@@ -302,7 +324,7 @@ case "$OUT" in
 esac
 pass "real herdr: exit on a pane with a stale registration is idempotent success"
 
-rm -f "$SCRATCH/codex-launched"
+rm -f "$SCRATCH/codex-launched" "$SCRATCH/codex-release-now" "$SCRATCH/codex-released"
 OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a stale-registration Herdr pane should be relaunched: $OUT"
@@ -311,9 +333,13 @@ for _ in $(seq 1 20); do
   sleep 0.1
 done
 [ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched after the stale registration"
-"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
-  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1 \
-  || fail "the stale-registration replacement's registry identity could not be released"
+: > "$SCRATCH/codex-release-now"
+for _ in $(seq 1 200); do
+  [ ! -e "$SCRATCH/codex-released" ] || break
+  sleep 0.1
+done
+[ -e "$SCRATCH/codex-released" ] \
+  || fail "the stale-registration replacement did not release its temporary registry identity"
 wait_process_state shell 50 \
   || version_fail "the stale-registration replacement did not return to its shell"
 [ "$(sed -n 's/^window=//p' "$HOME_DIR/state/hsmoke.meta" | tail -1)" = "$SESSION:$PANE_ID" ] \
