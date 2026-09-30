@@ -1,0 +1,25 @@
+# Live repro: two orphaned bash spinners (self-bounded to 45s), thresholds lowered for a short demo
+$ ps -eo pid,ppid,pcpu,etime,time,comm | awk "$2==1 && $6 ~ /bash$/"
+22972     1  85.6       00:12   0:09.21 bash
+22973     1  85.4       00:12   0:09.23 bash
+79172     1   0.0 09-15:54:43   0:00.03 bash
+59619     1   0.0    06:06:30   0:00.04 bash
+59745     1   0.0    06:06:29   0:00.04 bash
+59941     1   0.0    06:06:29   0:00.04 bash
+60055     1   0.1    06:06:29   0:05.99 bash
+60208     1   0.0    06:06:29   0:00.04 bash
+60333     1   0.0    06:06:29   0:05.95 bash
+60657     1   0.0    06:06:29   0:05.95 bash
+60945     1   0.2    06:06:29   0:05.88 bash
+--- live orphan_hot_shells (age>=5s cpu>=3s) ---
+22972 cumulative path: 9s own cpu over 12s alive
+22973 cumulative path: 9s own cpu over 12s alive
+--- poll 1 ---
+no wake (recorded: 22972 22973 )
+--- poll 2 ---
+[queued check/orphan-shell]
+[WAKE] check: leaked worker probe - orphaned shell pid 22972 (ppid 1, cumulative path: 9s own cpu over 13s alive); pid 22973 (ppid 1, cumulative path: 9s own cpu over 13s alive) matched on consecutive polls, and is starving every lane on this machine, including this watcher and any running suite. Hungriest: pid 6738 (ppid 1, 83.0% cpu) /Users/achiu/.local/share/lumen/sunshine; pid 22973 (ppid 1, 73.0% cpu) bash; pid 22972 (ppid 1, 72.5% cpu) bash. Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain).
+--- poll 3 (same episode) ---
+[triage] absorbed orphaned-shell alarm (already reported this episode, pids 22972 22973)
+no wake
+spinners gone (self-bounded)

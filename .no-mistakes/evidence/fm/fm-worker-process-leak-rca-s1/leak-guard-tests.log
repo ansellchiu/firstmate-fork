@@ -1,0 +1,9 @@
+ok - an orphaned hot shell wakes once per episode after two polls, and re-arms when it is gone
+ok - a single sample of an orphaned shell is recorded, not alarmed, and gone pids are forgotten
+ok - a surviving reported orphan does not mask a new orphaned-shell leak
+ok - orphaned spinners starved to 5% of a core still alarm on cumulative CPU, all named
+ok - a long-lived mostly-sleeping orphaned shell and a young orphan do not alarm
+ok - a hot ppid-1 app or daemon and a parented shell do not alarm
+ok - sustained machine overload wakes once per episode after its streak, names its hungriest processes, and re-arms on recovery
+ok - a one-minute load spike with a quiet five-minute average does not alarm
+ok - FM_LOAD_ALARM_MULTIPLE=off disables the load guard entirely
