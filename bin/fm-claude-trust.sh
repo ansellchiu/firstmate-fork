@@ -235,7 +235,7 @@ esac
 
 refuse() { echo "error: refusing to pre-register Claude trust: $1" >&2; exit 1; }
 
-real_dir() { (cd -P -- "$1" 2>/dev/null && pwd -P); }
+real_dir() { (CDPATH='' cd -P -- "$1" 2>/dev/null && pwd -P); }
 
 # The fully resolved path of an existing file, or empty. Resolution runs in node
 # because it must follow a symlink chain to its final target, and node is
@@ -247,7 +247,7 @@ real_file() { node -e 'process.stdout.write(require("node:fs").realpathSync(proc
 common_dir_of() {
   local dir=$1 common
   common=$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null) || return 1
-  (cd -P -- "$dir" && real_dir "$common")
+  (CDPATH='' cd -P -- "$dir" && real_dir "$common")
 }
 
 # The origin identity of the repository a path lives in, or empty when the
@@ -270,18 +270,19 @@ common_dir_of() {
 # worktree parked anywhere in the pool and would resolve the spelling against a
 # directory the declaring repository never names. A remote URL is absolute by
 # nature, so it is the one form compared verbatim, which errs toward refusing
-# rather than trusting.
+# rather than trusting; it is recognised by git's own rule - a colon before any
+# slash - so a local path that merely contains a colon is still resolved.
 origin_identity() {  # <path-inside-repo>
   local dir=$1 url common base
   url=$(git -C "$dir" remote get-url origin 2>/dev/null) || return 1
   [ -n "$url" ] || return 1
   case $url in
-    /*) [ -d "$url" ] && (cd -P -- "$url" && pwd -P) || return 1 ;;
-    *://*|*:*) printf '%s\n' "$url" ;;
+    /*) [ -d "$url" ] && (CDPATH='' cd -P -- "$url" && pwd -P) || return 1 ;;
     *)
+      case ${url%%/*} in *:*) printf '%s\n' "$url"; return ;; esac
       common=$(common_dir_of "$dir") || return 1
       base=$(real_dir "$(dirname -- "$common")") || return 1
-      [ -n "$base" ] && [ -d "$base/$url" ] && (cd -P -- "$base/$url" && pwd -P) || return 1
+      [ -n "$base" ] && [ -d "$base/$url" ] && (CDPATH='' cd -P -- "$base/$url" && pwd -P) || return 1
       ;;
   esac
 }

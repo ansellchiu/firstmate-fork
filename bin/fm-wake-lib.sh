@@ -1299,8 +1299,9 @@ fm_treehouse_project_lock_path() {  # <project-dir>
 # repository declares none - or declares one that proves nothing. This is the
 # same identity bin/fm-claude-trust.sh's scope test uses, computed the same way
 # step for step - the common dir resolved physically from inside the worktree,
-# its parent resolved physically, and every candidate path entered with `cd -P`
-# - so a symlinked repository directory cannot make the two disagree. It is
+# its parent resolved physically, every candidate path entered with `cd -P` and
+# CDPATH cleared, and a remote URL told from a local path by git's own rule, a
+# colon before any slash - so a symlinked repository directory cannot make the two disagree. It is
 # deliberately stricter than fm_treehouse_project_lock_path's: a lock path only
 # has to be a stable key, while this decides whether two different repositories
 # are the same project, so a relative origin is resolved against the checkout
@@ -1313,8 +1314,8 @@ fm_treehouse_origin_identity() {  # <path-inside-repo>
   [ -n "$url" ] || return 1
   case "$url" in
     /*) [ -d "$url" ] && (CDPATH='' cd -P -- "$url" && pwd -P) || return 1 ;;
-    *://*|*:*) printf '%s\n' "$url" ;;
     *)
+      case ${url%%/*} in *:*) printf '%s\n' "$url"; return ;; esac
       common=$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null) || return 1
       common=$(CDPATH='' cd -P -- "$dir" 2>/dev/null && CDPATH='' cd -P -- "$common" 2>/dev/null && pwd -P) || return 1
       base=$(CDPATH='' cd -P -- "$(dirname -- "$common")" 2>/dev/null && pwd -P) || return 1

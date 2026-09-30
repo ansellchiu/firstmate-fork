@@ -959,6 +959,33 @@ test_unresolvable_relative_origin_collision_is_refused() {
   pass "fm-claude-trust.sh: refuses two unrelated repos sharing an unresolvable relative origin"
 }
 
+# Git reads `host:path` as a remote only when no slash precedes the first colon,
+# so `../project:x.git` is a relative local path that must be resolved like any
+# other, never compared verbatim as a URL. Two unrelated repositories both
+# declaring it unresolved must be refused.
+test_colon_in_relative_origin_is_not_a_url() {
+  local case_dir config main_proj main_wt mate_proj out
+  case_dir="$TMP_ROOT/colon-relative-origin"
+  config="$case_dir/claude-config"
+  main_proj="$case_dir/main/projects/project"
+  main_wt="$case_dir/main/pool/project"
+  mate_proj="$case_dir/mate/projects/project"
+  mkdir -p "$config" "$(dirname -- "$main_wt")" "$(dirname -- "$mate_proj")"
+  fm_git_init_commit "$main_proj"
+  git -C "$main_proj" remote add origin ../project:x.git
+  git -C "$main_proj" worktree add --quiet -b wt-colon "$main_wt"
+  fm_git_init_commit "$mate_proj"
+  git -C "$mate_proj" remote add origin ../project:x.git
+  [ "$(git -C "$main_wt" rev-parse --git-common-dir)" != "$(git -C "$mate_proj" rev-parse --git-common-dir)" ] \
+    || fail "the colon-origin case was vacuous: both paths share one common dir"
+  out=$(run_trust "$config" "$main_wt" "$mate_proj")
+  expect_code 1 $? "a relative origin containing a colon must not prove a shared identity: $out"
+  assert_contains "$out" "is not a worktree of project" "the refusal did not name the project mismatch"
+  assert_not_trusted "$config/.claude.json" "$main_wt" \
+    "an unrelated repository's worktree was trusted on a colon-containing relative origin"
+  pass "fm-claude-trust.sh: resolves a colon-containing relative origin as a local path"
+}
+
 # A relative origin resolved against the WORKTREE argument rather than against
 # the checkout that declares it names a directory the declaring repository never
 # refers to - and in the pool layout that directory sits beside the worktree,
@@ -1088,6 +1115,7 @@ test_same_origin_clone_worktree_refreshes_the_worktrees_own_canonical_import_con
 test_different_origin_clone_worktree_is_refused
 test_originless_clone_worktree_is_refused
 test_unresolvable_relative_origin_collision_is_refused
+test_colon_in_relative_origin_is_not_a_url
 test_relative_origin_resolves_from_the_declaring_checkout
 test_worktree_subdirectory_is_refused
 test_project_argument_that_is_itself_a_worktree_resolves_to_the_primary_checkout
