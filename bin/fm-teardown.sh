@@ -181,11 +181,15 @@
 #   which otherwise refuses a ship task with no completion receipt, and only
 #   when teardown itself confirms live that the task never started: no
 #   completion receipt exists, the status log carries no done: or failed:
-#   declaration, and the worktree is clean with no commits beyond its base
-#   (crew_is_never_started in bin/fm-classify-lib.sh, the same check the
-#   watcher applies). When any of those fail, the flag is ignored and teardown
-#   refuses exactly as it would without it. It never relaxes the dirty-worktree
-#   or unlanded-work refusals; only --force can authorize discarding work.
+#   declaration, the worktree is clean (crew_is_never_started in
+#   bin/fm-classify-lib.sh, the same check the watcher applies), and HEAD has
+#   no commits beyond the dispatch_base= SHA bin/fm-spawn.sh recorded. Commits
+#   that already landed on main still count as commits beyond that base. It
+#   fails closed: a record with no dispatch_base=, or one that does not resolve
+#   in the worktree, refuses outright. When the other conditions fail, the flag
+#   is ignored and teardown refuses exactly as it would without it. It never
+#   relaxes the dirty-worktree or unlanded-work refusals; only --force can
+#   authorize discarding work.
 #
 # Transient / stale worktree git lock recovery (teardown-lock-race): a crew process
 # killed mid-git-operation can leave a .git/worktrees/<wt>/index.lock (or, for a
@@ -3356,9 +3360,19 @@ fi
 # started: both represent a launch that never became work and therefore has no
 # landing or report to receipt. An unconfirmed --standdown is ignored here.
 STANDDOWN_CONFIRMED=0
-if [ "$STANDDOWN" -eq 1 ] && [ ! -e "$STATE/$ID.receipt" ] \
-   && crew_is_never_started "$ID" "$STATE"; then
-  STANDDOWN_CONFIRMED=1
+if [ "$STANDDOWN" -eq 1 ] && { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
+   && [ "$CLEANUP_RECOVERY" != orca ]; then
+  STANDDOWN_BASE=$(fm_meta_get "$META" dispatch_base)
+  if [ -z "$STANDDOWN_BASE" ] || [ -z "$WT" ] \
+     || ! git -C "$WT" rev-parse --verify --quiet "$STANDDOWN_BASE^{commit}" >/dev/null 2>&1; then
+    echo "REFUSED: --standdown cannot prove task $ID never started: its record carries no dispatch_base= that resolves in worktree ${WT:-<none>}, so commits beyond its base cannot be ruled out. Nothing was changed; tear it down without --standdown, or with --force after explicit approval." >&2
+    exit 1
+  fi
+  STANDDOWN_AHEAD=$(git -C "$WT" rev-list --count "$STANDDOWN_BASE..HEAD" 2>/dev/null || echo unknown)
+  if [ "$STANDDOWN_AHEAD" = 0 ] && [ ! -e "$STATE/$ID.receipt" ] \
+     && crew_is_never_started "$ID" "$STATE"; then
+    STANDDOWN_CONFIRMED=1
+  fi
 fi
 if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
    && [ "$CLEANUP_RECOVERY" != orca ] && [ "$STANDDOWN_CONFIRMED" -eq 0 ]; then

@@ -2988,8 +2988,16 @@ standdown_case() {  # <name>
   local case_dir
   case_dir=$(make_case "$1")
   write_meta "$case_dir" local-only ship
+  printf 'dispatch_base=%s\n' "$(git -C "$case_dir/wt" rev-parse HEAD)" >> "$case_dir/state/task-x1.meta"
   rm -f "$case_dir/state/task-x1.receipt"
   printf '%s\n' "$case_dir"
+}
+
+# Commit on the task branch and fast-forward origin's main to it: landed work.
+standdown_land_commit() {  # <case-dir>
+  wt_commit "$1" "fix the thing"
+  git -C "$1/wt" push -q origin HEAD:main
+  git -C "$1/project" fetch -q origin
 }
 
 test_standdown_never_started_task_completes() {
@@ -3045,10 +3053,7 @@ test_standdown_commits_beyond_base_refuse() {
 test_standdown_landed_ship_without_receipt_refuses() {
   local case_dir rc
   case_dir=$(standdown_case standdown-landed)
-  wt_commit "$case_dir" "fix the thing"
-  git -C "$case_dir/wt" push -q origin HEAD:main
-  git -C "$case_dir/project" fetch -q origin
-  printf '%s\n' "done: landed on main" > "$case_dir/state/task-x1.status"
+  standdown_land_commit "$case_dir"
 
   set +e
   run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
@@ -3060,6 +3065,42 @@ test_standdown_landed_ship_without_receipt_refuses() {
     "standdown-landed: the refusal did not name the missing receipt"
   assert_present "$case_dir/state/task-x1.meta" "standdown-landed: the refusal removed the task record"
   pass "--standdown does not lift the receipt gate for a landed ship"
+}
+
+test_standdown_landed_ship_with_launch_only_status_refuses() {
+  local case_dir rc
+  case_dir=$(standdown_case standdown-landed-launch-status)
+  standdown_land_commit "$case_dir"
+  printf '%s\n' "spawned: task-x1" > "$case_dir/state/task-x1.status"
+
+  set +e
+  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "standdown-landed-launch-status: --standdown lifted the receipt gate for landed work"
+  assert_grep 'REFUSED: ship task task-x1 has no completion receipt' "$case_dir/stderr" \
+    "standdown-landed-launch-status: the refusal did not name the missing receipt"
+  assert_present "$case_dir/state/task-x1.meta" "standdown-landed-launch-status: the refusal removed the task record"
+  pass "--standdown counts commits landed on main as commits beyond the dispatch base"
+}
+
+test_standdown_without_dispatch_base_refuses() {
+  local case_dir rc
+  case_dir=$(make_case standdown-no-base)
+  write_meta "$case_dir" local-only ship
+  rm -f "$case_dir/state/task-x1.receipt"
+
+  set +e
+  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
+  rc=$?
+  set -e
+
+  expect_code 1 "$rc" "standdown-no-base: --standdown stood down a task with no recorded dispatch base"
+  assert_grep 'REFUSED: --standdown cannot prove task task-x1 never started' "$case_dir/stderr" \
+    "standdown-no-base: the refusal did not say the dispatch base is unknown"
+  assert_present "$case_dir/state/task-x1.meta" "standdown-no-base: the refusal removed the task record"
+  pass "--standdown fails closed when the record carries no dispatch base"
 }
 
 # The merge poll can prove a merge while cleanup is still running, between the
@@ -4167,6 +4208,8 @@ test_standdown_never_started_task_completes
 test_standdown_dirty_worktree_refuses
 test_standdown_commits_beyond_base_refuse
 test_standdown_landed_ship_without_receipt_refuses
+test_standdown_landed_ship_with_launch_only_status_refuses
+test_standdown_without_dispatch_base_refuses
 test_receipt_verified_during_teardown_still_reaches_the_index
 test_parked_run_with_mismatched_ledger_head_is_never_aborted
 test_parked_run_with_malformed_ledger_row_is_never_aborted

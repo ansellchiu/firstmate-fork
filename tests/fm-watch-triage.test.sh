@@ -3818,8 +3818,8 @@ SH
 
   git -C "$proj" worktree add -q -b "$task" "$wt" main
 
-  printf 'window=%s\nendpoint_task_id=%s\nworktree=%s\nproject=%s\nkind=ship\nmode=local-only\nspawn_gen=1\n' \
-    "$window" "$task" "$wt" "$proj" > "$state/$task.meta"
+  printf 'window=%s\nendpoint_task_id=%s\nworktree=%s\nproject=%s\nkind=ship\nmode=local-only\nspawn_gen=1\ndispatch_base=%s\n' \
+    "$window" "$task" "$wt" "$proj" "$(git -C "$wt" rev-parse HEAD)" > "$state/$task.meta"
   touch "$state/$task.status"
   sig=$(seen_sig "$state/$task.status"); printf '%s' "$sig" > "$state/.seen-${task}_status"
 
