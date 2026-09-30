@@ -851,29 +851,38 @@ orphan_hot_shells() {
 # consecutive polls, so a momentary reparent during ordinary teardown cannot
 # alarm. Exits the cycle through wake() like every other actionable surface.
 orphan_guard_check() {
-  local seen_file marker now sustained reason
+  local seen_file marker now sustained reported fresh reason
   seen_file="$STATE/.orphan-shells"
   marker="$STATE/.orphan-alarm"
   now=$(orphan_hot_shells)
-  sustained=
-  [ -z "$now" ] || [ ! -s "$seen_file" ] \
-    || sustained=$(printf '%s\n' "$now" | grep -Fxf "$seen_file" | tr '\n' ' ')
-  if [ -n "$now" ]; then
-    printf '%s\n' "$now" > "$seen_file" 2>/dev/null || true
-  else
+  if [ -z "$now" ]; then
     rm -f "$seen_file" "$marker"
     return 0
   fi
+  sustained=
+  [ ! -s "$seen_file" ] || sustained=$(printf '%s\n' "$now" | grep -Fxf "$seen_file")
+  printf '%s\n' "$now" > "$seen_file" 2>/dev/null || true
+  # The marker lists the pids already reported, pruned to those still hot, so a
+  # surviving earlier orphan cannot mask a fresh leak.
+  reported=
+  [ ! -s "$marker" ] || reported=$(printf '%s\n' "$now" | grep -Fxf "$marker")
+  if [ -n "$reported" ]; then
+    printf '%s\n' "$reported" > "$marker" 2>/dev/null || true
+  else
+    rm -f "$marker"
+  fi
   [ -n "$sustained" ] || return 0
-  if [ -e "$marker" ]; then
-    triage_log "absorbed orphaned-shell alarm (already reported this episode, pids ${sustained% })"
+  fresh=$sustained
+  [ -z "$reported" ] || fresh=$(printf '%s\n' "$sustained" | grep -vFx "$reported")
+  if [ -z "$fresh" ]; then
+    triage_log "absorbed orphaned-shell alarm (already reported this episode, pids $(printf '%s' "$sustained" | tr '\n' ' '))"
     return 0
   fi
-  reason="check: leaked worker probe - orphaned shell pid ${sustained% } (ppid 1, burning at least ${ORPHAN_CPU_FLOOR}% cpu on consecutive polls) is starving every lane on this machine, including this watcher and any running suite. Hungriest: $(load_guard_offenders). Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
+  reason="check: leaked worker probe - orphaned shell pid $(printf '%s\n' "$fresh" | tr '\n' ' ')(ppid 1, burning at least ${ORPHAN_CPU_FLOOR}% cpu on consecutive polls) is starving every lane on this machine, including this watcher and any running suite. Hungriest: $(load_guard_offenders). Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
   # Enqueue before suppressing, like every other surface here: a failed append
   # must leave the episode unreported so the next poll tries again.
   fm_wake_append check orphan-shell "$reason" || return 1
-  : > "$marker" 2>/dev/null || true
+  printf '%s\n' "$fresh" >> "$marker" 2>/dev/null || true
   wake "$reason"
 }
 

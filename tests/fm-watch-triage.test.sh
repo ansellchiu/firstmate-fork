@@ -5422,6 +5422,39 @@ test_orphaned_shell_single_sample_is_not_an_alarm() {
   pass "a single sample of an orphaned shell is recorded, not alarmed, and gone pids are forgotten"
 }
 
+test_surviving_orphan_does_not_mask_a_new_leak() {
+  local dir state fakebin out pid a b
+  dir=$(make_case orphan-new-leak); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  a='44467     1  88.1 /bin/zsh'
+  b='55501     1  91.0 /bin/bash'
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$a"
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "watcher did not exit for orphan A"
+  grep -F 'orphaned shell pid 44467 (ppid 1,' "$out" >/dev/null \
+    || fail "orphan A did not alarm: $(cat "$out")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge orphan A's alarm"
+  # A is left running: it stays reported, not re-alarmed.
+  : > "$out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$a"
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "surviving orphan A re-alarmed: $(cat "$out")"
+  fi
+  reap "$pid"
+  # A fresh leak B, with A still hot, must wake and name only B.
+  : > "$out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$a
+$b"
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "a new orphan B was masked by surviving orphan A: $(cat "$out")"
+  grep -F 'orphaned shell pid 55501 (ppid 1,' "$out" >/dev/null \
+    || fail "the new-leak alarm did not name exactly orphan B: $(cat "$out")"
+  grep -Fx 44467 "$state/.orphan-alarm" >/dev/null && grep -Fx 55501 "$state/.orphan-alarm" >/dev/null \
+    || fail "the episode marker does not list both reported pids: $(cat "$state/.orphan-alarm")"
+  pass "a surviving reported orphan does not mask a new orphaned-shell leak"
+}
+
 test_hot_orphaned_non_shell_is_not_an_alarm() {
   local dir state fakebin out pid
   dir=$(make_case orphan-nonshell); state="$dir/state"; fakebin="$dir/fakebin"
@@ -6138,6 +6171,7 @@ test_procevent_surface_crash_boundaries
 test_procevent_marker_failure_exits_and_replays
 test_orphaned_shell_alarm_surfaces_once_then_rearms
 test_orphaned_shell_single_sample_is_not_an_alarm
+test_surviving_orphan_does_not_mask_a_new_leak
 test_hot_orphaned_non_shell_is_not_an_alarm
 test_machine_load_alarm_surfaces_once_then_rearms
 test_machine_load_spike_is_not_an_alarm
