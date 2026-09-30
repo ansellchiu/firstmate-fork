@@ -48,7 +48,7 @@ watch_bg() {  # <state> <fakebin> <out> [extra env assignments...]
   local state=$1 fakebin=$2 out=$3
   shift 3
   PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_FAKE_PROCS= FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$@" "$WATCH" > "$out" &
+    FM_FAKE_PROCS='' FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$@" "$WATCH" > "$out" &
 }
 
 # Wait up to <limit> 0.1s ticks while <pid> stays alive; 0 if still alive, 1 if it died.
@@ -5450,7 +5450,7 @@ $b"
   wait_for_exit "$pid" 100 || fail "a new orphan B was masked by surviving orphan A: $(cat "$out")"
   grep -F 'orphaned shell pid 55501 (ppid 1,' "$out" >/dev/null \
     || fail "the new-leak alarm did not name exactly orphan B: $(cat "$out")"
-  grep -Fx 44467 "$state/.orphan-alarm" >/dev/null && grep -Fx 55501 "$state/.orphan-alarm" >/dev/null \
+  { grep -Fx 44467 "$state/.orphan-alarm" && grep -Fx 55501 "$state/.orphan-alarm"; } >/dev/null \
     || fail "the episode marker does not list both reported pids: $(cat "$state/.orphan-alarm")"
   pass "a surviving reported orphan does not mask a new orphaned-shell leak"
 }
