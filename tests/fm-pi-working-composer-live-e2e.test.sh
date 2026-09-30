@@ -98,6 +98,15 @@ for f in fm-calm-assistant-layout.ts fm-calm-operational-user-layout.ts \
 done
 fm_git_init_commit "$PROJECT"
 
+# Calm's mid-turn hull is CALM_WORKING_SHIP_HULL in the sprite library. Derive it
+# from that source of truth instead of duplicating the glyphs here, so redrawing
+# the ship cannot leave this expectation silently stale.
+WORKING_SHIP_HULL=$(sed -n 's/^const HULL_[A-Z]* = "\(.*\)";$/\1/p' \
+  "$ROOT/.pi/extensions/lib/fm-calm-working-ship-sprite.ts" | tr -d '\n')
+[ -n "$WORKING_SHIP_HULL" ] \
+  || fail_pi "could not read CALM_WORKING_SHIP_HULL from the working-ship sprite library"
+
+
 # The faux provider: a real pi turn that stays in its working state long enough
 # to be observed, with no model call behind it.
 cat > "$PROJECT/live-provider.ts" <<'TS'
@@ -224,12 +233,12 @@ check_presentation() {  # <calm on|off> <expected-submit-verdict> <expected-gene
   if [ "$calm" = on ]; then
     i=0
     while [ "$i" -lt 240 ] \
-      && ! printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq '╲▁▁▁╱'; do
+      && ! printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq "$WORKING_SHIP_HULL"; do
       sleep 0.05
       generating=$(tmux -L "$SOCKET" capture-pane -e -p -t "$session" -S 0 -E - 2>/dev/null)
       i=$((i + 1))
     done
-    printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq '╲▁▁▁╱' \
+    printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq "$WORKING_SHIP_HULL" \
       || fail_pi "Calm never drew its working ship, so a cleared composer border proves nothing (calm=$calm)"
   fi
   ! printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq FM_LIVE_WORKING_DONE \

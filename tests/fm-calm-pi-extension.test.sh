@@ -3850,8 +3850,39 @@ const tree = dom.match(/<div[^>]*id="tree-container"[^>]*>([\s\S]*?)<div[^>]*id=
 if (!messages || !tree) process.exit(1);
 if (!/<div class="user-message"[^>]*>[\s\S]*Show a deterministic tool example\./.test(messages)) process.exit(1);
 if (!/<div class="assistant-message"[^>]*>[\s\S]*The deterministic tool example is complete\./.test(messages)) process.exit(1);
-if (messages.includes('<div class="hook-message"')) process.exit(1);
-if (messages.includes("[firstmate-synthetic-input]")) process.exit(1);
+// Pi renders a Calm-hidden operational row into the export DOM as a
+// display:none hook-message rather than omitting it, so absence from the DOM no
+// longer proves the conversation does not SHOW it. Assert what it shows: the
+// stylesheet really hides that class, every hook-message carries it, and the
+// synthetic label survives only inside those hidden blocks.
+if (!/\.hook-message-hidden\s*\{[^}]*display:\s*none[^}]*\}/.test(dom)) process.exit(1);
+for (const open of messages.matchAll(/<div class="([^"]*\bhook-message\b[^"]*)"/g)) {
+  if (!/\bhook-message-hidden\b/.test(open[1])) process.exit(1);
+}
+// Drop each hidden hook-message block by matching its own closing </div>, so
+// what remains is only the conversation the export actually displays.
+function strippedOfHiddenHookMessages(html) {
+  const marker = '<div class="hook-message hook-message-hidden"';
+  let out = "";
+  let pos = 0;
+  for (;;) {
+    const start = html.indexOf(marker, pos);
+    if (start === -1) return out + html.slice(pos);
+    out += html.slice(pos, start);
+    const tag = /<\/?div\b/g;
+    tag.lastIndex = start;
+    let depth = 0;
+    let end = -1;
+    let m;
+    while ((m = tag.exec(html)) !== null) {
+      depth += m[0] === "</div" ? -1 : 1;
+      if (depth === 0) { end = html.indexOf(">", m.index); break; }
+    }
+    if (end === -1) return out + html.slice(start);
+    pos = end + 1;
+  }
+}
+if (strippedOfHiddenHookMessages(messages).includes("[firstmate-synthetic-input]")) process.exit(1);
 for (const current of ["CURRENT_WATCHER_E2E", "CURRENT_TURN_END_E2E", "CURRENT_AWAY_E2E", "CURRENT_FROM_FIRSTMATE_E2E", "CURRENT_LAUNCH_BRIEF_E2E"]) {
   if (!messages.includes(current)) process.exit(1);
 }

@@ -2881,6 +2881,9 @@ printf 'watcher: started pid=%s (beacon fresh) recovery-generation=g4\n' "$$"
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
   PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_SECOND_FILE="$second" FM_STOP_FILE="$stop" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module > "$TMP_ROOT/pi-successor-failure-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -3378,6 +3381,9 @@ while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.05; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
   handoff="$home/state/extensions/pi-primary-watch/session-replacement-actionable.json"
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
   PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_HANDOFF_FILE="$handoff" FM_PI_ARM_READY_TIMEOUT_MS=3000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=200 node --input-type=module > "$TMP_ROOT/pi-late-retiring-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -3572,6 +3578,9 @@ printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
   PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_PI_ARM_READY_TIMEOUT_MS=4000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=1 node --input-type=module > "$TMP_ROOT/pi-retired-restoration-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -4792,8 +4801,9 @@ printf 'guard should not run\n' >&2
 exit 2
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh" "$repo/bin/fm-turnend-guard.sh"
-  # Stock macOS Bash 3.2 cannot reliably parse JavaScript template literals in
-  # a heredoc nested inside command substitution, so capture through a file.
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
   ARM_PLUGIN="$arm_plugin" GUARD_PLUGIN="$guard_plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_GUARD_LOG="$guard_log" node > "$node_output" 2>&1 <<'EOF'
 import { existsSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -4868,8 +4878,9 @@ printf 'guard ran after external healthy watcher\n' >&2
 exit 2
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh" "$repo/bin/fm-turnend-guard.sh"
-  # Stock macOS Bash 3.2 cannot reliably parse JavaScript template literals in
-  # a heredoc nested inside command substitution, so capture through a file.
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
   ARM_PLUGIN="$arm_plugin" GUARD_PLUGIN="$guard_plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_GUARD_LOG="$guard_log" node > "$node_output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
