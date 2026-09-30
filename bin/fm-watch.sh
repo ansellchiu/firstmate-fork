@@ -762,7 +762,7 @@ signal_turnend_panes_churned() {  # <file> ...
 # the 2026-09-30 leak stayed invisible for 66 minutes - twelve orphaned busy
 # loops, see docs/worker-process-leak-rca.md. Two signals, each one wake per
 # episode and re-armed when it clears. The primary one is specific: an orphaned
-# SHELL (ppid 1) burning CPU on two consecutive polls is the leak itself. The
+# SHELL (ppid 1) doing CPU work on two consecutive polls is the leak itself. The
 # backstop is sustained machine overload, which only sees the aftermath, since
 # twelve spinners add only ~12 to the load average. Both surface and attribute;
 # they never kill anything, because reaping another process is destructive and
@@ -778,7 +778,29 @@ LOAD_ALARM_POLLS=${FM_LOAD_ALARM_POLLS:-12}   # consecutive overloaded polls bef
 case "$LOAD_ALARM_POLLS" in
   ''|*[!0-9]*|0) LOAD_ALARM_POLLS=12 ;;
 esac
-ORPHAN_CPU_FLOOR=50   # percent of one core an orphaned shell must burn to count
+
+# Orphaned-shell thresholds. The primary test reads CUMULATIVE own CPU time, not
+# the instantaneous share: pcpu is the share of a core the process actually
+# received, so it collapses under exactly the contention this alarm exists for.
+# Cumulative CPU is work performed and accrues at any received share - a spinner
+# held to ~5% of a core at the incident's load of 237 still accrues ~9s of CPU
+# per 3 minutes of life and ~18s per 6, so it crosses the 10s floor within a few
+# polls there just as it does on an idle machine. The age floor (180s) keeps an
+# ordinary short-lived orphan during teardown out. The CPU-to-lifetime ratio
+# floor (0.02) separates a spinner from a long-lived, mostly-sleeping daemonized
+# shell: a spinner's ratio equals its received share (~0.05 even in the worst
+# observed contention), while a shell that used 12s across two hours sits near
+# 0.002. ps `time` counts the process's OWN CPU, so a supervisor that merely
+# spawns busy children is not caught. The pcpu floor is only a secondary fast
+# path that alarms sooner on a quiet machine; it is never the sole gate.
+ORPHAN_MIN_AGE=${FM_ORPHAN_MIN_AGE:-180}      # seconds alive
+ORPHAN_MIN_CPU=${FM_ORPHAN_MIN_CPU:-10}       # seconds of own cumulative CPU
+ORPHAN_MIN_RATIO=${FM_ORPHAN_MIN_RATIO:-0.02} # cumulative CPU / lifetime
+ORPHAN_FAST_PCPU=${FM_ORPHAN_FAST_PCPU:-20}   # instantaneous percent of one core
+case "$ORPHAN_MIN_AGE" in ''|*[!0-9]*) ORPHAN_MIN_AGE=180 ;; esac
+case "$ORPHAN_MIN_CPU" in ''|*[!0-9]*) ORPHAN_MIN_CPU=10 ;; esac
+case "$ORPHAN_MIN_RATIO" in ''|*[!0-9.]*|*.*.*|.) ORPHAN_MIN_RATIO=0.02 ;; esac
+case "$ORPHAN_FAST_PCPU" in ''|*[!0-9]*|0) ORPHAN_FAST_PCPU=20 ;; esac
 
 # Online core count, or nothing when this host reports none. Nothing means the
 # guard stands down: a guessed core count is a guessed threshold, and guessing
@@ -809,14 +831,14 @@ load_averages() {
   sysctl -n vm.loadavg 2>/dev/null | awk '{gsub(/[{}]/, ""); print $1, $2}'
 }
 
-# Every process as `pid ppid pcpu command`, the command kept whole, spaces
-# included. FM_FAKE_PROCS, when set at all, is the test seam.
+# Every process as `pid ppid pcpu etime time command`, the command kept whole,
+# spaces included. FM_FAKE_PROCS, when set at all, is the test seam.
 process_sample() {
   if [ -n "${FM_FAKE_PROCS+x}" ]; then
     [ -z "$FM_FAKE_PROCS" ] || printf '%s\n' "$FM_FAKE_PROCS"
     return 0
   fi
-  ps -eo pid=,ppid=,pcpu=,comm= 2>/dev/null
+  ps -eo pid=,ppid=,pcpu=,etime=,time=,comm= 2>/dev/null
 }
 
 # The three hungriest processes, one line, each with its parent pid: an orphaned
@@ -825,36 +847,51 @@ process_sample() {
 load_guard_offenders() {
   process_sample | sort -k3 -rn | awk '
     NR <= 3 {
-      cmd = $4
-      for (i = 5; i <= NF; i++) cmd = cmd " " $i
+      cmd = $6
+      for (i = 7; i <= NF; i++) cmd = cmd " " $i
       printf "%spid %s (ppid %s, %s%% cpu) %s", (NR > 1 ? "; " : ""), $1, $2, $3, cmd
     }
     END { printf "\n" }'
 }
 
-# Pids of orphaned shells burning CPU, one per line. Only shells: launchd starts
-# apps and daemons (a browser, a spotlight indexer) with ppid 1 legitimately, and
+# Orphaned shells doing CPU work, one `pid why` line each, where `why` names the
+# path that matched (see the thresholds above). Only shells: launchd starts apps
+# and daemons (a browser, a spotlight indexer) with ppid 1 legitimately, and
 # they can run hot; an orphaned shell spinning has no legitimate cause here.
 # ponytail: on Linux a subreaper can adopt orphans instead of pid 1; match its
 # pid too if that host shape ever runs the fleet.
 orphan_hot_shells() {
-  process_sample | awk -v floor="$ORPHAN_CPU_FLOOR" '
-    $2 == 1 && $3 + 0 >= floor {
-      cmd = $4
-      for (i = 5; i <= NF; i++) cmd = cmd " " $i
+  process_sample | awk -v age_min="$ORPHAN_MIN_AGE" -v cpu_min="$ORPHAN_MIN_CPU" \
+    -v ratio_min="$ORPHAN_MIN_RATIO" -v fast="$ORPHAN_FAST_PCPU" '
+    function secs(t,   d, n, p, i, v) {
+      d = 0
+      if (index(t, "-")) { d = substr(t, 1, index(t, "-") - 1); t = substr(t, index(t, "-") + 1) }
+      n = split(t, p, ":"); v = 0
+      for (i = 1; i <= n; i++) v = v * 60 + p[i]
+      return d * 86400 + v
+    }
+    $2 == 1 {
+      cmd = $6
+      for (i = 7; i <= NF; i++) cmd = cmd " " $i
       sub(/.*\//, "", cmd); sub(/^-/, "", cmd)
-      if (cmd ~ /^(sh|bash|zsh|dash|ksh)$/) print $1
+      if (cmd !~ /^(sh|bash|zsh|dash|ksh)$/) next
+      age = secs($4); cpu = secs($5)
+      if (age >= age_min && cpu >= cpu_min && cpu >= ratio_min * age)
+        printf "%s cumulative path: %ds own cpu over %ds alive\n", $1, cpu, age
+      else if ($3 + 0 >= fast)
+        printf "%s fast path: %s%% cpu now\n", $1, $3
     }'
 }
 
-# Alarm once per episode when the same orphaned shell stays hot across two
+# Alarm once per episode when the same orphaned shell matches across two
 # consecutive polls, so a momentary reparent during ordinary teardown cannot
 # alarm. Exits the cycle through wake() like every other actionable surface.
 orphan_guard_check() {
-  local seen_file marker now sustained reported fresh reason
+  local seen_file marker orphans now sustained reported fresh reason
   seen_file="$STATE/.orphan-shells"
   marker="$STATE/.orphan-alarm"
-  now=$(orphan_hot_shells)
+  orphans=$(orphan_hot_shells)
+  now=$(printf '%s\n' "$orphans" | awk 'NF { print $1 }')
   if [ -z "$now" ]; then
     rm -f "$seen_file" "$marker"
     return 0
@@ -878,7 +915,9 @@ orphan_guard_check() {
     triage_log "absorbed orphaned-shell alarm (already reported this episode, pids $(printf '%s' "$sustained" | tr '\n' ' '))"
     return 0
   fi
-  reason="check: leaked worker probe - orphaned shell pid $(printf '%s\n' "$fresh" | tr '\n' ' ')(ppid 1, burning at least ${ORPHAN_CPU_FLOOR}% cpu on consecutive polls) is starving every lane on this machine, including this watcher and any running suite. Hungriest: $(load_guard_offenders). Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
+  reason="check: leaked worker probe - orphaned shell $(printf '%s\n' "$orphans" | awk -v fresh="$fresh" '
+    BEGIN { n = split(fresh, f, "\n"); for (i = 1; i <= n; i++) want[f[i]] = 1 }
+    ($1 in want) { why = $0; sub(/^[^ ]* /, "", why); printf "%spid %s (ppid 1, %s)", (k++ ? "; " : ""), $1, why }') matched on consecutive polls, and is starving every lane on this machine, including this watcher and any running suite. Hungriest: $(load_guard_offenders). Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
   # Enqueue before suppressing, like every other surface here: a failed append
   # must leave the episode unreported so the next poll tries again.
   fm_wake_append check orphan-shell "$reason" || return 1
