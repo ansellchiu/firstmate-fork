@@ -753,24 +753,32 @@ signal_turnend_panes_churned() {  # <file> ...
   return 0
 }
 
-# Machine-wide load guard.
+# Machine-wide leak guard.
 #
 # Every other detector in this watcher reads ONE crew's pane: the busy-state
 # record, the turn-end record and the stale/wedge timer all describe a single
 # task, so a worker that leaks CPU-burning children starves every lane on the
 # machine while each per-task signal still reads perfectly healthy. That is how
 # the 2026-09-30 leak stayed invisible for 66 minutes - twelve orphaned busy
-# loops, load average 237 on 12 cores - see docs/worker-process-leak-rca.md.
-# One loadavg read per poll, one wake per episode, re-armed when load falls
-# back. It surfaces and attributes; it never kills anything, because reaping
-# another process is destructive and belongs to the captain.
-# ponytail: the episode marker is per home, so two homes on one machine each
-# report the same overload once. Per-machine dedupe only if that gets noisy.
+# loops, see docs/worker-process-leak-rca.md. Two signals, each one wake per
+# episode and re-armed when it clears. The primary one is specific: an orphaned
+# SHELL (ppid 1) burning CPU on two consecutive polls is the leak itself. The
+# backstop is sustained machine overload, which only sees the aftermath, since
+# twelve spinners add only ~12 to the load average. Both surface and attribute;
+# they never kill anything, because reaping another process is destructive and
+# belongs to the captain.
+# ponytail: the episode markers are per home, so two homes on one machine each
+# report the same leak once. Per-machine dedupe only if that gets noisy.
 LOAD_ALARM_MULTIPLE=${FM_LOAD_ALARM_MULTIPLE:-4}   # alarm at cores x this, `off` disables
 case "$LOAD_ALARM_MULTIPLE" in
   off) ;;
   ''|*[!0-9]*|0) LOAD_ALARM_MULTIPLE=4 ;;
 esac
+LOAD_ALARM_POLLS=${FM_LOAD_ALARM_POLLS:-12}   # consecutive overloaded polls before it wakes
+case "$LOAD_ALARM_POLLS" in
+  ''|*[!0-9]*|0) LOAD_ALARM_POLLS=12 ;;
+esac
+ORPHAN_CPU_FLOOR=50   # percent of one core an orphaned shell must burn to count
 
 # Online core count, or nothing when this host reports none. Nothing means the
 # guard stands down: a guessed core count is a guessed threshold, and guessing
@@ -801,12 +809,21 @@ load_averages() {
   sysctl -n vm.loadavg 2>/dev/null | awk '{gsub(/[{}]/, ""); print $1, $2}'
 }
 
+# Every process as `pid ppid pcpu command`, the command kept whole, spaces
+# included. FM_FAKE_PROCS, when set at all, is the test seam.
+process_sample() {
+  if [ -n "${FM_FAKE_PROCS+x}" ]; then
+    [ -z "$FM_FAKE_PROCS" ] || printf '%s\n' "$FM_FAKE_PROCS"
+    return 0
+  fi
+  ps -eo pid=,ppid=,pcpu=,comm= 2>/dev/null
+}
+
 # The three hungriest processes, one line, each with its parent pid: an orphaned
 # shell (ppid 1) is the signature of a leaked probe whose launching shell is
-# already gone. The command is kept whole, spaces included, so an app bundle
-# path is not truncated into uselessness.
+# already gone.
 load_guard_offenders() {
-  ps -eo pid=,ppid=,pcpu=,comm= 2>/dev/null | sort -k3 -rn | awk '
+  process_sample | sort -k3 -rn | awk '
     NR <= 3 {
       cmd = $4
       for (i = 5; i <= NF; i++) cmd = cmd " " $i
@@ -815,10 +832,56 @@ load_guard_offenders() {
     END { printf "\n" }'
 }
 
-# Alarm once per episode while the machine is sustainedly overloaded. Exits the
-# cycle through wake() like every other actionable surface.
+# Pids of orphaned shells burning CPU, one per line. Only shells: launchd starts
+# apps and daemons (a browser, a spotlight indexer) with ppid 1 legitimately, and
+# they can run hot; an orphaned shell spinning has no legitimate cause here.
+# ponytail: on Linux a subreaper can adopt orphans instead of pid 1; match its
+# pid too if that host shape ever runs the fleet.
+orphan_hot_shells() {
+  process_sample | awk -v floor="$ORPHAN_CPU_FLOOR" '
+    $2 == 1 && $3 + 0 >= floor {
+      cmd = $4
+      for (i = 5; i <= NF; i++) cmd = cmd " " $i
+      sub(/.*\//, "", cmd); sub(/^-/, "", cmd)
+      if (cmd ~ /^(sh|bash|zsh|dash|ksh)$/) print $1
+    }'
+}
+
+# Alarm once per episode when the same orphaned shell stays hot across two
+# consecutive polls, so a momentary reparent during ordinary teardown cannot
+# alarm. Exits the cycle through wake() like every other actionable surface.
+orphan_guard_check() {
+  local seen_file marker now sustained reason
+  seen_file="$STATE/.orphan-shells"
+  marker="$STATE/.orphan-alarm"
+  now=$(orphan_hot_shells)
+  sustained=
+  [ -z "$now" ] || [ ! -s "$seen_file" ] \
+    || sustained=$(printf '%s\n' "$now" | grep -Fxf "$seen_file" | tr '\n' ' ')
+  if [ -n "$now" ]; then
+    printf '%s\n' "$now" > "$seen_file" 2>/dev/null || true
+  else
+    rm -f "$seen_file" "$marker"
+    return 0
+  fi
+  [ -n "$sustained" ] || return 0
+  if [ -e "$marker" ]; then
+    triage_log "absorbed orphaned-shell alarm (already reported this episode, pids ${sustained% })"
+    return 0
+  fi
+  reason="check: leaked worker probe - orphaned shell pid ${sustained% } (ppid 1, burning at least ${ORPHAN_CPU_FLOOR}% cpu on consecutive polls) is starving every lane on this machine, including this watcher and any running suite. Hungriest: $(load_guard_offenders). Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
+  # Enqueue before suppressing, like every other surface here: a failed append
+  # must leave the episode unreported so the next poll tries again.
+  fm_wake_append check orphan-shell "$reason" || return 1
+  : > "$marker" 2>/dev/null || true
+  wake "$reason"
+}
+
+# Backstop: alarm once per episode while the machine stays overloaded for
+# LOAD_ALARM_POLLS consecutive polls. It catches a runaway the orphan signal
+# misses, but only once other work has piled up behind it.
 load_guard_check() {
-  local l1 l5 cores threshold marker offenders reason
+  local l1 l5 cores threshold marker streak polls offenders reason
   [ "$LOAD_ALARM_MULTIPLE" != off ] || return 0
   read -r l1 l5 <<LOADAVG
 $(load_averages)
@@ -828,20 +891,26 @@ LOADAVG
   [ -n "$cores" ] || return 0
   threshold=$(( cores * LOAD_ALARM_MULTIPLE ))
   marker="$STATE/.load-alarm"
+  streak="$STATE/.load-streak"
   # Sustained, not spiky: the five-minute average has to be over the line too,
   # so one parallel build step or a nine-shard suite burst cannot alarm.
   if ! awk -v a="$l1" -v b="$l5" -v t="$threshold" 'BEGIN { exit !(a + 0 >= t && b + 0 >= t) }'; then
-    rm -f "$marker"
+    rm -f "$marker" "$streak"
     return 0
   fi
   if [ -e "$marker" ]; then
     triage_log "absorbed machine-load alarm (already reported this episode, load $l1)"
     return 0
   fi
+  polls=$(cat "$streak" 2>/dev/null)
+  case "$polls" in ''|*[!0-9]*) polls=0 ;; esac
+  polls=$((polls + 1))
+  if [ "$polls" -lt "$LOAD_ALARM_POLLS" ]; then
+    printf '%s\n' "$polls" > "$streak" 2>/dev/null || true
+    return 0
+  fi
   offenders=$(load_guard_offenders)
-  reason="check: machine load $l1 (5m $l5) on $cores cores is past $threshold - every lane on this machine is starved, including this watcher and any running suite. Hungriest: ${offenders:-unavailable}. An orphaned shell there (ppid 1, a zsh or bash burning CPU) is a leaked worker probe: find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
-  # Enqueue before suppressing, like every other surface here: a failed append
-  # must leave the episode unreported so the next poll tries again.
+  reason="check: machine load $l1 (5m $l5) on $cores cores has been past $threshold for $polls polls - every lane on this machine is starved, including this watcher and any running suite. Hungriest: ${offenders:-unavailable}. An orphaned shell there (ppid 1, a zsh or bash burning CPU) is a leaked worker probe: find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
   fm_wake_append check machine-load "$reason" || return 1
   : > "$marker" 2>/dev/null || true
   wake "$reason"
@@ -2473,7 +2542,8 @@ while :; do
   touch "$STATE/.last-watcher-beat"
 
   # Before any per-task read: a starved machine makes every other observation in
-  # this cycle unreliable, so it is surfaced first (load_guard_check above).
+  # this cycle unreliable, so it is surfaced first (orphan_guard_check above).
+  orphan_guard_check || exit 1
   load_guard_check || exit 1
 
   if [ "$(age_of "$STATE/home-summary.json")" -ge "$HOME_SUMMARY_INTERVAL" ]; then

@@ -48,7 +48,7 @@ watch_bg() {  # <state> <fakebin> <out> [extra env assignments...]
   local state=$1 fakebin=$2 out=$3
   shift 3
   PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$@" "$WATCH" > "$out" &
+    FM_FAKE_PROCS= FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$@" "$WATCH" > "$out" &
 }
 
 # Wait up to <limit> 0.1s ticks while <pid> stays alive; 0 if still alive, 1 if it died.
@@ -5354,19 +5354,100 @@ test_procevent_marker_failure_exits_and_replays() {
   pass "marker failure exits through the shared wake owner, releases its lock, and replays later"
 }
 
-# --- machine-wide load guard -------------------------------------------------
+# --- machine-wide leak guard -------------------------------------------------
 #
 # Every other detector here reads ONE crew's pane, so a worker that leaks
 # CPU-burning children starves the machine while every per-task signal still
-# reads healthy (docs/worker-process-leak-rca.md). FM_FAKE_LOADAVG is the seam:
-# these drive the guard's decision without loading the test machine.
+# reads healthy (docs/worker-process-leak-rca.md). FM_FAKE_PROCS and
+# FM_FAKE_LOADAVG are the seams: these drive the guard's decisions without
+# loading the test machine or creating real orphans.
+
+LEAK_PROCS='  101     1  97.5 /System/Library/Frameworks/CoreSpotlight.framework/corespotlightd
+  102     1  97.4 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+44467     1  88.1 /bin/zsh
+44468   500  90.0 /bin/bash'
+
+test_orphaned_shell_alarm_surfaces_once_then_rearms() {
+  local dir state fakebin out pid
+  dir=$(make_case orphan-shell); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$LEAK_PROCS"
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "watcher did not exit for an orphaned shell hot on consecutive polls"
+  [ -s "$state/.orphan-shells" ] || fail "the orphan guard did not record its between-poll observation"
+  # Exactly the orphaned shell: not the hot ppid-1 apps, not the parented bash.
+  grep -F 'check: leaked worker probe - orphaned shell pid 44467 (ppid 1,' "$out" >/dev/null \
+    || fail "the orphan guard did not name exactly the orphaned shell: $(cat "$out")"
+  grep "$(printf '\tcheck\torphan-shell\t')" "$state/.wake-queue" >/dev/null \
+    || fail "the orphan alarm was not queued as a check wake: $(cat "$state/.wake-queue")"
+  [ -e "$state/.orphan-alarm" ] || fail "the orphan alarm did not record its episode marker"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the orphan alarm"
+  : > "$out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$LEAK_PROCS"
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "the orphan alarm repeated on every poll instead of once per episode: $(cat "$out")"
+  fi
+  reap "$pid"
+  # Re-arm once the orphan is gone, and forget its pid.
+  watch_bg "$state" "$fakebin" "$out"
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the watcher exited with no orphaned shell"; }
+  reap "$pid"
+  [ -e "$state/.orphan-alarm" ] && fail "a cleared orphan did not re-arm the guard"
+  [ -e "$state/.orphan-shells" ] && fail "a cleared orphan left its pid recorded"
+  pass "an orphaned hot shell wakes once per episode after two polls, and re-arms when it is gone"
+}
+
+test_orphaned_shell_single_sample_is_not_an_alarm() {
+  local dir state fakebin out pid i=0
+  dir=$(make_case orphan-shell-once); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  # One sample is not an alarm: a shell can reparent for a moment in teardown.
+  # The recorded pid from the previous poll is gone, so this sample starts over.
+  printf '%s\n' 777 > "$state/.orphan-shells"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS='44467     1  88.1 /bin/zsh' FM_POLL=3
+  pid=$!
+  while ! grep -Fx 44467 "$state/.orphan-shells" >/dev/null 2>&1 && [ "$i" -lt 100 ]; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1; i=$((i + 1))
+  done
+  kill -0 "$pid" 2>/dev/null || fail "one sample of an orphaned shell woke firstmate: $(cat "$out")"
+  reap "$pid"
+  grep -Fx 44467 "$state/.orphan-shells" >/dev/null \
+    || fail "the orphan guard did not record the first sample for the next poll"
+  grep -Fx 777 "$state/.orphan-shells" >/dev/null \
+    && fail "the orphan guard kept a pid that is gone"
+  [ -e "$state/.orphan-alarm" ] && fail "one sample of an orphaned shell armed the orphan guard"
+  pass "a single sample of an orphaned shell is recorded, not alarmed, and gone pids are forgotten"
+}
+
+test_hot_orphaned_non_shell_is_not_an_alarm() {
+  local dir state fakebin out pid
+  dir=$(make_case orphan-nonshell); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  # launchd starts apps and daemons with ppid 1; a hot browser is not a leak,
+  # and neither is a hot shell whose parent is still alive.
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$(printf '%s\n' "$LEAK_PROCS" | grep -v zsh)"
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "a hot ppid-1 non-shell or a parented shell woke firstmate: $(cat "$out")"
+  fi
+  reap "$pid"
+  [ -e "$state/.orphan-alarm" ] && fail "a hot ppid-1 non-shell armed the orphan guard"
+  pass "a hot ppid-1 app or daemon and a parented shell do not alarm"
+}
 
 test_machine_load_alarm_surfaces_once_then_rearms() {
   local dir state fakebin out pid
   dir=$(make_case machine-load); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_POLLS=3 \
+    FM_FAKE_PROCS='44468   500  90.0 /bin/bash'
   pid=$!
+  # Sustained shape: the first overloaded polls only count toward the streak.
+  wait_poll_cycle "$state" "$pid" || fail "the load backstop woke on its first overloaded poll: $(cat "$out")"
+  [ -e "$state/.load-alarm" ] && fail "the load backstop armed before its sustain requirement was met"
   wait_for_exit "$pid" 100 || fail "watcher did not exit for a sustainedly overloaded machine"
   grep -F 'check: machine load' "$out" >/dev/null \
     || fail "the load guard did not print its wake reason: $(cat "$out")"
@@ -5378,19 +5459,20 @@ test_machine_load_alarm_surfaces_once_then_rearms() {
   # One wake per episode: the same overload must not re-alarm on every poll.
   ack_stopped_cycle "$state" || fail "could not acknowledge the load alarm"
   : > "$out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_POLLS=3
   pid=$!
   if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
     reap "$pid"; fail "the load alarm repeated on every poll instead of once per episode: $(cat "$out")"
   fi
   reap "$pid"
   # Re-arm when the machine recovers, so the NEXT leak is reported too.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="0.20 0.30"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="0.20 0.30" FM_LOAD_ALARM_POLLS=3
   pid=$!
   wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the watcher exited on a healthy load"; }
   reap "$pid"
   [ -e "$state/.load-alarm" ] && fail "a recovered load did not re-arm the guard"
-  pass "machine overload wakes once per episode, names its hungriest processes, and re-arms on recovery"
+  [ -e "$state/.load-streak" ] && fail "a recovered load did not reset the sustain streak"
+  pass "sustained machine overload wakes once per episode after its streak, names its hungriest processes, and re-arms on recovery"
 }
 
 test_machine_load_spike_is_not_an_alarm() {
@@ -5399,7 +5481,7 @@ test_machine_load_spike_is_not_an_alarm() {
   out="$dir/watch.out"
   # A one-minute burst with a quiet five-minute average is a parallel build step,
   # not a leak: sustained overload is the signal.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 0.40"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 0.40" FM_LOAD_ALARM_POLLS=1
   pid=$!
   wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "a short load spike woke firstmate: $(cat "$out")"; }
   reap "$pid"
@@ -5411,7 +5493,8 @@ test_machine_load_guard_can_be_disabled() {
   local dir state fakebin out pid
   dir=$(make_case machine-load-off); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_MULTIPLE=off
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_MULTIPLE=off \
+    FM_LOAD_ALARM_POLLS=1
   pid=$!
   wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the disabled load guard still woke firstmate: $(cat "$out")"; }
   reap "$pid"
@@ -6053,6 +6136,9 @@ test_procevent_launch_failed_episodes_are_each_delivered
 test_procevent_surface_serializes_with_drain
 test_procevent_surface_crash_boundaries
 test_procevent_marker_failure_exits_and_replays
+test_orphaned_shell_alarm_surfaces_once_then_rearms
+test_orphaned_shell_single_sample_is_not_an_alarm
+test_hot_orphaned_non_shell_is_not_an_alarm
 test_machine_load_alarm_surfaces_once_then_rearms
 test_machine_load_spike_is_not_an_alarm
 test_machine_load_guard_can_be_disabled

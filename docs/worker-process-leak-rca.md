@@ -2,7 +2,7 @@
 
 On 2026-09-30 at 22:05 SGT a ship worker (`fm-ci-suite-green-s1`, repairing the public fork's test suite) started a load probe under `/tmp/hangprobe`.
 Twelve parallel shell loops never exited.
-They reparented to `launchd` (PID 1), burned twelve cores for 1h06m, and drove this Mac's load average to 237.
+They reparented to `launchd` (PID 1), burned twelve cores for 1h06m, and, with the rest of the fleet backing up behind them, this Mac's load average reached 237.
 Every lane on the machine was starved: watcher cycles exited non-zero and restarted, wake handling timed out behind a lock, and the worker's own suite assertions flaked.
 The worker reaped all twelve by pid and removed `/tmp/hangprobe`, and load recovered.
 Nothing in the fleet detected it; supervision only noticed because a separate run happened to report the load.
@@ -96,7 +96,10 @@ So the class of failure "a worker starves the whole machine" had no detector of 
 
 ## 4. What made it harmful rather than merely wasteful
 
-Twelve unbounded spinners on a 12-core machine leave no core for anything else, and the recorded load average of 235-267 is roughly 20x the core count.
+Twelve unbounded spinners on a 12-core machine leave no core for anything else.
+They add only about 12 to the load average themselves: one runnable process each.
+The recorded 235-267 came from everything else backing up behind them - watcher cycles, wake handling, and the worker's own nine-shard suite all queued for CPU that the spinners held.
+So load average measures the aftermath of a leak, not the leak: a fresh twelve-spinner leak on top of an ordinary 19-28 baseline reads around 30-40, with every lane already starved.
 Beyond the wasted hour of CPU, the concrete downstream damage was:
 
 - Watcher cycles exited non-zero and restarted, so fleet supervision itself was degraded during the window.
@@ -110,7 +113,7 @@ A load probe that had been bounded to its six measurement runs would have cost a
 The mechanism gap is real but narrow: the probe used a trailing `kill` where only a self-bound works, in a harness that can end a tool call at any moment, with the bounded-execution primitive already available in the repo and unused.
 Underneath it, the cause is worker judgement - an unbounded `while :; do :; done` was written on the assumption that the launching shell would live to clean up.
 
-The fleet-level cause is different and sharper: **there was no detector for machine-wide resource starvation.**
+The fleet-level cause is different and sharper: **there was no detector for a leaked process or for machine-wide resource starvation.**
 The leak's cost was not that it happened, but that it ran for 66 minutes while every durable record read healthy.
 
 The fix is proportionate to both, and small on each side.
@@ -127,15 +130,19 @@ Three candidates were evaluated.
 Catches: the cause, at the only place it originates, for every future worker - and it names the primitive so the correct shape is cheaper to write than the broken one.
 Misses: a worker that ignores it, and any leak from a path that is not a brief-carrying worker. A rule prevents; it does not detect.
 
-**B. A firstmate-side guard for runaway load (adopted).**
-`bin/fm-watch.sh` reads the one- and five-minute load averages once per poll cycle, before any per-task read.
-When both are at or past `cores x FM_LOAD_ALARM_MULTIPLE` (default 4), it queues one `check: machine load ...` wake naming the load, the core count, and the three hungriest processes with their parent pids, then re-arms only after load falls back.
+**B. A firstmate-side leak guard, with a load backstop (adopted).**
+`bin/fm-watch.sh` checks two machine-wide signals once per poll cycle, before any per-task read.
+Each queues one `check:` wake per episode, names the three hungriest processes with their parent pids, and re-arms only after its condition clears.
+
+- **Primary: an orphaned shell burning CPU.** A process whose parent is PID 1, whose command basename is a shell (`sh`, `bash`, `zsh`, `dash`, `ksh`), and whose CPU is at or above 50% is recorded in `state/.orphan-shells`. When the same pid is seen that way on two consecutive polls, the watcher queues `check: leaked worker probe - orphaned shell pid ...`. This is the leak's own signature from section 2, so it fires within about two polls whatever the load is. It is narrowed to shells because PID 1 alone is not a signal: on this machine Google Chrome and `corespotlightd` both run under `launchd` at ~97% CPU legitimately, while an orphaned shell spinning has no legitimate cause. The two-poll requirement keeps a shell that reparents for a moment during ordinary teardown from alarming.
+- **Backstop: sustained machine overload.** When both the one- and five-minute load averages are at or past `cores x FM_LOAD_ALARM_MULTIPLE` (default 4) for `FM_LOAD_ALARM_POLLS` consecutive polls (default 12, about three minutes at the default poll), it queues `check: machine load ...`. It catches a runaway that is not an orphaned shell, but only once other work has piled up behind it (section 4).
+
 It surfaces and attributes; it never kills anything, because reaping another process is destructive and belongs to the captain - the non-destructive route is to steer the owning worker, as supervision did during the incident.
 
-Catches: this whole class regardless of source, including leaks from a non-worker path, and it closes the detection hole that made the incident expensive.
-Misses: prevention entirely, and precise ownership - it names the hungriest processes, not the task that spawned them, so the supervisor still has to map a pid to an owner. A PPID of 1 in that list is the tell.
-Threshold calibration: on this 12-core machine the default line is 48. A real watcher-suite run measured `{ 21.97 18.85 27.53 }` while this change was being validated, so ordinary heavy local test work sits comfortably under it, while the incident's 235-267 was roughly five times over it.
-Costs: one `sysctl`/`/proc` read per poll, a `ps` only while alarming, and one marker file.
+Catches: the incident's exact shape within about two polls, and runaway load of any other shape as a backstop.
+Misses: prevention entirely; a leaked non-shell process until it drives the load past the backstop; and precise ownership - it names pids, not the task that spawned them, so the supervisor still has to map a pid to an owner.
+Threshold calibration: on this 12-core machine the backstop line is 48. A real watcher-suite run measured `{ 21.97 18.85 27.53 }` while this change was being validated, and sustained 17-27 was seen during an ordinary nine-shard suite run, so `cores x 2` (24) would fire on healthy work. The backstop therefore stays at 4x, which a fresh twelve-spinner leak (about 30-40) does not reach - the incident's 235-267 crossed it only because the fleet had backed up. That gap is why the orphaned-shell signal is the primary detector and the load threshold only a backstop.
+Costs: one `sysctl`/`/proc` read and one `ps` per poll, and four small marker files.
 
 **C. A harness launch-wrapper change (rejected).**
 Launching each worker in its own process group and sweeping that group would catch orphans at task end.
@@ -143,7 +150,7 @@ It was rejected on evidence, not taste: the reproduction above shows orphans kee
 The mechanism was therefore already in place during the incident and did not help, because the task was still live - nothing tore it down for another day.
 A wrapper change addresses the end of a task; this leak did its damage in the middle of one.
 
-A and B are each a few lines, and they cover different halves of the failure: A removes the cause, B removes the 66 minutes.
+A and B are each small, and they cover different halves of the failure: A removes the cause, B removes the 66 minutes.
 Neither alone was sufficient - a rule leaves the next unnoticed leak unnoticed, and a guard leaves the probe shape in place.
 
 Deliberately not built: any new daemon, watch service, per-process accounting, or automatic reaping.
@@ -154,7 +161,7 @@ Deliberately not built: any new daemon, watch service, per-process accounting, o
 - Incident record: `state/fm-ci-suite-green-s1.status` line 6, the steer in `state/fm-ci-suite-green-s1.inbox/handled/002.msg`, and `data/learnings.md` (2026-09-30 entries).
 - Leak mechanism reproduced, and the self-bound demonstrated holding without a live parent: section 2.
 - Detection blindness: `bin/fm-lint.sh:707` was the only load reading under `bin/` before this change.
-- Fix caught the reproduction: with two orphaned spinners from section 2 live on the machine (PPID 1, ~85% CPU each) and only the load number faked, a real watcher cycle produced
+- Load backstop attribution on the reproduction: with two orphaned spinners from section 2 live on the machine (PPID 1, ~85% CPU each) and only the load number faked, a real watcher cycle of the first version of the backstop produced
 
   ```
   check: machine load 99999 (5m 99999) on 12 cores is past 48 - every lane on this machine is starved, including this watcher and any running suite.
@@ -162,5 +169,5 @@ Deliberately not built: any new daemon, watch service, per-process accounting, o
   An orphaned shell there (ppid 1, a zsh or bash burning CPU) is a leaked worker probe: find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain).
   ```
 
-  `pid 44467 ... /bin/zsh` is the reproduction's own orphan, so the guard both alarms and points at the leak.
-- Fix under test: `tests/fm-watch-triage.test.sh` (`test_machine_load_alarm_surfaces_once_then_rearms`, `test_machine_load_spike_is_not_an_alarm`, `test_machine_load_guard_can_be_disabled`) drives a real watcher through the overload, asserts one wake per episode with process attribution, no alarm on a one-minute spike, re-arming on recovery, and the `off` switch; `tests/fm-brief.test.sh` (`test_background_process_bound_rule`) asserts both generated brief shapes carry the rule.
+  `pid 44467 ... /bin/zsh` is the reproduction's own orphan, so the attribution points at the leak. The same list also shows why PID 1 alone is not a leak signal: Chrome and `corespotlightd` are the two hungriest, both legitimately under `launchd`. That is the shape the orphaned-shell signal now matches directly, without needing the load at all.
+- Fix under test: `tests/fm-watch-triage.test.sh` drives a real watcher with a faked process sample (`FM_FAKE_PROCS`) and load (`FM_FAKE_LOADAVG`). `test_orphaned_shell_alarm_surfaces_once_then_rearms`, `test_orphaned_shell_single_sample_is_not_an_alarm`, and `test_hot_orphaned_non_shell_is_not_an_alarm` assert the orphaned-shell signal wakes once per episode only after two polls, names exactly the orphaned shell, forgets gone pids, re-arms, and ignores hot PID-1 apps and parented shells. `test_machine_load_alarm_surfaces_once_then_rearms`, `test_machine_load_spike_is_not_an_alarm`, and `test_machine_load_guard_can_be_disabled` assert the backstop waits out its streak, wakes once per episode with process attribution, ignores a one-minute spike, re-arms on recovery, and honours the `off` switch; `tests/fm-brief.test.sh` (`test_background_process_bound_rule`) asserts both generated brief shapes carry the rule.
