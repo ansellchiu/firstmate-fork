@@ -161,7 +161,7 @@
 # leased home releases its durable treehouse lease so the pool slot is freed,
 # never left leased forever. If the treehouse return fails, teardown leaves the
 # leased home and state in place instead of hiding a still-held lease.
-# Usage: fm-teardown.sh <task-id> [--force] [--legacy-record]
+# Usage: fm-teardown.sh <task-id> [--force] [--legacy-record] [--standdown]
 #   --force skips ordinary-task dirty and landed-work checks, skips scout report
 #   checks, and discards secondmate child work for kind=secondmate. Only use it
 #   when the captain has explicitly said to discard the work.
@@ -175,6 +175,15 @@
 #   an abandoned attempt left behind never counts as a published incarnation:
 #   the record still reads as a legacy record, so the endpoint gate runs again
 #   and the retry still needs --legacy-record.
+#   --standdown declares that this dispatch never became work: it is how the
+#   watcher's auto-standdown stands a never-started worker down. Its ONLY effect
+#   is on the structural receipt gate below, which otherwise refuses a ship task
+#   with no completion receipt on the premise that the work already landed. A
+#   never-started dispatch has no landing and no report to receipt, exactly like
+#   a cleanup_recovery=orca record, so there is nothing for it to produce. It
+#   relaxes nothing else - every dirty and unlanded-work refusal still applies,
+#   which is what keeps a worker that did commit something from being stood down,
+#   and only --force can authorize discarding that.
 #
 # Transient / stale worktree git lock recovery (teardown-lock-race): a crew process
 # killed mid-git-operation can leave a .git/worktrees/<wt>/index.lock (or, for a
@@ -304,11 +313,13 @@ fi
 ID=$1
 FORCE=
 LEGACY_RECORD_GIVEN=0
+STANDDOWN=0
 shift
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --force) FORCE=--force ;;
     --legacy-record) LEGACY_RECORD_GIVEN=1 ;;
+    --standdown) STANDDOWN=1 ;;
     *)
       echo "error: invalid teardown request" >&2
       exit 2
@@ -3338,11 +3349,12 @@ fi
 # exactly as it lifts those and never fabricates a receipt. A scout's report
 # receipt is written here at completion. The archive is append-once and both
 # steps are idempotent, and they run BEFORE the pending-close record below,
-# so an interrupted cleanup always retries safely. Not for kind=secondmate or
-# an Orca allocation-cleanup record: cleanup_recovery=orca represents a launch
-# that never became work and therefore has no landing or report to receipt.
+# so an interrupted cleanup always retries safely. Not for kind=secondmate, an
+# Orca allocation-cleanup record, or a --standdown: cleanup_recovery=orca and
+# --standdown both represent a launch that never became work and therefore has no
+# landing or report to receipt.
 if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
-   && [ "$CLEANUP_RECOVERY" != orca ]; then
+   && [ "$CLEANUP_RECOVERY" != orca ] && [ "$STANDDOWN" -eq 0 ]; then
   if [ "$KIND" = ship ] && [ "$FORCE" != "--force" ]; then
     RECEIPT_GATE_RC=0
     FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
