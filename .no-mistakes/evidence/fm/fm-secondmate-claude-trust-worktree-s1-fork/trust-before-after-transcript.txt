@@ -1,0 +1,21 @@
+## Scenario: secondmate home holds its own clone; shared pool hands it a worktree of the MAIN clone
+$ fm-claude-trust.sh <pool worktree of main clone> <mate clone>
+--- BASE (e03a46e) ---
+error: refusing to pre-register Claude trust: '/private$T/s/pool/app' is not a worktree of project '/private$T/s/mate/projects/app'
+exit=1
+--- HEAD (b161406) ---
+trusted: /private$T/s/pool/app
+trusted (project root): /private$T/s/main/app
+exit=0
+trusted keys in store:
+  /private$T/s/pool/app
+  /private$T/s/main/app
+
+--- HEAD with CDPATH exported (must match) ---
+trusted: /private$T/s/pool/app
+trusted (project root): /private$T/s/main/app
+exit=0
+
+## Negative: mate clone of a DIFFERENT origin is still refused (HEAD)
+error: refusing to pre-register Claude trust: '/private$T/s/pool/app' is not a worktree of project '/private$T/s/mate/projects/app'
+exit=1

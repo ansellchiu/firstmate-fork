@@ -1,0 +1,9 @@
+## Symlinked repo dir + relative origin '../app.git': trust gate and pool-slot must agree
+$ fm-claude-trust.sh pool/1/app mate/projects/app
+trusted: $T/pool/1/app
+trusted (project root): $T/real/app
+exit=0
+$ fm_treehouse_origin_identity (wake-lib) for each side
+  pool worktree: $T/real/app.git
+  mate clone:    $T/real/app.git
+  fm_treehouse_pool_slot: RECOGNISED as mate project slot
