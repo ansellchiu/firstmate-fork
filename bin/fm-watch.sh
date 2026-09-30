@@ -753,6 +753,100 @@ signal_turnend_panes_churned() {  # <file> ...
   return 0
 }
 
+# Machine-wide load guard.
+#
+# Every other detector in this watcher reads ONE crew's pane: the busy-state
+# record, the turn-end record and the stale/wedge timer all describe a single
+# task, so a worker that leaks CPU-burning children starves every lane on the
+# machine while each per-task signal still reads perfectly healthy. That is how
+# the 2026-09-30 leak stayed invisible for 66 minutes - twelve orphaned busy
+# loops, load average 237 on 12 cores - see docs/worker-process-leak-rca.md.
+# One loadavg read per poll, one wake per episode, re-armed when load falls
+# back. It surfaces and attributes; it never kills anything, because reaping
+# another process is destructive and belongs to the captain.
+# ponytail: the episode marker is per home, so two homes on one machine each
+# report the same overload once. Per-machine dedupe only if that gets noisy.
+LOAD_ALARM_MULTIPLE=${FM_LOAD_ALARM_MULTIPLE:-4}   # alarm at cores x this, `off` disables
+case "$LOAD_ALARM_MULTIPLE" in
+  off) ;;
+  ''|*[!0-9]*|0) LOAD_ALARM_MULTIPLE=4 ;;
+esac
+
+# Online core count, or nothing when this host reports none. Nothing means the
+# guard stands down: a guessed core count is a guessed threshold, and guessing
+# low would alarm on an ordinary busy machine.
+machine_cores() {
+  local n
+  for n in "$(getconf _NPROCESSORS_ONLN 2>/dev/null)" \
+    "$(sysctl -n hw.ncpu 2>/dev/null)" "$(nproc 2>/dev/null)"; do
+    case "$n" in
+      ''|*[!0-9]*|0) continue ;;
+      *) printf '%s\n' "$n"; return 0 ;;
+    esac
+  done
+  return 0
+}
+
+# One- and five-minute load averages on one line, or nothing when this host
+# exposes neither source. FM_FAKE_LOADAVG is the test seam.
+load_averages() {
+  if [ -n "${FM_FAKE_LOADAVG:-}" ]; then
+    printf '%s\n' "$FM_FAKE_LOADAVG"
+    return 0
+  fi
+  if [ -r /proc/loadavg ]; then
+    awk '{print $1, $2}' /proc/loadavg
+    return 0
+  fi
+  sysctl -n vm.loadavg 2>/dev/null | awk '{gsub(/[{}]/, ""); print $1, $2}'
+}
+
+# The three hungriest processes, one line, each with its parent pid: an orphaned
+# shell (ppid 1) is the signature of a leaked probe whose launching shell is
+# already gone. The command is kept whole, spaces included, so an app bundle
+# path is not truncated into uselessness.
+load_guard_offenders() {
+  ps -eo pid=,ppid=,pcpu=,comm= 2>/dev/null | sort -k3 -rn | awk '
+    NR <= 3 {
+      cmd = $4
+      for (i = 5; i <= NF; i++) cmd = cmd " " $i
+      printf "%spid %s (ppid %s, %s%% cpu) %s", (NR > 1 ? "; " : ""), $1, $2, $3, cmd
+    }
+    END { printf "\n" }'
+}
+
+# Alarm once per episode while the machine is sustainedly overloaded. Exits the
+# cycle through wake() like every other actionable surface.
+load_guard_check() {
+  local l1 l5 cores threshold marker offenders reason
+  [ "$LOAD_ALARM_MULTIPLE" != off ] || return 0
+  read -r l1 l5 <<LOADAVG
+$(load_averages)
+LOADAVG
+  [ -n "${l1:-}" ] && [ -n "${l5:-}" ] || return 0
+  cores=$(machine_cores)
+  [ -n "$cores" ] || return 0
+  threshold=$(( cores * LOAD_ALARM_MULTIPLE ))
+  marker="$STATE/.load-alarm"
+  # Sustained, not spiky: the five-minute average has to be over the line too,
+  # so one parallel build step or a nine-shard suite burst cannot alarm.
+  if ! awk -v a="$l1" -v b="$l5" -v t="$threshold" 'BEGIN { exit !(a + 0 >= t && b + 0 >= t) }'; then
+    rm -f "$marker"
+    return 0
+  fi
+  if [ -e "$marker" ]; then
+    triage_log "absorbed machine-load alarm (already reported this episode, load $l1)"
+    return 0
+  fi
+  offenders=$(load_guard_offenders)
+  reason="check: machine load $l1 (5m $l5) on $cores cores is past $threshold - every lane on this machine is starved, including this watcher and any running suite. Hungriest: ${offenders:-unavailable}. An orphaned shell there (ppid 1, a zsh or bash burning CPU) is a leaked worker probe: find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain)."
+  # Enqueue before suppressing, like every other surface here: a failed append
+  # must leave the episode unreported so the next poll tries again.
+  fm_wake_append check machine-load "$reason" || return 1
+  : > "$marker" 2>/dev/null || true
+  wake "$reason"
+}
+
 recorded_windows() {
   local meta w seen=
   for meta in "$STATE"/*.meta; do
@@ -2377,6 +2471,10 @@ while :; do
   # Liveness beacon for fm-guard.sh: a fresh mtime here means a watcher is
   # alive. Supervision scripts warn when this goes stale with tasks in flight.
   touch "$STATE/.last-watcher-beat"
+
+  # Before any per-task read: a starved machine makes every other observation in
+  # this cycle unreliable, so it is surfaced first (load_guard_check above).
+  load_guard_check || exit 1
 
   if [ "$(age_of "$STATE/home-summary.json")" -ge "$HOME_SUMMARY_INTERVAL" ]; then
     home_summary_refresh_detached

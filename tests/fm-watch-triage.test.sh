@@ -5354,6 +5354,71 @@ test_procevent_marker_failure_exits_and_replays() {
   pass "marker failure exits through the shared wake owner, releases its lock, and replays later"
 }
 
+# --- machine-wide load guard -------------------------------------------------
+#
+# Every other detector here reads ONE crew's pane, so a worker that leaks
+# CPU-burning children starves the machine while every per-task signal still
+# reads healthy (docs/worker-process-leak-rca.md). FM_FAKE_LOADAVG is the seam:
+# these drive the guard's decision without loading the test machine.
+
+test_machine_load_alarm_surfaces_once_then_rearms() {
+  local dir state fakebin out pid
+  dir=$(make_case machine-load); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999"
+  pid=$!
+  wait_for_exit "$pid" 100 || fail "watcher did not exit for a sustainedly overloaded machine"
+  grep -F 'check: machine load' "$out" >/dev/null \
+    || fail "the load guard did not print its wake reason: $(cat "$out")"
+  grep -F 'Hungriest: pid ' "$out" >/dev/null \
+    || fail "the load wake did not attribute the load to processes: $(cat "$out")"
+  grep "$(printf '\tcheck\tmachine-load\t')" "$state/.wake-queue" >/dev/null \
+    || fail "the load alarm was not queued as a check wake: $(cat "$state/.wake-queue")"
+  [ -e "$state/.load-alarm" ] || fail "the load alarm did not record its episode marker"
+  # One wake per episode: the same overload must not re-alarm on every poll.
+  ack_stopped_cycle "$state" || fail "could not acknowledge the load alarm"
+  : > "$out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999"
+  pid=$!
+  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
+    reap "$pid"; fail "the load alarm repeated on every poll instead of once per episode: $(cat "$out")"
+  fi
+  reap "$pid"
+  # Re-arm when the machine recovers, so the NEXT leak is reported too.
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="0.20 0.30"
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the watcher exited on a healthy load"; }
+  reap "$pid"
+  [ -e "$state/.load-alarm" ] && fail "a recovered load did not re-arm the guard"
+  pass "machine overload wakes once per episode, names its hungriest processes, and re-arms on recovery"
+}
+
+test_machine_load_spike_is_not_an_alarm() {
+  local dir state fakebin out pid
+  dir=$(make_case machine-load-spike); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  # A one-minute burst with a quiet five-minute average is a parallel build step,
+  # not a leak: sustained overload is the signal.
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 0.40"
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "a short load spike woke firstmate: $(cat "$out")"; }
+  reap "$pid"
+  [ -e "$state/.load-alarm" ] && fail "a short load spike armed the load guard"
+  pass "a one-minute load spike with a quiet five-minute average does not alarm"
+}
+
+test_machine_load_guard_can_be_disabled() {
+  local dir state fakebin out pid
+  dir=$(make_case machine-load-off); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"
+  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_MULTIPLE=off
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the disabled load guard still woke firstmate: $(cat "$out")"; }
+  reap "$pid"
+  [ -e "$state/.load-alarm" ] && fail "the disabled load guard still armed its marker"
+  pass "FM_LOAD_ALARM_MULTIPLE=off disables the load guard entirely"
+}
+
 # --- heartbeat: no-change absorbed, backstop surfaces a missed status --------
 
 test_heartbeat_no_change_absorbed() {
@@ -5988,6 +6053,9 @@ test_procevent_launch_failed_episodes_are_each_delivered
 test_procevent_surface_serializes_with_drain
 test_procevent_surface_crash_boundaries
 test_procevent_marker_failure_exits_and_replays
+test_machine_load_alarm_surfaces_once_then_rearms
+test_machine_load_spike_is_not_an_alarm
+test_machine_load_guard_can_be_disabled
 test_heartbeat_no_change_absorbed
 test_heartbeat_backstop_surfaces_unsurfaced_status
 test_heartbeat_backstop_honors_daemon_catchall_marker
