@@ -3363,7 +3363,7 @@ SH
     fail "render_export_dom accepted a Chrome that never rendered the DOM"
   fi
   [ "$(wc -l <"$dir/attempts-broken")" -eq 3 ] \
-    || fail "render_export_dom did not exhaust its bounded retries before failing"
+    || fail "render_export_dom did not exhaust its bounded retries before failing: attempts=$(wc -l <"$dir/attempts-broken" | tr -d ' ') report=$(cat "$dir/report-broken")"
   report=$(cat "$dir/report-broken")
   assert_contains "$report" "$dir/chrome-broken" "the render failure did not name the Chrome binary it used"
   assert_contains "$report" "FakeChrome 1.2.3" "the render failure did not name the Chrome version it used"
@@ -3374,13 +3374,16 @@ SH
 
   : >"$dir/attempts-hang"
   : >"$out_file"
-  if FM_FAKE_CHROME_ATTEMPTS="$dir/attempts-hang" FM_CHROME_RENDER_WAIT_TICKS=3 \
+  # 10 ticks, not 3: the budget has to outlast the fake's own start-up on a loaded
+  # runner, or killing the attempt before it records itself loses a retry and the
+  # count below flakes. Still bounded, and timed_out=yes still proves the timeout.
+  if FM_FAKE_CHROME_ATTEMPTS="$dir/attempts-hang" FM_CHROME_RENDER_WAIT_TICKS=10 \
     render_export_dom "$dir/chrome-hang" "$source_file" "$out_file" 9.9.9 >"$dir/report-hang"
   then
     fail "render_export_dom accepted a Chrome that never finished the DOM"
   fi
   [ "$(wc -l <"$dir/attempts-hang")" -eq 3 ] \
-    || fail "render_export_dom did not exhaust its bounded retries on a Chrome that never finished"
+    || fail "render_export_dom did not exhaust its bounded retries on a Chrome that never finished: attempts=$(wc -l <"$dir/attempts-hang" | tr -d ' ') report=$(cat "$dir/report-hang")"
   report=$(cat "$dir/report-hang")
   assert_contains "$report" "timed_out=yes" \
     "the render failure reported its own kill signal without saying the attempt was timed out"
