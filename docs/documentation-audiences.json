@@ -529,6 +529,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/worker-process-leak-rca.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": "docs/zellij-backend.md",
       "audience": "operator-current"
     },

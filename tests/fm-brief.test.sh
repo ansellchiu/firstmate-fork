@@ -974,6 +974,37 @@ test_secret_variable_interpolation_guard() {
   pass "fm-brief.sh: ship and scout briefs carry the secret-variable output interpolation guard rule"
 }
 
+# The 2026-09-30 leak: a worker's load probe started twelve unbounded background
+# loops whose only cleanup was a trailing kill in the launching shell. That shell
+# was killed mid-command, so the loops reparented to init and burned twelve cores
+# for 66 minutes (docs/worker-process-leak-rca.md). Every generated brief carries
+# the self-bounding rule.
+test_background_process_bound_rule() {
+  local home id brief kind
+  home="$TMP_ROOT/background-bound-home"
+  mkdir -p "$home/data"
+
+  for kind in ship scout; do
+    id="brief-background-bound-$kind"
+    if [ "$kind" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --scout >/dev/null 2>&1
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null 2>&1
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_present "$brief" "$kind brief was not scaffolded"
+    assert_grep "must bound ITSELF" "$brief" \
+      "$kind brief missing the self-bounding background-process rule"
+    assert_grep "A trailing \`kill\` or a trap is NOT a bound" "$brief" \
+      "$kind brief does not reject trailing-kill cleanup as a bound"
+    assert_grep "bin/fm-timeout-lib.sh" "$brief" \
+      "$kind brief does not point at the bounded-execution primitive"
+    assert_grep "may outlive the tool call that started it" "$brief" \
+      "$kind brief missing the outlive-the-tool-call boundary"
+  done
+  pass "fm-brief.sh: ship and scout briefs require every background process to bound itself"
+}
+
 test_worker_role_scope() {
   local kind home brief
   home="$TMP_ROOT/worker-role"
@@ -1022,4 +1053,5 @@ test_scout_and_secondmate_scaffold
 test_scout_lavish_line_follows_presentation_floor
 test_scout_research_standards_contract
 test_secret_variable_interpolation_guard
+test_background_process_bound_rule
 test_worker_role_scope

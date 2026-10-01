@@ -481,6 +481,13 @@ Retrieval and an existence-surface check are mandatory whenever this task's find
    the daemon accepts \`respond\` immediately and runs the round in the background, so a killed or
    timed-out call was only waiting for a read while the run kept working.
 8. Never interpolate a secret-named variable into output; test presence without printing the value (for example \`[ -n "\${VAR:-}" ] && echo set || echo unset\`, never \`\${VAR:-fallback}\` or \`echo "\${VAR:-no}"\`).
+9. Anything you start in the background - a load or hang probe, a watch loop, a server, a parallel
+   sweep - must bound ITSELF: an explicit deadline inside the child, or \`fm_run_timed\` from
+   \`$FM_ROOT/bin/fm-timeout-lib.sh\`. A trailing \`kill\` or a trap is NOT a bound: your shell can be
+   killed mid-command, the trailing line never runs, a trap queued behind a blocking foreground
+   command never fires, and the children then reparent to init and burn CPU until a human notices.
+   Nothing you start may outlive the tool call that started it; confirm with
+   \`ps -eo pid,ppid,%cpu,etime,command\` before you move on.
 
 $INBOX_SECTION
 
@@ -573,6 +580,13 @@ $ASK_USER_BLOCK
    the daemon accepts \`respond\` immediately and runs the round in the background, so a killed or
    timed-out call was only waiting for a read while the run kept working.
 8. Never interpolate a secret-named variable into output; test presence without printing the value (for example \`[ -n "\${VAR:-}" ] && echo set || echo unset\`, never \`\${VAR:-fallback}\` or \`echo "\${VAR:-no}"\`).
+9. Anything you start in the background - a load or hang probe, a watch loop, a server, a parallel
+   sweep - must bound ITSELF: an explicit deadline inside the child, or \`fm_run_timed\` from
+   \`$FM_ROOT/bin/fm-timeout-lib.sh\`. A trailing \`kill\` or a trap is NOT a bound: your shell can be
+   killed mid-command, the trailing line never runs, a trap queued behind a blocking foreground
+   command never fires, and the children then reparent to init and burn CPU until a human notices.
+   Nothing you start may outlive the tool call that started it; confirm with
+   \`ps -eo pid,ppid,%cpu,etime,command\` before you move on.
 
 $INBOX_SECTION
 

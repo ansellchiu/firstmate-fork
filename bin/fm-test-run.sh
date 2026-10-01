@@ -2473,6 +2473,11 @@ run_script_bounded() {  # <script> <out> <stream> <id>
   local GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
   # shellcheck source=tests/git-config-helpers.sh
   . "$ROOT/tests/git-config-helpers.sh" || return
+  # Blind bin/fm-watch.sh's machine-wide leak guards to the host: a real hot
+  # orphan or load spike on the runner would otherwise wake every watcher a test
+  # starts. Tests of those guards set their own samples.
+  local FM_FAKE_PROCS='' FM_FAKE_LOADAVG='0.00 0.00'
+  export FM_FAKE_PROCS FM_FAKE_LOADAVG
   local rc
   : "$id"
   set +e
