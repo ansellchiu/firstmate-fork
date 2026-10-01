@@ -94,6 +94,7 @@ data/                personal fleet records; LOCAL, gitignored as a whole
   captain.md         this home's domain-local captain preferences and working style; LOCAL, gitignored, canonical even if harness memory mirrors it, and updated with inspect-then-update
   captain-shared.md  main-authoritative shared captain preferences propagated read-only to secondmate homes; LOCAL, gitignored, owned by secondmate-provisioning
   learnings.md       fleet-local operational facts and gotchas; LOCAL, gitignored; dated, evidence-backed, curated, and updated with inspect-then-update - rewrite and prune rather than append forever, the same contract as captain.md; created lazily, absent until this home has a learning to store
+  value-ledger/      Plan payback ledger, captures, and registry; bin/fm-value-ledger.sh owns it (docs/configuration.md "Plan payback ledger")
   projects.md        thin fleet navigation registry recording each project's standing delivery posture and its `+focus`/`+parked` portfolio state; firstmate-private, parsed by fm-project-mode.sh for mechanical sync and seeding (section 6) and for the captain-attention classification (section 7)
   secondmates.md      local and remote secondmate routing table; firstmate-private, maintained by the secondmate seed helpers (section 6)
   <id>/brief.md      per-task crewmate brief, or per-secondmate charter brief when kind=secondmate
@@ -133,6 +134,7 @@ state/               runtime records and signals; gitignored
   .lease-<task>        per-task supervision lease naming which actor (main or branch) may change that task; bin/fm-lease-lib.sh owns the contract the guarded scripts enforce
   .pi-auto-afk-observations  append-only record of the Pi idle observer's countdown starts, cancellations, and would-have-entered expiries; present only when config/pi-auto-afk arms it, never away-posture state, and safe to delete
   x-watch.check.sh   generated Relay poll shim; present only when opted in (section 14)
+  value-ledger.check.sh  generated Plan payback daily poll shim and its .check-trust binding; present only after bin/fm-value-ledger.sh arm; schema: docs/configuration.md "Plan payback ledger"
   tool-updates.check.sh  generated watched-tool update poll shim and its .check-trust binding; present only after bin/fm-tool-update-check.sh arm; its report record .tool-updates is what keeps one pending update from being reported on every poll
   mail.check.sh      generated received-mail poll shim and its .check-trust binding; present only after bin/fm-mail-check.sh arm; report record .mail-check (mail schema: docs/configuration.md "Mail plane")
   .mail-seen .mail-woken .mail-retry .mail-retry-pos .mail-turn .mail-seen.lock  mail-plane poll cursor, emission journal, transient-fetch retry set, retry-scan position, contended-slot turn flag, and overlapping-poll lock; written only by bin/fm-mail.sh (mail schema: docs/configuration.md "Mail plane")
