@@ -81,13 +81,40 @@
 # path policy. Each mode has its own, because the two directories have entirely
 # different shapes on disk.
 #
-# WORKTREE MODE. <worktree> must be a LINKED git worktree - its own git dir,
-# sharing <project>'s common dir - whose top level is exactly the resolved
-# argument. Git is the ground truth, so the argument is never trusted on its
-# own word: a primary checkout (git dir == common dir), a worktree of an
+# WORKTREE MODE. <worktree> must be a LINKED git worktree whose top level is
+# exactly the resolved argument and whose owning repository is the SAME PROJECT
+# as <project>. Git is the ground truth, so the argument is never trusted on
+# its own word: a primary checkout (git dir == common dir), a worktree of an
 # unrelated repo, a subdirectory of a worktree, a plain directory, and a home
 # directory are each refused. Refusal is a non-zero exit, never a warning and
-# never a silent skip. When <project> is itself a linked worktree (a
+# never a silent skip. "Same project" is the worktree's common git dir equal to
+# <project>'s own common git dir, OR the two owning repositories sharing one
+# origin identity. The second branch exists because the treehouse pool is keyed
+# on repo identity and is shared by every clone of one origin: a persistent
+# second mate home holding its OWN clone of a project is handed a linked
+# worktree of the primary home's clone, and the exact-common-dir test refused a
+# worktree the allocator itself treats as the same project.
+# The allowance borrows the allocator's NOTION of project - the origin the
+# treehouse pool and bin/fm-wake-lib.sh's fm_treehouse_project_lock_path are
+# keyed on - rather than inventing a second one, but it is deliberately a
+# strictly narrower test than the lock's key: a lock path only has to be stable,
+# so it may key off an origin spelling it never resolved, while this must PROVE
+# two repositories are one project and yields nothing when it cannot (see
+# origin_identity below). For an absolute or URL origin - the ordinary case -
+# the two agree, so an accepted pair is also locked together. They can diverge
+# for a RELATIVE origin declared by a project that is itself a linked worktree:
+# the lock resolves that spelling against the worktree, while this resolves it
+# against the declaring primary checkout, so two homes this accepts may hold
+# two different lock paths. That divergence is the lock's to close, not this
+# test's. An unrelated repository has its own origin and is
+# still refused, and the shared pool stays a single allocator, its slot
+# accounting reading the same proven identity (fm_treehouse_pool_slot). The comparison is deliberately
+# fail-closed: a remote URL proves sameness only on an exact match, so a
+# differently-spelled URL to the one remote refuses rather than wrongly trusts,
+# and an unresolved local-path origin proves nothing at all - the same relative
+# spelling names a different place in each repository that declares it - so it
+# refuses too. An origin-less repository has no such identity to prove, so it
+# must match on the common dir alone. When <project> is itself a linked worktree (a
 # secondmate home spawned from, rather than as, the primary checkout),
 # refusing outright would wedge a relaunch that is otherwise perfectly valid:
 # its own common dir already IS the primary checkout's own git dir (git's
@@ -98,7 +125,11 @@
 # resolved git dir must equal that common dir, the same primary-checkout
 # definition used throughout, or this refuses rather than guess. The
 # consent-gated external-imports flags land on that resolved canonical
-# checkout, never on the linked-worktree argument itself.
+# checkout, never on the linked-worktree argument itself, and that checkout is
+# resolved from the WORKTREE's own common dir: when the worktree belongs to a
+# different clone of the same origin, the checkout Claude collapses it to is
+# that clone's, not <project>'s, so landing the flags on <project> would put
+# them at a key the running app never reads for this worktree.
 #
 # The test is deliberately NOT a treehouse or orca path prefix. Treehouse's
 # root is configurable (--root, TREEHOUSE_ROOT, config, and a relative
@@ -204,7 +235,7 @@ esac
 
 refuse() { echo "error: refusing to pre-register Claude trust: $1" >&2; exit 1; }
 
-real_dir() { (cd -P -- "$1" 2>/dev/null && pwd -P); }
+real_dir() { (CDPATH='' cd -P -- "$1" 2>/dev/null && pwd -P); }
 
 # The fully resolved path of an existing file, or empty. Resolution runs in node
 # because it must follow a symlink chain to its final target, and node is
@@ -216,7 +247,44 @@ real_file() { node -e 'process.stdout.write(require("node:fs").realpathSync(proc
 common_dir_of() {
   local dir=$1 common
   common=$(git -C "$dir" rev-parse --git-common-dir 2>/dev/null) || return 1
-  (cd -P -- "$dir" && real_dir "$common")
+  (CDPATH='' cd -P -- "$dir" && real_dir "$common")
+}
+
+# The origin identity of the repository a path lives in, or empty when the
+# repository declares no origin - or declares one that proves nothing. Origin is
+# the notion of project bin/fm-wake-lib.sh's fm_treehouse_project_lock_path keys
+# its single project lock on, and it is why the shared treehouse pool hands one
+# clone's worktree to another clone of the same project. What this computes is
+# strictly narrower than that key: a local path origin is resolved to its real
+# directory the way the lock resolves one, so two clones that name the same
+# directory differently still compare equal - but where the lock keeps an
+# unresolved path as a key, which only has to be stable, this proves NO identity
+# at all, because an unresolved local path is only meaningful relative to the
+# repository that declares it and two unrelated repositories can spell the same
+# one. Trust has to be proven, not merely keyed. A relative one is therefore
+# resolved against the checkout that DECLARES the remote - the primary checkout
+# of the repository the argument lives in, derived from its git common dir,
+# resolved physically exactly as bin/fm-wake-lib.sh's fm_treehouse_origin_identity
+# resolves it, so the two copies answer identically for the same repository -
+# never against the argument itself, which on the worktree side is a linked
+# worktree parked anywhere in the pool and would resolve the spelling against a
+# directory the declaring repository never names. A remote URL is absolute by
+# nature, so it is the one form compared verbatim, which errs toward refusing
+# rather than trusting; it is recognised by git's own rule - a colon before any
+# slash - so a local path that merely contains a colon is still resolved.
+origin_identity() {  # <path-inside-repo>
+  local dir=$1 url common base
+  url=$(git -C "$dir" remote get-url origin 2>/dev/null) || return 1
+  [ -n "$url" ] || return 1
+  case $url in
+    /*) [ -d "$url" ] && (CDPATH='' cd -P -- "$url" && pwd -P) || return 1 ;;
+    *)
+      case ${url%%/*} in *:*) printf '%s\n' "$url"; return ;; esac
+      common=$(common_dir_of "$dir") || return 1
+      base=$(real_dir "$(dirname -- "$common")") || return 1
+      [ -n "$base" ] && [ -d "$base/$url" ] && (CDPATH='' cd -P -- "$base/$url" && pwd -P) || return 1
+      ;;
+  esac
 }
 
 TARGET_REAL=$(real_dir "$TARGET_ARG") || true
@@ -273,7 +341,16 @@ if [ "$MODE" = worktree ]; then
 
   PROJ_COMMON=$(common_dir_of "$PROJ_REAL") || true
   [ -n "$PROJ_COMMON" ] || refuse "project '$PROJ_REAL' is not inside a git repository"
-  [ "$WT_COMMON" = "$PROJ_COMMON" ] || refuse "'$TARGET_REAL' is not a worktree of project '$PROJ_REAL'"
+  if [ "$WT_COMMON" != "$PROJ_COMMON" ]; then
+    # Separate clones of one origin: the exact-common-dir test cannot see this as
+    # the same project, so compare the origin identity the treehouse pool is keyed
+    # on. Both sides must prove one, and both must agree.
+    WT_ORIGIN=$(origin_identity "$TARGET_REAL") || true
+    PROJ_ORIGIN=$(origin_identity "$PROJ_REAL") || true
+    if [ -z "$WT_ORIGIN" ] || [ "$WT_ORIGIN" != "$PROJ_ORIGIN" ]; then
+      refuse "'$TARGET_REAL' is not a worktree of project '$PROJ_REAL'"
+    fi
+  fi
 
   # The external-imports flags must land on the primary checkout - its own git
   # dir equals the common dir - because that is exactly the path Claude Code's
@@ -292,16 +369,28 @@ if [ "$MODE" = worktree ]; then
   [ -n "$PROJ_GIT_DIR" ] || refuse "project '$PROJ_REAL' has no resolvable git directory"
   PROJ_GIT_DIR=$(real_dir "$PROJ_GIT_DIR") || true
   [ -n "$PROJ_GIT_DIR" ] || refuse "project '$PROJ_REAL' has an unresolvable git directory"
-  if [ "$PROJ_GIT_DIR" = "$PROJ_COMMON" ]; then
+  #
+  # The same-origin allowance above lets the worktree belong to a DIFFERENT
+  # clone than <project>. Claude Code's canonicalization collapses that worktree
+  # to ITS OWN primary checkout, never <project>'s, so the common dir the
+  # canonical is derived from is the worktree's own whenever the two differ, and
+  # <project>'s otherwise. It is picked once and the single derive-and-verify
+  # below runs against it.
+  if [ "$WT_COMMON" != "$PROJ_COMMON" ]; then
+    CANON_COMMON=$WT_COMMON
+    CANON_REFUSAL="'$TARGET_REAL' belongs to a clone whose primary checkout could not be resolved"
+  else
+    CANON_COMMON=$PROJ_COMMON
+    CANON_REFUSAL="project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
+  fi
+  if [ "$PROJ_GIT_DIR" = "$CANON_COMMON" ]; then
     PROJ_CANON=$PROJ_REAL
   else
-    PROJ_CANON=$(real_dir "$(dirname -- "$PROJ_COMMON")") || true
-    [ -n "$PROJ_CANON" ] \
-      || refuse "project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
+    PROJ_CANON=$(real_dir "$(dirname -- "$CANON_COMMON")") || true
+    [ -n "$PROJ_CANON" ] || refuse "$CANON_REFUSAL"
     CANON_GIT_DIR=$(git -C "$PROJ_CANON" rev-parse --absolute-git-dir 2>/dev/null) || true
     CANON_GIT_DIR=$(real_dir "${CANON_GIT_DIR:-}") || true
-    [ -n "$CANON_GIT_DIR" ] && [ "$CANON_GIT_DIR" = "$PROJ_COMMON" ] \
-      || refuse "project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
+    [ -n "$CANON_GIT_DIR" ] && [ "$CANON_GIT_DIR" = "$CANON_COMMON" ] || refuse "$CANON_REFUSAL"
   fi
 else
   # The seed evidence, in the order that names the most useful reason first: the

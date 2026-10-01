@@ -4033,7 +4033,11 @@ fi
 # bin/fm-claude-trust.sh owns the structural scope test for both shapes and
 # refuses anything that is neither this project's own isolated worktree nor a
 # seeded secondmate home marked for this id; a refusal blocks the spawn rather
-# than launching a worker that would wedge. Refusing here rather than beside the
+# than launching a worker that would wedge. A crewmate a secondmate home spawns
+# takes the worktree shape, and the shared treehouse pool hands it a worktree of
+# whichever clone of that origin is free - often the primary home's - so the
+# worktree scope test accepts a clone sharing the project's origin identity
+# rather than only the exact clone the home knows. Refusing here rather than beside the
 # arm keeps this in the same class as the two worktree refusals just above: no
 # temp root, no retired relaunch wiring and no busy record exists yet to strand,
 # so the refusal names the endpoint the same way they do and leaves nothing else
