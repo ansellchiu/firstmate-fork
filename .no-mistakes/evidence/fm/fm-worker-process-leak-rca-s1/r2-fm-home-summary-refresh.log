@@ -1,0 +1,30 @@
+ok - watcher-carried status append publishes the real home summary
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - large backlog snapshots and home-summary publication stay within exec limits
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - fleet snapshot transport does not require or mutate operational state
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - parent snapshot consumes large child ledgers without argument transport
+ok - live watcher cadence bounds publication staleness without signals
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - fleet snapshot consumes the published local ledger by default
+ok - writer kill and replacement preserve an atomic JSON ledger
+ok - best-effort publication logs and continues
+Terminated: 15             sleep 0.1
+Terminated: 15             sleep 0.1
+ok - best-effort refresh bounds publication lock acquisition
+Terminated: 15             env FM_ROOT_OVERRIDE="$FM_ROOT" FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_CONFIG_OVERRIDE="$CONFIG" FM_PROJECTS_OVERRIDE="$PROJECTS" "$SCRIPT_DIR/fm-fleet-snapshot.sh" --secondmate-home-summary > "$HOME_SUMMARY_TMP" 2> "$HOME_SUMMARY_ERR_TMP"
+ok - best-effort refresh bounds validation and publication
+ok - best-effort refresh bounds state initialization
+ok - best-effort refresh logs worker termination
+ok - best-effort refresh bounds failure reporting fallback
+ok - valid publication ignores an unavailable failure record
+ok - publication completes on a home carrying accumulated status history
+ok - producer skips remote per-task state probes
+ok - a stalled publication does not delay the watcher liveness beacon
+ok - publication remains single-flight across watcher restart
+ok - bootstrap scopes retained failures to the current publication
+Terminated: 15             sleep 0.1
+ok - failure records preserve refresh attempt ordering
+ok - repeated publication failure is reported at session start until it clears
+rc=0

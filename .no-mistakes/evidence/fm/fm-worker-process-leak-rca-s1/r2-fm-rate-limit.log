@@ -1,0 +1,13 @@
+ok - GLM signals: the 1308 envelope (incident shape, explicit model), 429+phrase, Chinese; a loose 1308 never names a window
+ok - GLM weekly wall: the 1310 envelope with or without an adjacent 429, distinct from glm-1308; the newest envelope wins; loose digits, wall prose alone, and the 1311 envelope (even with usage prose) name no window
+ok - no line of the detector's own source is read as a GLM usage-limit window
+ok - DeepSeek signals: 429 rate_limit_error, 429 upstream, standalone load-saturation refusal; generic type token
+ok - Claude and generic 429 signals detected; vendor phrases stay family-scoped
+ok - negatives: bare 429, phrases without codes, busy output, and digit-boundary lookalikes never match
+ok - a rate-limited stale surfaces at once, named and classified as not a wedge
+ok - a pane on the GLM weekly wall surfaces classified as stalled on glm-1310, never as a possible wedge
+ok - an already-classified rate-limited episode absorbs silently on later polls
+ok - a pane whose rate-limit signal cleared drops the classification and resumes wedge aging
+ok - a rate-limited busy pane past its turn-age bound surfaces classified, never as a wedge
+ok - a bare-429 pane without a rate-limit phrase keeps the ordinary stale surface
+rc=0
