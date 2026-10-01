@@ -1121,6 +1121,8 @@ test_backlog_multiline_hold_and_structural_since_parsing() {
 - [ ] paren-hold-blocked - Paren hold then blocker (since 2026-10-09) (hold: fix (PR 12), since asked) blocked-by: upstream - waits
 - [ ] hold-blocked-paren - Thing (repo: firstmate) (since 2026-10-10) (hold: parked) blocked-by: upstream - waits on fix (PR 12)
 - [ ] hold-then-prose - Prose after hold (hold: parked) see https://example.com/pull/1 (repo: firstmate) (since 2026-10-11)
+- [ ] stray-paren - Sad hold (repo: firstmate) (since 2026-01-01) (hold: blocked :( on vendor) (hold-kind: captain)
+  Captain hold set: 2026-09-01T00:00:00Z
 - [ ] prose-only - Fix, since upgrade breaks (repo: firstmate) (kind: ship)
 - [ ] single-line-since - Single line with since prose in hold (repo: firstmate) (kind: ship) (since 2026-10-03) (hold: wait for captain, since we need input) (hold-kind: captain)
   Captain hold set: 2026-10-03T12:00:00Z
@@ -1173,6 +1175,12 @@ EOF
           and .repo == "firstmate"
           and .since == "2026-10-10"
           and .blocked_by == "upstream")
+      and ([.backlog.records[] | select(.id == "stray-paren")][0]
+        | .hold_set == "2026-09-01T00:00:00Z"
+          and .title == "Sad hold"
+          and .since == "2026-01-01"
+          and .hold_kind == "captain"
+          and .body_lines == ["Captain hold set: 2026-09-01T00:00:00Z"])
       and ([.backlog.records[] | select(.id == "hold-then-prose")][0]
         | .hold_reason == "parked"
           and .repo == "firstmate"

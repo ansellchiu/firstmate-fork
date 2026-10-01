@@ -543,20 +543,26 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
              body_lines:[],
              body_excerpt:null}
         end;
+    def commit_pending($pending; $section; $order):
+      if unclosed_hold($pending) and ($pending | test("\n")) then
+        ($pending | split("\n")) as $parts
+        | parse_row($parts[0]; $section; $order)
+        | .body_lines = [$parts[1:][] | trim | select(. != "")]
+      else parse_row($pending; $section; $order) end;
     reduce inputs as $line
       ({path:$path,present:true,records:[],section:null,order:0,pending_row:null};
        if ($line | test("^##[[:space:]]+")) then
          (if .pending_row != null then
-            .order += 1 | .records += [parse_row(.pending_row; .section; .order)] | .pending_row = null
+            .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
           else . end)
          | .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
        elif .section == null or ($line | trim) == "" then
          (if .pending_row != null then
-            .order += 1 | .records += [parse_row(.pending_row; .section; .order)] | .pending_row = null
+            .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
           else . end)
        elif .pending_row != null then
          if structured_row($line) then
-           .order += 1 | .records += [parse_row(.pending_row; .section; .order)]
+           .order += 1 | .records += [commit_pending(.pending_row; .section; .order)]
            | if unclosed_hold($line) then
                .pending_row = $line
              else
@@ -588,7 +594,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
          | .records += [{order:.order,state:.section,structured:false,id:null,raw:$line,body_lines:[],body_excerpt:null}]
        end)
     | if .pending_row != null then
-        .order += 1 | .records += [parse_row(.pending_row; .section; .order)] | .pending_row = null
+        .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
       else . end
     | del(.pending_row)
     | .records |= map(
