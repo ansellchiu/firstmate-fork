@@ -202,7 +202,7 @@ test_altered_capture_is_detected() {
   local home cap out
   home=$(make_home tamper); fresh_world "$home"
   two_samples "$home" 70
-  cap=$(ls -d "$home"/data/value-ledger/captures/*/ | head -1)
+  cap=$(printf '%s\n' "$home"/data/value-ledger/captures/*/ | head -1)
   echo '{"entries":[]}' >> "${cap}hourly-claude.json"
   out=$(rollup_json "$home")
   assert_equals 1 "$(jq '.capture_violations | length' <<<"$out")" "a capture whose bytes changed is a recorded violation"
