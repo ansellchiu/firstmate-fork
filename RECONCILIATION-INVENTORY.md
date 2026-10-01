@@ -713,7 +713,7 @@ forced.
 | `1b1b6e05` | stop labeling Herdr as experimental (#4972) | Clean apply. Comment/notice/docs alignment only; orthogonal to retain herdr intents (native submit, idle-unknown, relaunch identity). |
 | `a0b2f343` | authorize isolated Herdr lab validation (#4998) | Independent; only `.no-mistakes.yaml`. |
 | `804394e8` | remote charter steering-inbox path host-local (#5049) | Clean apply; mechanical remote-seed path rewrite + docs/test. |
-| `b8ab7354` | fit pull observation within contribution poll budget (#5107) | Independent; `fm-contributions` only (not contended). |
+| `b8ab7354` | fit pull observation within contribution poll budget (#5107) | Independent; `fm-contributions` only (not contended). Landed with a local review narrowing: each parallel read wave is capped at three concurrent forge reads per user token (budget arithmetic unchanged). |
 | `631bc26d` | idempotent inbox capture, replies, receipts, readiness (#5103) | Clean apply; Relay/voice-inbox priority. Adds `fm_session_lock_inspect` and reimplements `fm-lock.sh status` on it (a directory or symlink at `state/.lock` now reports unreadable instead of free); private capitalized-harness case-fold (`session-lock-harness-case`) preserved. |
 
 Landed on this branch as cherry-picks with `-x` (local tips `37ba0194` … `c19c966d`).
