@@ -241,6 +241,17 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
   [ "$rc" -ne 0 ] || fail "an invalid structured version subject was accepted"
 
   write_valid_payload "$data"
+  jq '.captains_call[0].context = 7' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-string captains_call context was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[0].context = (reduce range(8001) as $i (""; . + "x"))' "$data" > "$data.tmp" \
+    && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "an over-long captains_call context was accepted"
+
+  write_valid_payload "$data"
   jq '.captains_call[0].type = "verdict"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
   set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
   [ "$rc" -ne 0 ] || fail "an unknown captains_call type was accepted"
