@@ -71,7 +71,7 @@ Lock ownership and away state are re-checked whenever the observer acts rather t
 While armed on a TUI Pi session that holds this home's fleet lock, is not a secondmate home, and has no away posture, legacy flag, or unfinished return in progress, the observer waits 1,740 seconds with no observed Pi-local input, then shows a 60-second countdown in the Pi status bar.
 Any nonempty byte reaching the terminal cancels it and is returned to Pi unchanged, as does a submitted interactive message that arrived without one; Firstmate's own `pi.sendUserMessage` traffic is reported as extension-sourced and deliberately does not count as the captain.
 Countdown starts, cancellations with their remaining seconds, and would-have-entered expiries append one line each to `state/.pi-auto-afk-observations`, which is the prototype's whole output - it exists so a real week of use can answer how often terminal replies or other processes writing to the terminal cancel the countdown falsely.
-[`.pi/extensions/fm-pi-auto-afk-observe.ts`](../.pi/extensions/fm-pi-auto-afk-observe.ts) owns the detection, the gates, and that consent boundary, and `data/fm-auto-afk-idle-detect-s1/report.md` holds the investigation behind them.
+[`.pi/extensions/fm-pi-auto-afk-observe.ts`](../.pi/extensions/fm-pi-auto-afk-observe.ts) owns the detection, the gates, and that consent boundary, and [`tests/fm-pi-auto-afk-observe.test.sh`](../tests/fm-pi-auto-afk-observe.test.sh) is its regression test.
 
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 
