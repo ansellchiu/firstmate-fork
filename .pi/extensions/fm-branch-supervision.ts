@@ -2364,6 +2364,42 @@ ${context.command}
     return shell;
   };
 
+  // Pi's own tool-call header, collapsed to `key=value` pairs on the title line or
+  // expanded to one `key: value` line each. Reproduced rather than imported:
+  // formatToolCallWithArgs lives in Pi's core render utils, which are not on the
+  // package's public export surface. Both self-rendering tools below must draw the
+  // same header Pi's stock fallback would, so Calm off is indistinguishable from
+  // stock; the Calm-off stock-parity case in tests/fm-pi-branch-extension.test.sh
+  // is the guard that catches drift when Pi changes this shape.
+  const STOCK_COLLAPSED_ARGS_CHARS = 100;
+  const stockToolCallHeader = (
+    title: string,
+    args: unknown,
+    theme: Parameters<NonNullable<ToolDefinition["renderCall"]>>[1],
+    expanded: boolean,
+  ): string => {
+    const header = theme.fg("toolTitle", theme.bold(title));
+    if (args === null || args === undefined) return header;
+    const entries: [string, unknown][] =
+      typeof args === "object" && !Array.isArray(args)
+        ? Object.entries(args as Record<string, unknown>)
+        : [["args", args]];
+    if (entries.length === 0) return header;
+    if (expanded) {
+      const lines = entries.map(([key, value]) => {
+        const text = typeof value === "string" ? value : (JSON.stringify(value, null, 2) ?? String(value));
+        return `  ${key}: ${text.replace(/\t/g, "   ").replace(/\r/g, "").split("\n").join("\n    ")}`;
+      });
+      return `${header}\n${theme.fg("muted", lines.join("\n"))}`;
+    }
+    const pairs = entries.map(([key, value]) => `${key}=${JSON.stringify(value) ?? String(value)}`).join(" ");
+    const preview =
+      pairs.length > STOCK_COLLAPSED_ARGS_CHARS
+        ? `${pairs.slice(0, STOCK_COLLAPSED_ARGS_CHARS - 3)}...`
+        : pairs;
+    return `${header} ${theme.fg("muted", preview)}`;
+  };
+
   registerFirstmateTool(pi, {
     name: "fm_branch_outcomes",
     label: "Read supervision branch outcomes",
@@ -2374,11 +2410,11 @@ ${context.command}
       recent: Type.Optional(Type.Number({ description: "How many most-recent outcomes to read (default 20)" })),
     }),
     renderShell: "self",
-    renderCall: (_args, theme, context) => {
+    renderCall: (args, theme, context) => {
       if (calmPresentation.stockExportRendering) throw new Error("Use Pi stock export rendering");
       if (calmHides("assistant-tool-call")) return new Container();
       const shellState = context.state as OutcomesToolShellState;
-      shellState.call = new Text(theme.fg("toolTitle", theme.bold("fm_branch_outcomes")), 0, 0);
+      shellState.call = new Text(stockToolCallHeader("fm_branch_outcomes", args, theme, context.expanded), 0, 0);
       return refreshOutcomesToolShell(shellState, theme, context);
     },
     renderResult: (result, options, theme, context) => {
@@ -2436,11 +2472,11 @@ ${context.command}
       through: Type.Number({ description: "The highest outcome sequence number this conversation has processed" }),
     }),
     renderShell: "self",
-    renderCall: (_args, theme, context) => {
+    renderCall: (args, theme, context) => {
       if (calmPresentation.stockExportRendering) throw new Error("Use Pi stock export rendering");
       if (calmHides("assistant-tool-call")) return new Container();
       const shellState = context.state as OutcomesToolShellState;
-      shellState.call = new Text(theme.fg("toolTitle", theme.bold("fm_branch_processed")), 0, 0);
+      shellState.call = new Text(stockToolCallHeader("fm_branch_processed", args, theme, context.expanded), 0, 0);
       return refreshOutcomesToolShell(shellState, theme, context);
     },
     renderResult: (result, _options, theme, context) => {
