@@ -24,12 +24,28 @@
 # must set up for that to hold, including which agents are eligible launchers;
 # this header owns the mechanics.
 #
+# Backend selection. config/secret-backend picks WHICH backend serves a call once
+# config/av-inject is on: `automic` (default) is everything above, `varlock-op`
+# serves only the rapid-recon search keys in FM_VARLOCK_OP_ALLOWED from a
+# dedicated read-only 1Password vault through `varlock run`, authorized by a
+# service-account token read from the macOS keychain at the moment of the call.
+# That mode has no human approval to wait for, so the three Automic timeouts
+# (FM_VAULT_PROBE_TIMEOUT, FM_AV_INJECT_PREFLIGHT_DEADLINE, FM_AV_APPROVAL_TIMEOUT)
+# do not apply to it. docs/configuration.md owns the operator setup.
+#
 # Secret handling: a VALUE never appears here. Only key NAMES are handled, and
 # key names are not secret - they are what `av list` prints. `av inject` places
 # the value directly into the target process environment, so no value reaches
 # argv, a log line, a status file, or a brief.
 
 FM_AV_INJECT_FILE="av-inject"
+FM_SECRET_BACKEND_FILE="secret-backend"
+# The only keys the varlock-op backend will serve: the low-value, individually
+# rate-limited search keys held in the dedicated read-only vault.
+FM_VARLOCK_OP_ALLOWED="EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_API_KEY PARALLEL_API_KEY"
+# Keychain item holding the vault's service-account token (never in an env file).
+FM_VARLOCK_OP_KEYCHAIN_SERVICE=${FM_VARLOCK_OP_KEYCHAIN_SERVICE:-firstmate-rapid-recon}
+FM_VARLOCK_OP_KEYCHAIN_ACCOUNT=${FM_VARLOCK_OP_KEYCHAIN_ACCOUNT:-OP_SERVICE_ACCOUNT_TOKEN}
 FM_AV_INJECT_ERROR=""
 # Populated by fm_av_inject_keys; one `+NAME` argument per requested secret.
 FM_AV_INJECT_KEYARGS=()
@@ -62,6 +78,31 @@ fm_av_inject_mode() {  # <config-dir>
   case "$raw" in
     [Oo][Nn]|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|1) printf 'on\n' ;;
     *) printf 'off\n' ;;
+  esac
+}
+
+# Read the backend selection. FM_SECRET_BACKEND (env) wins over the local,
+# gitignored config/<FM_SECRET_BACKEND_FILE>; absent/empty means automic. Unlike
+# the on/off gate, an unknown value is a refusal (return 1, FM_AV_INJECT_ERROR
+# set) and never silently defaults, since a typo must not route a key through
+# the wrong backend. Prints "automic" or "varlock-op".
+# Args: <config-dir>
+fm_secret_backend_mode() {  # <config-dir>
+  local raw="" file="$1/$FM_SECRET_BACKEND_FILE"
+  if [ -n "${FM_SECRET_BACKEND:-}" ]; then
+    raw=$FM_SECRET_BACKEND
+  elif [ -f "$file" ]; then
+    IFS= read -r raw < "$file" 2>/dev/null || true
+    raw=${raw#"${raw%%[![:space:]]*}"}
+    raw=${raw%"${raw##*[![:space:]]}"}
+  fi
+  case "$raw" in
+    ""|[Aa][Uu][Tt][Oo][Mm][Ii][Cc]) printf 'automic\n' ;;
+    [Vv][Aa][Rr][Ll][Oo][Cc][Kk]-[Oo][Pp]) printf 'varlock-op\n' ;;
+    *)
+      FM_AV_INJECT_ERROR="unknown secret backend '$raw'; config/$FM_SECRET_BACKEND_FILE must be automic or varlock-op"
+      return 1
+      ;;
   esac
 }
 
@@ -195,6 +236,55 @@ fm_av_inject_approved() {  # <av-path>
     "$av" inject "${FM_AV_INJECT_KEYARGS[@]}" -- true >/dev/null 2>&1 </dev/null
 }
 
+# The varlock-op backend. Called only after fm_av_inject_keys populated
+# FM_AV_INJECT_KEYARGS. Refuses (return 1, FM_AV_INJECT_ERROR set, nothing run)
+# for a key outside FM_VARLOCK_OP_ALLOWED, a missing varlock or schema, or a
+# missing or malformed keychain token; otherwise execs
+# `varlock run --path <schema-dir> --filter <keys> -- <tool>`. The token is read
+# from the keychain here, held only in a local variable, and handed to varlock as
+# an exec-time environment assignment, so it is never in argv, a file, a log, or
+# this process's own environment. A well-formed token that 1Password rejects is
+# refused by varlock itself, which does not run the tool on a resolution failure.
+# Args: <config-dir> <tool> [args...]
+fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
+  local config_dir=$1 arg key varlock sec tok filter="" schema_dir
+  shift
+  for arg in "${FM_AV_INJECT_KEYARGS[@]}"; do
+    key=${arg#+}
+    case " $FM_VARLOCK_OP_ALLOWED " in
+      *" $key "*) : ;;
+      *)
+        FM_AV_INJECT_ERROR="secret '$key' is not served by the varlock-op backend (allowed: $FM_VARLOCK_OP_ALLOWED); use the automic backend for it"
+        return 1
+        ;;
+    esac
+    filter=${filter:+$filter,}$key
+  done
+  varlock=$(type -P -- varlock 2>/dev/null) || {
+    FM_AV_INJECT_ERROR="the 'varlock' CLI was not found on PATH; install varlock or set config/$FM_SECRET_BACKEND_FILE to automic"
+    return 1
+  }
+  schema_dir="$config_dir/varlock"
+  if [ ! -f "$schema_dir/.env.schema" ]; then
+    FM_AV_INJECT_ERROR="no varlock schema at $schema_dir/.env.schema; create it per docs/configuration.md \"Secret backend\""
+    return 1
+  fi
+  sec=$(type -P -- security 2>/dev/null) || {
+    FM_AV_INJECT_ERROR="the macOS 'security' CLI was not found, so the varlock-op service-account token cannot be read"
+    return 1
+  }
+  tok=$("$sec" find-generic-password -s "$FM_VARLOCK_OP_KEYCHAIN_SERVICE" -a "$FM_VARLOCK_OP_KEYCHAIN_ACCOUNT" -w 2>/dev/null </dev/null) || tok=""
+  case "$tok" in
+    ops_?*) : ;;
+    *)
+      tok=""
+      FM_AV_INJECT_ERROR="no usable service-account token in the keychain item '$FM_VARLOCK_OP_KEYCHAIN_SERVICE' (account $FM_VARLOCK_OP_KEYCHAIN_ACCOUNT); store the ops_ token there or set config/$FM_SECRET_BACKEND_FILE to automic"
+      return 1
+      ;;
+  esac
+  OP_SERVICE_ACCOUNT_TOKEN=$tok exec "$varlock" run --path "$schema_dir" --filter "$filter" -- "$@"
+}
+
 # Run ONE tool call with the named secrets applied to it, and nothing else.
 # Validates enablement, the `av` CLI, and every key name, brings the approval
 # service up on a bounded poll, then execs `av inject +KEY... -- <tool> [args]`
@@ -204,7 +294,7 @@ fm_av_inject_approved() {  # <av-path>
 # downstream error rather than an actionable one.
 # Args: <config-dir> <key-spec> <tool> [args...]
 fm_av_inject_exec() {  # <config-dir> <key-spec> <tool> [args...]
-  local config_dir=$1 spec=$2 av
+  local config_dir=$1 spec=$2 av backend
   shift 2
   FM_AV_INJECT_ERROR=""
   if [ "$#" -eq 0 ]; then
@@ -215,12 +305,19 @@ fm_av_inject_exec() {  # <config-dir> <key-spec> <tool> [args...]
     FM_AV_INJECT_ERROR="vault key injection is off for this home; add the per-secret Direct Access rules for this agent launcher in the Automic Vault app, then set config/$FM_AV_INJECT_FILE to on"
     return 1
   fi
-  if ! av=$(fm_av_inject_bin); then
-    # shellcheck disable=SC2034 # Caller reads the shared error after this function returns.
-    FM_AV_INJECT_ERROR="the 'av' CLI (Automic Vault) was not found on PATH; install Automic Vault or set config/$FM_AV_INJECT_FILE to off"
-    return 1
+  backend=$(fm_secret_backend_mode "$config_dir") || return 1
+  if [ "$backend" = automic ]; then
+    if ! av=$(fm_av_inject_bin); then
+      # shellcheck disable=SC2034 # Caller reads the shared error after this function returns.
+      FM_AV_INJECT_ERROR="the 'av' CLI (Automic Vault) was not found on PATH; install Automic Vault or set config/$FM_AV_INJECT_FILE to off"
+      return 1
+    fi
   fi
   fm_av_inject_keys "$spec" || return 1
+  if [ "$backend" = varlock-op ]; then
+    fm_varlock_op_exec "$config_dir" "$@"
+    return 1
+  fi
   fm_av_inject_preflight "$av" || return 1
   if ! fm_av_inject_approved "$av"; then
     # shellcheck disable=SC2034 # Caller reads the shared error after this function returns.

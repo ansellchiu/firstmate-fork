@@ -257,6 +257,28 @@ That approval bound is checked before the tool is exec'd rather than wrapped aro
 The cost is that when no Direct Access rule matches, the check spends one approval prompt before the real call makes its own, which is the already-misconfigured case the rules above exist to fix.
 `config/av-inject` is primary-authoritative and inherited into secondmate homes like the other local config toggles.
 `bin/fm-av-inject-lib.sh`'s header owns the exact mode parsing, key validation, launcher-matching rationale, and injection mechanics, and `bin/fm-av-run.sh --help` output owns its calling syntax.
+## Secret backend (config/secret-backend / FM_SECRET_BACKEND)
+
+The optional local, gitignored `config/secret-backend` selects which backend serves a `bin/fm-av-run.sh` call once `config/av-inject` is on.
+`automic` (absent, empty, or `automic`) is the Automic Vault behavior above and is the default for every key.
+`varlock-op` serves only `EXA_API_KEY`, `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, `LINKUP_API_KEY`, and `PARALLEL_API_KEY`, the low-value rapid-recon search keys, so an unattended worker needs no per-run approval tap.
+Any other value refuses the call rather than defaulting, because a typo must not route a key through the wrong backend.
+`FM_SECRET_BACKEND` overrides the file with the same values and exists for tests.
+`config/secret-backend` is primary-authoritative and inherited into secondmate homes like `config/av-inject`.
+
+The `varlock-op` backend runs `varlock run --path <home>/config/varlock --filter <keys> -- <tool>` after the same key-name validation as Automic, and refuses without running the tool for a key outside the five, a missing `varlock`, a missing `config/varlock/.env.schema`, or a missing or malformed token.
+Key names are validated as exact names, so the `--filter` is always the requested keys and never a glob.
+The operator supplies:
+
+- A dedicated 1Password vault holding only those five keys, and a read-only service account scoped to it.
+- The service-account `ops_` token stored in the macOS keychain with `security add-generic-password -s firstmate-rapid-recon -a OP_SERVICE_ACCOUNT_TOKEN -w`; the token is read at the moment of the call and handed to `varlock` as an exec-time environment assignment, so it is never in Firstmate's environment, argv, a file, or a log.
+- A schema at `config/varlock/.env.schema` that reads the five keys from that vault with the 1Password plugin and marks the token variable `@internal` so it is not passed on to the tool.
+
+A well-formed token that 1Password rejects is refused by `varlock` itself, which does not run the tool when resolution fails.
+This backend has no human approval to wait for, so `FM_VAULT_PROBE_TIMEOUT`, `FM_AV_INJECT_PREFLIGHT_DEADLINE`, and `FM_AV_APPROVAL_TIMEOUT` apply to the `automic` backend only.
+It trades the Automic launcher gate for a bearer token on this Mac, which is acceptable only for low-value, individually rate-limited, separately revocable keys; keep everything else on `automic`.
+`bin/fm-av-inject-lib.sh`'s header owns the mechanics.
+
 ## Turn-end pane-churn absorb (config/turnend-churn-absorb)
 
 The optional local, gitignored `config/turnend-churn-absorb` presence flag opts this home into a default-off third form of positive work evidence in watcher triage.

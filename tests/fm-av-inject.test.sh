@@ -122,6 +122,89 @@ assert_not_contains "$argv" "+BRAVE_SEARCH_API_KEY" "no key beyond the exact sel
 assert_not_contains "$argv" "+DEEPSEEK_API_KEY" "there must be no implicit default key set"
 pass "an injected call requests exactly the named keys and nothing else"
 
+# --- secret backend: selection and the varlock-op branch ---------------------
+
+CFG_VL="$TMP_ROOT/cfg-vl"; mkdir -p "$CFG_VL/varlock"
+printf 'on\n' > "$CFG_VL/av-inject"
+printf 'varlock-op\n' > "$CFG_VL/secret-backend"
+: > "$CFG_VL/varlock/.env.schema"
+[ "$(fm_secret_backend_mode "$TMP_ROOT/nope")" = automic ] || fail "absent secret-backend must be automic"
+[ "$(fm_secret_backend_mode "$CFG_VL")" = varlock-op ] || fail "varlock-op must select varlock-op"
+[ "$(FM_SECRET_BACKEND=automic fm_secret_backend_mode "$CFG_VL")" = automic ] || fail "FM_SECRET_BACKEND must override the file"
+[ "$(FM_SECRET_BACKEND=VARLOCK-OP fm_secret_backend_mode "$CFG_ON")" = varlock-op ] || fail "selection must be case-insensitive"
+FM_SECRET_BACKEND=maybe fm_secret_backend_mode "$CFG_ON" >/dev/null 2>&1 && fail "a garbage backend must refuse, not default"
+pass "fm_secret_backend_mode defaults to automic, honors the override, and refuses garbage"
+
+VL_BIN=$(fm_fakebin "$TMP_ROOT/vl")
+cat > "$VL_BIN/varlock" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$TMP_ROOT/vl-argv.log"
+printf '%s\n' "\${OP_SERVICE_ACCOUNT_TOKEN:+token-present}" >> "$TMP_ROOT/vl-env.log"
+while [ "\${1:-}" != "--" ] && [ "\$#" -gt 0 ]; do shift; done
+shift || true
+exec "\$@"
+SH
+cat > "$VL_BIN/security" <<'SH'
+#!/usr/bin/env bash
+[ -n "${FM_FAKE_TOKEN+x}" ] || exit 44
+printf '%s\n' "$FM_FAKE_TOKEN"
+SH
+chmod +x "$VL_BIN/varlock" "$VL_BIN/security"
+FAKE_TOKEN="ops_FAKE_TEST_TOKEN_NOT_REAL"
+
+run_vl() {  # <keys> <tool...>   (token from FM_FAKE_TOKEN in env)
+  local keys=$1; shift
+  env FM_CONFIG_OVERRIDE="$CFG_VL" PATH="$VL_BIN:$FAKE_BIN:$PATH" "$AV_RUN" "$keys" -- "$@" 2>&1
+}
+
+: > "$TMP_ROOT/vl-argv.log"; : > "$TMP_ROOT/vl-env.log"; : > "$TMP_ROOT/av-argv.log"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl 'EXA_API_KEY,TAVILY_API_KEY' /bin/echo ran-vl); rc=$?
+expect_code 0 "$rc" "varlock-op must run the tool for allowed keys"
+assert_contains "$out" "ran-vl" "the tool must run"
+vargv=$(cat "$TMP_ROOT/vl-argv.log")
+assert_contains "$vargv" "--filter EXA_API_KEY,TAVILY_API_KEY" "key spec must translate to an exact --filter"
+assert_contains "$vargv" "--path $CFG_VL/varlock" "the schema directory must be passed"
+assert_not_contains "$vargv" "ops_" "the token must never reach argv"
+assert_not_contains "$out" "ops_" "the token must never be printed"
+assert_contains "$(cat "$TMP_ROOT/vl-env.log")" "token-present" "varlock must receive the token in its environment"
+[ ! -s "$TMP_ROOT/av-argv.log" ] || fail "varlock-op must never touch av"
+[ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] || fail "the token must not leak into this shell's environment"
+pass "varlock-op translates the spec to --filter, passes the token only by environment, and never calls av"
+
+# Validation is shared and not bypassed by the fork.
+: > "$TMP_ROOT/vl-argv.log"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl 'EXA_API_KEY bad-key' /bin/echo no); rc=$?
+expect_code 1 "$rc" "an invalid name must refuse under varlock-op"
+assert_contains "$out" "bad-key" "the refusal must name the bad key"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl 'EXA_API_KEY,*' /bin/echo no); rc=$?
+expect_code 1 "$rc" "a glob must refuse, never reach --filter"
+[ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "an invalid spec must not exec varlock"
+pass "key validation is not bypassed under varlock-op"
+
+# Allowlist: a valid name outside the five is refused without exec.
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl 'EXA_API_KEY,DEEPSEEK_API_KEY' /bin/echo no); rc=$?
+expect_code 1 "$rc" "a key outside the allowlist must refuse"
+assert_contains "$out" "DEEPSEEK_API_KEY" "the refusal must name the disallowed key"
+[ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "a disallowed key must not exec varlock"
+pass "varlock-op serves only the allowlisted search keys"
+
+# Missing / malformed token refuses without exec; the tool never runs.
+out=$(run_vl EXA_API_KEY /bin/echo ran-keyless); rc=$?
+expect_code 1 "$rc" "a missing token must refuse"
+assert_not_contains "$out" "ran-keyless" "the tool must not run without a token"
+out=$(FM_FAKE_TOKEN='not-a-token' run_vl EXA_API_KEY /bin/echo ran-keyless); rc=$?
+expect_code 1 "$rc" "a malformed token must refuse"
+assert_not_contains "$out" "ran-keyless" "the tool must not run on a bad token"
+assert_not_contains "$out" "not-a-token" "a bad token value must not be echoed"
+[ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "a bad token must not exec varlock"
+rm -f "$CFG_VL/varlock/.env.schema"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl EXA_API_KEY /bin/echo no); rc=$?
+expect_code 1 "$rc" "a missing schema must refuse"
+: > "$CFG_VL/varlock/.env.schema"
+out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_SECRET_BACKEND=garbage PATH="$VL_BIN:$FAKE_BIN:$PATH" "$AV_RUN" EXA_API_KEY -- /bin/echo no 2>&1); rc=$?
+expect_code 1 "$rc" "a garbage backend must refuse the whole call"
+pass "varlock-op refuses without running the tool on a missing or bad token, missing schema, or garbage backend"
+
 # --- preflight: a service that stays down refuses on a bounded poll -----------
 
 : > "$TMP_ROOT/av-argv.log"
