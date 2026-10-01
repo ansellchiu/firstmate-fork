@@ -1113,6 +1113,10 @@ test_backlog_multiline_hold_and_structural_since_parsing() {
   Captain hold set: 2026-10-02T12:00:00Z
 - [ ] prose-since - since the upgrade builds fail, since upgrade (since v2 upgrade) (since 2026-10-04)
 - [ ] repo-prose - repo: wrong title prose (repo: firstmate) (since 2026-10-05)
+- [ ] paren-hold - Hold note with its own parenthetical (since 2026-10-06) (hold: waiting on fix (PR 12), since captain asked) (hold-kind: captain)
+- [ ] paren-multi - Multi-line hold with inner parenthetical (since 2026-10-07) (hold: waiting on (PR 9), since
+  captain asked) (hold-kind: captain)
+- [ ] prose-only - Fix, since upgrade breaks (repo: firstmate) (kind: ship)
 - [ ] single-line-since - Single line with since prose in hold (repo: firstmate) (kind: ship) (since 2026-10-03) (hold: wait for captain, since we need input) (hold-kind: captain)
   Captain hold set: 2026-10-03T12:00:00Z
 
@@ -1141,7 +1145,21 @@ EOF
       and $prose.since == "2026-10-04"
       and $repo.repo == "firstmate"
       and $repo.since == "2026-10-05"
+      and ([.backlog.records[] | select(.id == "paren-hold")][0]
+        | .since == "2026-10-06"
+          and .hold_reason == "waiting on fix (PR 12), since captain asked"
+          and .hold_kind == "captain"
+          and .title == "Hold note with its own parenthetical")
+      and ([.backlog.records[] | select(.id == "paren-multi")][0]
+        | .since == "2026-10-07"
+          and (.hold_reason | contains("captain asked"))
+          and .hold_kind == "captain")
   ' >/dev/null || fail "multi-line hold or structural since parsing failed: $snap"
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --secondmate-home-summary) || fail "home summary failed"
+  printf '%s' "$out" | jq -e '
+    ([.queued[] | select(.id == "prose-only")][0].since) == "unknown"
+      and ([.queued[] | select(.id == "paren-hold")][0].since) == "2026-10-06"
+  ' >/dev/null || fail "home-summary queued since must show unknown for a non-date: $out"
   pass "backlog multi-line hold notes assemble cleanly and since is extracted structurally"
 }
 

@@ -431,8 +431,10 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
     def cap($rest; $re):
       (((($rest | capture($re)?) // {}) | .v) // null) as $v
       | if $v == null then null else ($v | trim) end;
+    def hold_close:
+      "\\)(?=[[:space:]]*(?:\\z|\\((?:repo|kind|priority|hold-kind|hold-until):|\\((?:since|merged|reported|done)[[:space:]]))";
     def without_hold:
-      gsub("(?s)\\(hold:[^)]*\\)"; "");
+      gsub("(?s)\\(hold:.*?" + hold_close; "");
     def metadata($rest; $key):
       cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
     # LOAD-BEARING, do not remove as a duplicate definition of the kind field.
@@ -451,7 +453,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif ($rest | test("^SHIP(?![A-Za-z0-9_])")) then "ship"
         else null end;
     def hold_metadata($rest):
-      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>[^)]*)");
+      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>.*?)" + hold_close);
     def metadata_word($rest; $key):
       cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
     def url_pattern: "https?://[^[:space:])\"<>]+";
@@ -473,6 +475,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       | trim;
     def title_of($rest):
       $rest
+      | without_hold
       | gsub(wrapped_url_pattern; "")
       | sub("[[:space:]]*blocked-by:[[:space:]]+[^[:space:])]+[[:space:]]+-[[:space:]]+.*$"; "")
       | gsub("[[:space:]]*blocked-by:[[:space:]]+[^[:space:]]+"; "")
@@ -503,7 +506,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       ($line | test("^[-*][[:space:]]+\\[[ xX]\\][[:space:]]+[^[:space:]]+[[:space:]]+-[[:space:]]+"))
       or ($line | test("^[-*][[:space:]]+\\*\\*[^*]+\\*\\*[[:space:]]+-[[:space:]]+"));
     def unclosed_hold($line):
-      $line | test("(?s)\\(hold:[^)]*$");
+      $line | test("(?s)\\(hold:(?!.*" + hold_close + ")");
     def parse_row($line; $section; $order):
       row_match($line) as $m
       | if $m == null then
@@ -1044,6 +1047,14 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
     | def trunc($n):
       tostring | gsub("\\s+"; " ")
       | if length > $n then .[:$n] + "…" else . end;
+    def valid_iso_date:
+      . as $d
+      | type == "string"
+      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
+      and (if test("T")
+        then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
+        else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
+        end);
     def filed_epoch:
       (.since // null) as $filed
       | if ($filed | type) != "string" then null
@@ -1186,7 +1197,7 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
           captain_actionable:(.captain_actionable // false),
           repo:((.repo // null) | if . == null then null else trunc(120) end),
           kind:((.kind // null) | if . == null then null else trunc(40) end),
-          since:((.since // null) | if . == null then null else trunc(40) end)}]
+          since:((.since // null) | if . == null then null elif valid_iso_date then . else "unknown" end)}]
           | ((map(select(.captain_actionable != true)) | newest_filed_first)
              + (map(select(.captain_actionable == true)) | newest_filed_first))
           | .[:$queued_n]),
