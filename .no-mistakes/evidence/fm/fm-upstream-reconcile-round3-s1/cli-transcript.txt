@@ -1,0 +1,21 @@
++(eval):3> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-lock.sh status
+lock: free
++(eval):4> mkdir /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state/.lock
++(eval):4> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-lock.sh status
+lock: unreadable
++(eval):4> rmdir /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state/.lock
++(eval):5> echo 999999
++(eval):5> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-lock.sh status
+lock: stale (pid 999999 dead or not a harness)
++(eval):6> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-inbox.sh note --request-id req-1 --json -- 'check the Phase 0 landing'
+{"schema":"fm-inbox-note.v1","outcome":"created","id":"1790829339-WhjZcm","request_id":"req-1","saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state/inbox/1790829339-WhjZcm.note"}
++(eval):7> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-inbox.sh note --request-id req-1 --json -- 'check the Phase 0 landing'
+{"schema":"fm-inbox-note.v1","outcome":"replay","id":"1790829339-WhjZcm","request_id":"req-1","saved":true,"announced":true,"acknowledged":false,"path":"/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state/inbox/1790829339-WhjZcm.note"}
++(eval):8> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-inbox.sh list
+1790829339-WhjZcm
+    check the Phase 0 landing
++(eval):9> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-inbox.sh receipts
+{"schema":"fm-inbox-receipts.v1","home":"T/tmp.jF0gWWajta","generated":"2026-10-01T04:35:39Z","pending":[{"id":"1790829339-WhjZcm","at":"2026-10-01T04:35:39Z","source":"text","request_id":"req-1","body":"check the Phase 0 landing","acknowledged":false,"announced":true,"reply":null}],"handled":[],"replies":[],"reply_cursor":"","omitted":[]}
++(eval):10> FM_HOME=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta FM_STATE_OVERRIDE=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.jF0gWWajta/state bin/fm-inbox.sh ready
+{"schema":"fm-primary-ready.v1","home":"T/tmp.jF0gWWajta","observed_at":"2026-10-01T04:35:39Z","lock":{"state":"stale","pid":999999,"live_harness":false},"wake_consumer":{"state":"unknown","reason":"supervision-model-unknown-for-home","beacon_age_seconds":null},"posture":{"state":"present"},"can_receive":false}
++(eval):11> set +x

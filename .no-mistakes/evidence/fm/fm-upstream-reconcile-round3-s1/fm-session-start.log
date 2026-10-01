@@ -1,0 +1,23 @@
+ok - context digest distinguishes ABSENT, empty-but-present, and populated files
+ok - a lock refusal prints a loud read-only banner, skips every mutating step, and still completes the digest
+ok - session start stays read-only when lock ownership cannot be published
+ok - locked session start freezes trace context and lock refusal leaves it unchanged
+ok - concurrent session-lock acquisition admits exactly one live harness
+ok - digest sections are ordered safety-preamble first, live fleet state before curated memory
+ok - the read-once contract is stated once, ahead of the sources it governs
+ok - session start: configured and auto-detected Herdr homes never require tmux
+ok - session start: an absent recorded tmux window relaunches its Pi secondmate exactly once, off the blocking path
+ok - session start: a deferred relaunch is always reported, so the digest's stale endpoint record cannot stand
+ok - session start: inactive reconciliation runs after the digest and retains its durable wake
+ok - session start: an unreachable host delays a reported check, not the digest
+ok - session start: a deferred result the digest outran still reaches the agent as a wake
+ok - session start: a read-only session declares its skipped network checks rather than dropping them
+ok - session start: the tasks-axi compatibility verdict is computed once and reused
+ok - session start: an existing ambiguous Pi process prevents duplicate recovery
+ok - session start: transient tmux unreadability never licenses a relaunch
+ok - session start: the proven bare-shell recovery path remains intact
+Terminated: 15             env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" "$SESSION_START"
+rm: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-session-start-tests.ekJFpj/secondmate-herdr-husk/home/state: Directory not empty
+rm: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-session-start-tests.ekJFpj/secondmate-herdr-husk/home: Directory not empty
+rm: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-session-start-tests.ekJFpj/secondmate-herdr-husk: Directory not empty
+rm: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-session-start-tests.ekJFpj: Directory not empty
