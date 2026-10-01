@@ -1,0 +1,104 @@
+rows in durable queue before:      140
+watcher cycles run: 20 actionable; follow-up messages queued to main: 20
+
+----- follow-up #1 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task1.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #2 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task2.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #3 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task3.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #4 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task4.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #5 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task5.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #6 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task6.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #7 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task7.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #8 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task8.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #9 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task9.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #10 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task10.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #11 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task11.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #12 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task12.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #13 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task13.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #14 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task14.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #15 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task15.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #16 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task16.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #17 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task17.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #18 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task18.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #19 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task19.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #20 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.8UV7IloUFr/home/state/task20.status
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+rows in durable queue after (nothing silently retired):      140

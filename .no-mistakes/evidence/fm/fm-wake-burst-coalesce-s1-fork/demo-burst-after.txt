@@ -1,0 +1,18 @@
+rows in durable queue before:      140
+watcher cycles run: 20 actionable; follow-up messages queued to main: 2
+
+----- follow-up #1 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.r13DLY40DI/home/state/task1.status
+
+35 notification(s) were waiting when this was queued; the single drain below presents and acknowledges every notification waiting, including any that arrived since.
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+----- follow-up #2 -----
+⁣FIRSTMATE_OP: v1 watcher: FIRSTMATE WATCHER WAKE: signal: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.r13DLY40DI/home/state/task12.status
+
+10 further watcher cycle(s) were folded into the previous notification. 35 notification(s) were waiting when this was queued; the single drain below presents and acknowledges every notification waiting, including any that arrived since.
+
+Run bin/fm-wake-drain.sh first and handle the queued wake. Watcher continuity is extension-owned.
+
+rows in durable queue after (nothing silently retired):      140

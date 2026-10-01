@@ -1,0 +1,3 @@
+ok - a catch-up burst delivers one follow-up and leaves every durable row queued
+ok - an accepted but unconsumed follow-up cannot mute the captain
+ok - a wake is delivered without its burst count when the count wedges or cannot be taken

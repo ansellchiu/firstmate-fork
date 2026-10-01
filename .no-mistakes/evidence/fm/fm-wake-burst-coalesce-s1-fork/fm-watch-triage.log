@@ -1,0 +1,4 @@
+ok - a catch-up burst queues one row per changed file and bounds each payload to that file
+/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3V69YEYMVR7HY05P48SK9VJ/bin/fm-classify-lib.sh: line 1357: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-watch-triage-tests.jx4kqQ/signal-commit-error/state/.seen-fallback1_status: Is a directory
+/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3V69YEYMVR7HY05P48SK9VJ/bin/fm-classify-lib.sh: line 1357: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-watch-triage-tests.jx4kqQ/signal-commit-error/state/.seen-fallback2_status: Is a directory
+ok - a re-queued benign batch bounds each row's payload to that row's file

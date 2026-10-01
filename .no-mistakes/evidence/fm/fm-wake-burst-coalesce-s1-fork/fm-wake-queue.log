@@ -1,0 +1,9 @@
+ok - a branch-held row raises no queued-wake warning for main, and the same row is presented and acknowledged once the grant clears
+awk: can't open file /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-wake-tests.RU5Jmb/presented-count-contract/state/.wake-queue
+ source line number 3
+awk: can't open file /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-wake-tests.RU5Jmb/presented-count-contract/state/.wake-queue
+ source line number 3
+ok - a presented count reports only numbers it counted, while the row count keeps its alarm
+ok - a queue that cannot be counted keeps the queued-wake alarm up
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 4 --recovery-generation 73479.1790840296.86uCFE
+ok - drain collapses obvious duplicate heartbeat and signal records
