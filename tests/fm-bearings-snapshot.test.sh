@@ -3308,6 +3308,28 @@ test_a_remote_home_without_any_ledger_is_explicitly_unreadable_without_remote_co
   pass "a missing remote ledger stays explicitly unreadable without remote summary computation"
 }
 
+test_non_iso_since_and_hold_until_degrade_to_unknown() {
+  local home fakebin json
+  home=$(make_home non-iso-degrade)
+  fakebin=$(make_fakebin "$home")
+  cat > "$home/data/backlog.md" <<'EOF'
+## In flight
+
+## Queued
+- [ ] bad-since - Gate with non-ISO since (since not-a-real-date)
+- [ ] bad-until - Dated hold with non-ISO until (repo: firstmate) (kind: captain) (hold: wait for decision) (hold-kind: captain) (hold-until: not-a-real-until)
+  Captain hold set: 2026-07-14T12:00:00Z
+
+## Done
+EOF
+  json=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$BEARINGS" --json) || fail "bearings failed"
+  printf '%s' "$json" | jq -e '
+    ([.gates[] | select(.id == "bad-since")][0].filed == "unknown")
+      and ([.gates[] | select(.id == "bad-until")][0].reason == "until unknown: wait for decision")
+  ' >/dev/null || fail "non-ISO since or hold_until did not degrade to unknown: $json"
+  pass "non-ISO since and hold_until degrade to unknown rather than date or prose"
+}
+
 test_task_teardown_during_metadata_capture_does_not_abort_snapshot
 test_current_state_uses_captured_status_observation
 test_relaunched_task_does_not_inherit_reused_endpoint_state
@@ -3367,3 +3389,4 @@ test_revealed_deferred_holds_show_their_deferral_reason
 test_pr_repository_cap_and_expansion
 test_per_repository_pr_cap_is_disclosed
 test_projection_and_toon_fail_closed
+test_non_iso_since_and_hold_until_degrade_to_unknown

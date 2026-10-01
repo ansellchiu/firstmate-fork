@@ -126,7 +126,7 @@ validate_payload() {  # <data.json>
         else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $filed) catch false
         end);
     def optional_filed:
-      (has("filed") | not) or (.filed == null) or (.filed | valid_filed);
+      (has("filed") | not) or (.filed == null) or (.filed == "unknown") or (.filed | valid_filed);
     def optional_string($name): (has($name) | not) or (.[$name] | type == "string");
     def optional_https_url($name):
       (has($name) | not)

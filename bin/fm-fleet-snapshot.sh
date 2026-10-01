@@ -23,6 +23,9 @@
 #     normalized current_role, requires_child_metadata, blocked_by_ids,
 #     unresolved_blocker_ids, captain_actionable, hold_set, hold_age_days,
 #     and hold_bucket fields.
+#     Rows whose hold reason spans multiple lines are assembled before parsing.
+#     Metadata fields such as since are extracted structurally outside the
+#     hold reason, preventing hold-reason prose from leaking into them.
 #     Repeated blocker tokens remain ordered; a blocker resolves only when its
 #     structured record is Done, and missing ids stay open.
 #     There is no separate decision type: any captain-held task is the same
@@ -419,8 +422,10 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
     def cap($rest; $re):
       (((($rest | capture($re)?) // {}) | .v) // null) as $v
       | if $v == null then null else ($v | trim) end;
+    def without_hold:
+      gsub("(?s)\\(hold:[^)]*\\)"; "");
     def metadata($rest; $key):
-      cap($rest; ".*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
+      cap(($rest | without_hold); "(?:^|[\\(,][[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
     # LOAD-BEARING, do not remove as a duplicate definition of the kind field.
     # tasks-axi 0.2.5 omits the (kind: ...) metadata when a title starts with
     # uppercase SCOUT or SHIP at a JavaScript word boundary (ASCII letters,
@@ -437,15 +442,15 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif ($rest | test("^SHIP(?![A-Za-z0-9_])")) then "ship"
         else null end;
     def hold_metadata($rest):
-      cap($rest; ".*\\(hold:[[:space:]]*(?<v>[^)]*)");
+      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>[^)]*)");
     def metadata_word($rest; $key):
-      cap($rest; ".*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
+      cap(($rest | without_hold); "(?:^|[\\(,][[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
     def url_pattern: "https?://[^[:space:])\"<>]+";
     def wrapped_url_pattern: "<?" + url_pattern + ">?";
     def links($rest): [$rest | scan(url_pattern)];
     def strip_trailing_metadata:
       reduce range(0; 20) as $_ (.;
-        sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
+        sub("(?s)[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
     def strip_title_artifacts:
       sub("[[:space:]]+-[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
       | sub("[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
@@ -482,12 +487,14 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif $done != null then {verb:"done",date:$done}
         else {verb:null,date:null} end;
     def row_match($line):
-      (($line | capture("^[-*][[:space:]]+\\[(?<check>[ xX])\\][[:space:]]+(?<id>[^[:space:]]+)[[:space:]]+-[[:space:]]+(?<rest>.*)$")?) //
-       (($line | capture("^[-*][[:space:]]+\\*\\*(?<id>[^*]+)\\*\\*[[:space:]]+-[[:space:]]+(?<rest>.*)$")?)
+      (($line | capture("^[-*][[:space:]]+\\[(?<check>[ xX])\\][[:space:]]+(?<id>[^[:space:]]+)[[:space:]]+-[[:space:]]+(?<rest>(?s).*)$")?) //
+       (($line | capture("^[-*][[:space:]]+\\*\\*(?<id>[^*]+)\\*\\*[[:space:]]+-[[:space:]]+(?<rest>(?s).*)$")?)
         | if . == null then null else . + {check:" "} end));
     def structured_row($line):
       ($line | test("^[-*][[:space:]]+\\[[ xX]\\][[:space:]]+[^[:space:]]+[[:space:]]+-[[:space:]]+"))
       or ($line | test("^[-*][[:space:]]+\\*\\*[^*]+\\*\\*[[:space:]]+-[[:space:]]+"));
+    def unclosed_hold($line):
+      $line | test("(?s)\\(hold:[^)]*$");
     def parse_row($line; $section; $order):
       row_match($line) as $m
       | if $m == null then
@@ -524,14 +531,41 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
              body_excerpt:null}
         end;
     reduce inputs as $line
-      ({path:$path,present:true,records:[],section:null,order:0};
+      ({path:$path,present:true,records:[],section:null,order:0,pending_row:null};
        if ($line | test("^##[[:space:]]+")) then
-         .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
+         (if .pending_row != null then
+            .order += 1 | .records += [parse_row(.pending_row; .section; .order)] | .pending_row = null
+          else . end)
+         | .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
        elif .section == null or ($line | trim) == "" then
-         .
+         (if .pending_row != null then
+            .order += 1 | .records += [parse_row(.pending_row; .section; .order)] | .pending_row = null
+          else . end)
+       elif .pending_row != null then
+         if structured_row($line) then
+           .order += 1 | .records += [parse_row(.pending_row; .section; .order)]
+           | if unclosed_hold($line) then
+               .pending_row = $line
+             else
+               .pending_row = null
+               | .order += 1
+               | .records += [parse_row($line; .section; .order)]
+             end
+         else
+           .pending_row += "\n" + $line
+           | if (unclosed_hold(.pending_row) | not) then
+               .order += 1
+               | .records += [parse_row(.pending_row; .section; .order)]
+               | .pending_row = null
+             else . end
+         end
        elif structured_row($line) then
-         .order += 1
-         | .records += [parse_row($line; .section; .order)]
+         if unclosed_hold($line) then
+           .pending_row = $line
+         else
+           .order += 1
+           | .records += [parse_row($line; .section; .order)]
+         end
        elif ((.records | length) > 0 and (.records[-1].structured == true) and ($line | test("^[[:space:]]+"))) then
          ($line | trim) as $body
          | if $body == "" then .
@@ -540,6 +574,10 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
          .order += 1
          | .records += [{order:.order,state:.section,structured:false,id:null,raw:$line,body_lines:[],body_excerpt:null}]
        end)
+    | if .pending_row != null then
+        .order += 1 | .records += [parse_row(.pending_row; .section; .order)] | .pending_row = null
+      else . end
+    | del(.pending_row)
     | .records |= map(
         if (.body_lines | length) > 0 then
           .hold_set = cap(.body_lines[0]; "^Captain hold set:[[:space:]]*(?<v>[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?)$")
