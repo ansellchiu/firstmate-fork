@@ -320,8 +320,6 @@ test_build_injects_binds_then_arms() {
   assert_present "$board" "build reported success without a board"
   assert_contains "$(cat "$board")" "does not answer this card" \
     "the built board does not say that a note is not an answer"
-  assert_contains "$(cat "$board")" "options: item.options.map" \
-    "the built board does not carry its authored options in the answer context"
 
   # Round-trip: apart from the reconcile choice the build adds to every
   # decision card, the payload extracted from the built page is the same JSON

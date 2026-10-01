@@ -670,8 +670,9 @@ cmd_read() {
           if (ref($d) eq "HASH" && defined($d->{question}) && !ref($d->{question})) {
             my $sel = defined($d->{selection}) && !ref($d->{selection}) ? $d->{selection} : "";
             my $nt = defined($d->{note}) && !ref($d->{note}) ? $d->{note} : "";
-            $_ =~ s/[\x00-\x1f\x7f]/ /g for ($sel, $nt);
-            print "card_key: $d->{question}\n";
+            my $key = $d->{question};
+            $_ =~ s/[\x00-\x1f\x7f]/ /g for ($key, $sel, $nt);
+            print "card_key: $key\n";
             print "card_selection: ", (length $sel ? $sel : "(none - a note alone answers nothing)"), "\n" if exists $d->{selection};
             print "card_note: $nt\n" if length $nt;
           }
