@@ -3317,6 +3317,7 @@ test_non_iso_since_and_hold_until_degrade_to_unknown() {
 
 ## Queued
 - [ ] bad-since - Gate with non-ISO since (since not-a-real-date)
+- [ ] bad-calendar-since - Gate with calendar-invalid since (since 2026-13-45)
 - [ ] bad-until - Dated hold with non-ISO until (repo: firstmate) (kind: captain) (hold: wait for decision) (hold-kind: captain) (hold-until: not-a-real-until)
   Captain hold set: 2026-07-14T12:00:00Z
 
@@ -3325,9 +3326,10 @@ EOF
   json=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$BEARINGS" --json) || fail "bearings failed"
   printf '%s' "$json" | jq -e '
     ([.gates[] | select(.id == "bad-since")][0].filed == "unknown")
-      and ([.gates[] | select(.id == "bad-until")][0].reason == "until unknown: wait for decision")
-  ' >/dev/null || fail "non-ISO since or hold_until did not degrade to unknown: $json"
-  pass "non-ISO since and hold_until degrade to unknown rather than date or prose"
+      and ([.gates[] | select(.id == "bad-calendar-since")][0].filed == "unknown")
+      and (.decisions_open | any(.[]; .id == "bad-until"))
+  ' >/dev/null || fail "non-ISO since did not degrade to unknown or non-ISO hold_until suppressed the captain call: $json"
+  pass "non-ISO since degrades to unknown and non-ISO hold_until keeps the captain call live"
 }
 
 test_task_teardown_during_metadata_capture_does_not_abort_snapshot

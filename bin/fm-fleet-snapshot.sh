@@ -409,6 +409,14 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       if ($d | type) != "string" then null
       elif ($d | test("T")) then try ($d | fromdateiso8601) catch null
       else try (($d + "T00:00:00Z") | fromdateiso8601) catch null end;
+    def valid_iso_date:
+      . as $d
+      | type == "string"
+      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
+      and (if test("T")
+        then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
+        else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
+        end);
     def days_between($from; $to):
       (timestamp_epoch($from)) as $a
       | (timestamp_epoch($to)) as $b
@@ -425,7 +433,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
     def without_hold:
       gsub("(?s)\\(hold:[^)]*\\)"; "");
     def metadata($rest; $key):
-      cap(($rest | without_hold); "(?:^|[\\(,][[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
+      cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
     # LOAD-BEARING, do not remove as a duplicate definition of the kind field.
     # tasks-axi 0.2.5 omits the (kind: ...) metadata when a title starts with
     # uppercase SCOUT or SHIP at a JavaScript word boundary (ASCII letters,
@@ -444,7 +452,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
     def hold_metadata($rest):
       cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>[^)]*)");
     def metadata_word($rest; $key):
-      cap(($rest | without_hold); "(?:^|[\\(,][[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
+      cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
     def url_pattern: "https?://[^[:space:])\"<>]+";
     def wrapped_url_pattern: "<?" + url_pattern + ">?";
     def links($rest): [$rest | scan(url_pattern)];
@@ -611,7 +619,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
           | .hold_bucket =
               (if .hold_kind != "captain" or .hold_reason == null or .state == "done" then null
                elif (.unresolved_blocker_ids | length) > 0 then "blocked"
-               elif .hold_until != null and .hold_until > $today then "dated"
+               elif (.hold_until | valid_iso_date) and .hold_until > $today then "dated"
                elif .hold_until == null and .hold_age_days != null
                     and .hold_age_days >= $age_days then "aged"
                else "live" end)

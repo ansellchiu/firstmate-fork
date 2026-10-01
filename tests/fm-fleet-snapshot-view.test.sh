@@ -1111,6 +1111,8 @@ test_backlog_multiline_hold_and_structural_since_parsing() {
   since we need input
   from multiple people) (since 2026-10-02) (hold-kind: captain)
   Captain hold set: 2026-10-02T12:00:00Z
+- [ ] prose-since - since the upgrade builds fail, since upgrade (since v2 upgrade) (since 2026-10-04)
+- [ ] repo-prose - repo: wrong title prose (repo: firstmate) (since 2026-10-05)
 - [ ] single-line-since - Single line with since prose in hold (repo: firstmate) (kind: ship) (since 2026-10-03) (hold: wait for captain, since we need input) (hold-kind: captain)
   Captain hold set: 2026-10-03T12:00:00Z
 
@@ -1121,6 +1123,8 @@ EOF
     ([.backlog.records[] | select(.id == "leading-since")][0]) as $lead
     | ([.backlog.records[] | select(.id == "trailing-since")][0]) as $trail
     | ([.backlog.records[] | select(.id == "single-line-since")][0]) as $single
+    | ([.backlog.records[] | select(.id == "prose-since")][0]) as $prose
+    | ([.backlog.records[] | select(.id == "repo-prose")][0]) as $repo
     | $lead.since == "2026-10-01"
       and ($lead.hold_reason | contains("since we need input"))
       and $lead.hold_kind == "captain"
@@ -1134,6 +1138,9 @@ EOF
       and $single.hold_reason == "wait for captain, since we need input"
       and $single.hold_kind == "captain"
       and $single.hold_set == "2026-10-03T12:00:00Z"
+      and $prose.since == "2026-10-04"
+      and $repo.repo == "firstmate"
+      and $repo.since == "2026-10-05"
   ' >/dev/null || fail "multi-line hold or structural since parsing failed: $snap"
   pass "backlog multi-line hold notes assemble cleanly and since is extracted structurally"
 }

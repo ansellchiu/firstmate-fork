@@ -76,8 +76,9 @@
 # when known, otherwise its durable identifier.
 # A Charted Next row MAY carry `filed`, the durable filed date (YYYY-MM-DD, or
 # that date with a UTC timestamp) the template orders the section by, newest
-# first; a row with no comparable date keeps its payload order after every dated
-# row. Anything else in that field refuses rather than sorting on garbage.
+# first; a row with no comparable date, including the literal `unknown` for a
+# non-ISO source date, keeps its payload order after every dated row. Anything
+# else in that field refuses rather than sorting on garbage.
 #
 # The board path is stable - $FM_HOME/.lavish/bearings-board.html - so a
 # re-invocation rebuilds the same file in place, which keeps the same Lavish

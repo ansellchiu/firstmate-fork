@@ -379,8 +379,13 @@ MODEL=$(printf '%s' "$SNAP" | jq \
       elif length > $n then (if $n == 1 then "…" else (.[:($n - 1)] + "…") end)
       else . end;
   def is_iso_date:
-    (type == "string")
-    and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z)?$");
+    . as $d
+    | type == "string"
+    and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
+    and (if test("T")
+      then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
+      else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
+      end);
   def as_iso_date_or_unknown:
     if . == null then null
     elif is_iso_date then .
