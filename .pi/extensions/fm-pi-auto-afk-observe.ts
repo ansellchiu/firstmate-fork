@@ -19,8 +19,7 @@
 // Turning this into automatic entry is a captain product decision that must
 // first add an explicit advance-consent grant and a new validated transition in
 // the posture's record owner. Do not close that gap from inside this file.
-// data/fm-auto-afk-idle-detect-s1/report.md holds the full investigation, the
-// Pi-source evidence for the signals used below, and the acceptance tests.
+// tests/fm-pi-auto-afk-observe.test.sh is the executable form of this boundary.
 // docs/configuration.md owns the config/pi-auto-afk contract.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
