@@ -1480,10 +1480,17 @@ families_for_changed_path() {
       printf '%s\n' "__script__:fm-pi-watch-extension.test.sh"
       printf '%s\n' live-harness-optin
       ;;
+    .pi/extensions/fm-pi-auto-afk-observe.ts)
+      # The observe-only Pi idle detector: its own portable suite plus the
+      # shared extension typecheck. It touches no other suite's fixtures.
+      printf '%s\n' __script__:fm-pi-auto-afk-observe.test.sh
+      printf '%s\n' __script__:fm-pi-primary-types.test.sh
+      ;;
     .pi/extensions/lib/fm-primary-session-lock.ts)
       # Every suite that executes this file, either directly or by copying it
       # into a fixture the watcher extension imports from.
       printf '%s\n' "__script__:fm-primary-growth.test.sh"
+      printf '%s\n' "__script__:fm-pi-auto-afk-observe.test.sh"
       printf '%s\n' "__script__:fm-pi-primary-types.test.sh"
       printf '%s\n' "__script__:fm-pi-watch-extension.test.sh"
       printf '%s\n' "__script__:fm-calm-pi-extension.test.sh"
