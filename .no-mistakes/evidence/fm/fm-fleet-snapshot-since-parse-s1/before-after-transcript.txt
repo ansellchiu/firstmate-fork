@@ -1,0 +1,32 @@
+### backlog.md
+## In flight
+
+## Queued
+- [ ] leading-since - Leading since with multi-line hold (since 2026-10-01) (hold: wait for captain,
+  since we need input
+  from multiple people) (hold-kind: captain)
+  Captain hold set: 2026-10-01T12:00:00Z
+- [ ] prose-since - since the upgrade builds fail (since 2026-10-04)
+- [ ] bad-since - Gate with non-ISO since (since not-a-real-date)
+- [ ] bad-until - Dated hold with bad until (repo: firstmate) (hold: wait for decision) (hold-kind: captain) (hold-until: not-a-real-until)
+  Captain hold set: 2026-07-14T12:00:00Z
+
+## Done
+
+### BEFORE (base 5ed6b4e2) fm-fleet-snapshot.sh --json | [.backlog.records[] | select(.structured) | {id, since, hold_reason, hold_kind, hold_until, hold_bucket}]
+{"id":"leading-since","since":"2026-10-01","hold_reason":"wait for captain,","hold_kind":null,"hold_until":null,"hold_bucket":null}
+{"id":"prose-since","since":"2026-10-04","hold_reason":null,"hold_kind":null,"hold_until":null,"hold_bucket":null}
+{"id":"bad-since","since":"not-a-real-date","hold_reason":null,"hold_kind":null,"hold_until":null,"hold_bucket":null}
+{"id":"bad-until","since":null,"hold_reason":"wait for decision","hold_kind":"captain","hold_until":"not-a-real-until","hold_bucket":"dated"}
+
+### AFTER (d61fbcb7)
+{"id":"leading-since","since":"2026-10-01","hold_reason":"wait for captain,\n  since we need input\n  from multiple people","hold_kind":"captain","hold_until":null,"hold_bucket":"live"}
+{"id":"prose-since","since":"2026-10-04","hold_reason":null,"hold_kind":null,"hold_until":null,"hold_bucket":null}
+{"id":"bad-since","since":"not-a-real-date","hold_reason":null,"hold_kind":null,"hold_until":null,"hold_bucket":null}
+{"id":"bad-until","since":null,"hold_reason":"wait for decision","hold_kind":"captain","hold_until":"not-a-real-until","hold_bucket":"live"}
+
+### AFTER fm-bearings-snapshot.sh --json: gates filed + open decisions
+{"gates":[{"id":"prose-since","filed":"2026-10-04"},{"id":"bad-since","filed":"unknown"}],"decisions_open":[{"id":"leading-since"},{"id":"bad-until"}]}
+
+### BEFORE fm-bearings-snapshot.sh --json
+{"gates":[{"id":"prose-since","filed":"2026-10-04"},{"id":"leading-since","filed":"2026-10-01"},{"id":"bad-since","filed":"not-a-real-date"},{"id":"bad-until","filed":null}],"decisions_open":[]}
