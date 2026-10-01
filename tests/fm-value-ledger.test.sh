@@ -277,7 +277,7 @@ test_arm_registers_and_disarm_removes() {
   assert_contains "$(vl "$home" arm)" "armed: state/value-ledger.check.sh" "arm reports"
   assert_present "$home/state/value-ledger.check.sh" "shim written"
   assert_present "$home/state/value-ledger.check-trust" "shim bound"
-  assert_equals 700 "$(stat -f %Lp "$home/state/value-ledger.check.sh" 2>/dev/null || stat -c %a "$home/state/value-ledger.check.sh")" "shim mode"
+  assert_equals 700 "$(stat -c %a "$home/state/value-ledger.check.sh" 2>/dev/null || stat -f %Lp "$home/state/value-ledger.check.sh")" "shim mode"
   vl "$home" disarm >/dev/null
   assert_absent "$home/state/value-ledger.check.sh" "shim removed"
   assert_absent "$home/state/value-ledger.check-trust" "binding removed"
