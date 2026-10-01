@@ -1,0 +1,13 @@
+## real orphaned spinner (self-bounded 90s)
+81297     1 00:02   0:01.04  87.6 bash
+
+## watcher run: env -u FM_FAKE_PROCS FM_LOAD_ALARM_MULTIPLE=off FM_ORPHAN_MIN_AGE=5 FM_ORPHAN_MIN_CPU=3 FM_POLL=2 bin/fm-watch.sh
+check: leaked worker probe - orphaned shell pid 78088 (ppid 1, cumulative path: 737s own cpu over 3579s alive); pid 81297 (ppid 1, cumulative path: 4s own cpu over 6s alive) matched on consecutive polls, and is starving every lane on this machine, including this watcher and any running suite. Hungriest: pid 6738 (ppid 1, 87.7% cpu) /Users/achiu/.local/share/lumen/sunshine; pid 81297 (ppid 1, 82.3% cpu) bash; pid 78088 (ppid 1, 27.6% cpu) bash. Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain).
+watcher exit=0 after 5s
+
+## state: .wake-queue
+1790832940	1	check	orphan-shell	check: leaked worker probe - orphaned shell pid 78088 (ppid 1, cumulative path: 737s own cpu over 3579s alive); pid 81297 (ppid 1, cumulative path: 4s own cpu over 6s alive) matched on consecutive polls, and is starving every lane on this machine, including this watcher and any running suite. Hungriest: pid 6738 (ppid 1, 87.7% cpu) /Users/achiu/.local/share/lumen/sunshine; pid 81297 (ppid 1, 82.3% cpu) bash; pid 78088 (ppid 1, 27.6% cpu) bash. Find the owning task and steer that worker to reap its own processes (killing them is destructive and needs the captain).
+## state: .orphan-alarm
+78088
+81297
+spinner alive after cleanup: no

@@ -1,0 +1,18 @@
+ok - an orphaned hot shell wakes once per episode after two polls, and re-arms when it is gone
+test_orphaned_shell_alarm_surfaces_once_then_rearms rc=0
+ok - a single sample of an orphaned shell is recorded, not alarmed, and gone pids are forgotten
+test_orphaned_shell_single_sample_is_not_an_alarm rc=0
+ok - a surviving reported orphan does not mask a new orphaned-shell leak
+test_surviving_orphan_does_not_mask_a_new_leak rc=0
+ok - orphaned spinners starved to 5% of a core still alarm on cumulative CPU, all named
+test_contended_orphaned_spinner_alarms_on_cumulative_cpu rc=0
+ok - a long-lived mostly-sleeping orphaned shell and a young orphan do not alarm
+test_quiet_or_young_orphaned_shell_is_not_an_alarm rc=0
+ok - a hot ppid-1 app or daemon and a parented shell do not alarm
+test_hot_orphaned_non_shell_is_not_an_alarm rc=0
+ok - sustained machine overload wakes once per episode after its streak, names its hungriest processes, and re-arms on recovery
+test_machine_load_alarm_surfaces_once_then_rearms rc=0
+ok - a one-minute load spike with a quiet five-minute average does not alarm
+test_machine_load_spike_is_not_an_alarm rc=0
+ok - FM_LOAD_ALARM_MULTIPLE=off disables the load guard entirely
+test_machine_load_guard_can_be_disabled rc=0
