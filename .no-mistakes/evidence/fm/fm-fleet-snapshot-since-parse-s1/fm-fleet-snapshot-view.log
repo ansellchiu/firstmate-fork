@@ -1,0 +1,48 @@
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - empty fleet snapshot and view use explicit absence markers
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - fixture snapshot covers task rows, backlog rows, pointers, and stable ordering
+ok - home-summary excludes kind=secondmate from unowned_current and terminal_in_flight
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - undated captain holds age after a configurable threshold, decided only from structured fields
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - captain-hold buckets are total, mutually exclusive, and never decided by prose
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - main_inventory discloses orphan/unstructured and clears when inventory is consistent
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - backlog normalization preserves strict roles and resolves every blocker compatibly
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - snapshot event hints follow reconciled current state
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - durable fold keeps an open decision past a later unrelated event
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a live secondmate endpoint preserves unrelated open decisions
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - durable captain-held transfer closes the duplicate live status decision
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - durable fold clears a decision only on a keyed resolution
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a completed scout's stale decision surfaces as a report pointer, not pending
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a scout still parked at a decision stays pending (terminal clear does not over-fire)
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - snapshot includes durable scout reports after teardown
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - snapshot parses tasks-axi rows and respects operational overrides
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - fleet view renders the snapshot without secondmate peek guidance
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - fleet view renders secondmate agent liveness
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - backlog multi-line hold notes assemble cleanly and since is extracted structurally

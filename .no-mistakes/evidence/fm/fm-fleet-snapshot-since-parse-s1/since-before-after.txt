@@ -1,0 +1,13 @@
+$ fm-fleet-snapshot.sh --json | jq '.backlog.records[] | {id,since,hold_reason,hold_set}'
+--- BEFORE (base 5ed6b4e2)
+{"id":"trailing-since","since":null,"hold_reason":"wait for captain,","hold_set":null}
+{"id":"single-line-since","since":"we need input","hold_reason":"wait for captain, since we need input","hold_set":null}
+{"id":"prose-only","since":"upgrade breaks (repo: firstmate","hold_reason":null,"hold_set":null}
+home-summary queued since:
+[{"id":"trailing-since","since":null},{"id":"prose-only","since":"upgrade breaks (repo: firstmate"},{"id":"single-line-since","since":"we need input"}]
+--- AFTER (HEAD c1980722)
+{"id":"trailing-since","since":"2026-10-02","hold_reason":"wait for captain,\n  since we need input\n  from multiple people","hold_set":"2026-10-02T12:00:00Z"}
+{"id":"single-line-since","since":"2026-10-03","hold_reason":"wait for captain, since we need input","hold_set":null}
+{"id":"prose-only","since":"upgrade breaks (repo: firstmate","hold_reason":null,"hold_set":null}
+home-summary queued since:
+[{"id":"prose-only","since":"unknown"},{"id":"single-line-since","since":"2026-10-03"},{"id":"trailing-since","since":"2026-10-02"}]
