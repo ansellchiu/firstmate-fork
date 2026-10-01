@@ -21,6 +21,26 @@ if [ -z "${FM_ROOT_OVERRIDE:-}" ]; then
   export FM_ROOT_OVERRIDE
 fi
 
+# Machine-wide guard seams (host-isolation seam). bin/fm-watch.sh reads the real
+# process table and load average once per poll to catch a leaked worker probe,
+# so every watcher a test starts would otherwise depend on what else is running
+# on the machine - a busy dev box or CI runner trips the load backstop mid-case.
+# bin/fm-test-run.sh pins both for the tests it runs; pin them here too so a
+# direct `bash tests/<file>.test.sh` is hermetic as well, for the same reason the
+# wedge-alarm seam below lives here: sourcing this harness installs it, so it
+# cannot be forgotten at any of the many watcher launch sites. A suite or case
+# that sets its own value still wins, including the leak-guard cases that drive
+# these very checks. FM_FAKE_PROCS is honored when set at all (empty means an
+# empty sample), while FM_FAKE_LOADAVG is honored only when non-empty.
+if [ -z "${FM_FAKE_PROCS+x}" ]; then
+  FM_FAKE_PROCS=''
+  export FM_FAKE_PROCS
+fi
+if [ -z "${FM_FAKE_LOADAVG:-}" ]; then
+  FM_FAKE_LOADAVG='0.00 0.00'
+  export FM_FAKE_LOADAVG
+fi
+
 # Wedge-alarm notifier recorder (safety seam). The away-mode wedge alarm fires a
 # real OS-level desktop notification by default. Point its FM_WEDGE_ALARM_EXEC
 # seam at a recorder for every
