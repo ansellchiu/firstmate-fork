@@ -1,0 +1,28 @@
+$ fm-procevent-lavish.sh answers <result>   # keyed answers that close calls
+sample-membership-call	gold-only	Membership: gold-only - captain detail
+sample-gated-work	go	Gated work: go	release
+sample-nonexistent-call	yes	Absent call: yes
+sample-headline-call	f1-when-fp-gold	Headline: f1-when-fp-gold
+sample-note-select	yes	Yes - because reasons
+
+$ fm-procevent-lavish.sh read <result>   # what firstmate reads (note-only card excerpt)
+text:
+| Note only
+card_key: sample-note-only
+card_selection: (none - a note alone answers nothing)
+card_note: why is memory growing vs upstream
+ANNOTATION 11 of 15
+
+
+$ tasks show sample-note-only
+  state: queued
+  held: yes
+
+$ tasks show sample-free-value
+  state: queued
+  held: yes
+
+$ tasks show sample-note-select
+  state: done
+  held: no
+
