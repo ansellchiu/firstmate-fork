@@ -35,6 +35,13 @@ export interface AsyncExecOptions {
    * maxBuffer. Defaults to 1 MiB.
    */
   maxBuffer?: number;
+  /**
+   * Upper bound on the child's whole lifetime, mirroring spawnSync's timeout:
+   * a child still running at the deadline is killed and reported with a null
+   * status, the same answer a signalled child already gives. Unbounded when
+   * omitted, so a caller that must not wait forever has to say so.
+   */
+  timeoutMs?: number;
 }
 
 const DEFAULT_MAX_BUFFER = 1024 * 1024;
@@ -51,28 +58,58 @@ export function runCommandAsync(
     let stderrBytes = 0;
     const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER;
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const finish = (status: number | null, detail = ""): void => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer);
       resolve({ status, stdout, stderr: detail ? `${stderr}${detail}` : stderr });
     };
     let child;
+    // A bounded child leads its own process group, so a wedged GRANDCHILD
+    // (a `ps` liveness fallback, say) cannot outlive the kill still holding
+    // the inherited stdout/stderr pipes: the whole group goes. Only a caller
+    // that asked for a bound gets that group - an unbounded child keeps the
+    // caller's group, where a group-directed signal still reaches it. Windows
+    // has no process groups to lead and would give a detached child its own
+    // console, so it keeps the plain spawn and the direct kill.
+    const bounded = options.timeoutMs !== undefined && options.timeoutMs > 0;
+    const ownsGroup = bounded && process.platform !== "win32";
     try {
       child = spawn(command, [...args], {
         cwd: options.cwd,
         env: options.env,
         stdio: ["pipe", "pipe", "pipe"],
+        detached: ownsGroup,
       });
     } catch (error) {
       finish(null, error instanceof Error ? error.message : String(error));
       return;
+    }
+    const kill = (signal?: NodeJS.Signals): void => {
+      if (ownsGroup && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, signal ?? "SIGTERM");
+          return;
+        } catch {
+          // The group is already gone, or was never ours to signal.
+        }
+      }
+      child.kill(signal);
+    };
+    if (bounded) {
+      timer = setTimeout(() => {
+        kill("SIGKILL");
+        finish(null, `timed out after ${options.timeoutMs}ms`);
+      }, options.timeoutMs);
+      timer.unref?.();
     }
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
       if (settled) return;
       const bytes = Buffer.byteLength(chunk, "utf8");
       if (stdoutBytes + bytes > maxBuffer) {
-        child.kill();
+        kill();
         finish(null, `stdout exceeded ${maxBuffer} bytes`);
         return;
       }
@@ -84,7 +121,7 @@ export function runCommandAsync(
       if (settled) return;
       const bytes = Buffer.byteLength(chunk, "utf8");
       if (stderrBytes + bytes > maxBuffer) {
-        child.kill();
+        kill();
         finish(null, `stderr exceeded ${maxBuffer} bytes`);
         return;
       }

@@ -234,6 +234,46 @@ function hasOpenNeedsDecision(
   return [...open.values()].includes("needs-decision");
 }
 
+/**
+ * How many notifications main's drain would present right now, for naming the
+ * size of a catch-up burst in the one follow-up the captain is shown
+ * (fm-primary-pi-watch.ts sendWake). Display only: it classifies nothing and
+ * owns no acknowledgement. bin/fm-wake-lib.sh owns the count itself - which
+ * rows main may act on, which the supervision branch holds, and which rows the
+ * drain collapses into one - so this is a read through that owner rather than a
+ * second counting rule. null when the owner cannot be run at all, because a
+ * count nobody produced must not become a number the captain trusts - which is
+ * also what the owner reports as "unknown" for a queue it cannot count, rather
+ * than the pending-row sentinel its alarm-driven sibling returns. Awaited
+ * rather than synchronous for the same reason runGrantScript below is: every
+ * caller runs on the Pi thread that draws the captain's TUI
+ * (lib/fm-async-exec.ts), and bounded because the caller's notification must
+ * never wait on it: this count reaches a process-liveness check that can fall
+ * back to `ps`, and a doorbell the captain needs is not allowed to queue behind
+ * a stalled read of a number that only decorates it.
+ */
+const COUNT_TIMEOUT_MS = 2000;
+
+export async function mainDrainPendingCount(state: string, fmRoot: string): Promise<number | null> {
+  const result = await runCommandAsync(
+    "bash",
+    ["-c", '. "$1" && fm_wake_actor_presented_count main', "fm-wake-count", `${fmRoot}/bin/fm-wake-lib.sh`],
+    {
+      env: {
+        ...process.env,
+        FM_ROOT_OVERRIDE: fmRoot,
+        FM_STATE_OVERRIDE: state,
+        FM_WAKE_QUEUE: `${state}/.wake-queue`,
+        FM_WAKE_QUEUE_LOCK: `${state}/.wake-queue.lock`,
+      },
+      timeoutMs: COUNT_TIMEOUT_MS,
+    },
+  );
+  if (result.status !== 0) return null;
+  const count = Number.parseInt(result.stdout.trim(), 10);
+  return Number.isInteger(count) && count >= 0 ? count : null;
+}
+
 export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = false): UnreadWakeScope {
   let queue = "";
   try {
