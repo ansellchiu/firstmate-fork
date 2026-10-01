@@ -1,0 +1,28 @@
+$ # origin + MAIN home clone with a pool worktree, plus a SECOND MATE home holding its own clone
+pool/1/app common dir:         /private$W/main-home/projects/app/.git
+mate-home/projects/app common: /private$W/mate-home/projects/app/.git
+
+--- [BASE] $ CLAUDE_CONFIG_DIR=$W/cfg fm-claude-trust.sh $W/pool/1/app $W/mate-home/projects/app
+error: refusing to pre-register Claude trust: '/private$W/pool/1/app' is not a worktree of project '/private$W/mate-home/projects/app'
+exit=1
+
+--- [BASE] $ CLAUDE_CONFIG_DIR=$W/cfg fm-claude-trust.sh $W/pool/2/other $W/mate-home/projects/app
+error: refusing to pre-register Claude trust: '/private$W/pool/2/other' is not a worktree of project '/private$W/mate-home/projects/app'
+exit=1
+[BASE] .claude.json projects with hasTrustDialogAccepted:
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/fmtrust.BqBF/cfg-BASE/.claude.json'
+   (no .claude.json written)
+
+--- [HEAD] $ CLAUDE_CONFIG_DIR=$W/cfg fm-claude-trust.sh $W/pool/1/app $W/mate-home/projects/app
+trusted: /private$W/pool/1/app
+trusted (project root): /private$W/main-home/projects/app
+exit=0
+
+--- [HEAD] $ CLAUDE_CONFIG_DIR=$W/cfg fm-claude-trust.sh $W/pool/2/other $W/mate-home/projects/app
+error: refusing to pre-register Claude trust: '/private$W/pool/2/other' is not a worktree of project '/private$W/mate-home/projects/app'
+exit=1
+[HEAD] .claude.json projects with hasTrustDialogAccepted:
+   /private$W/pool/1/app True
+   /private$W/main-home/projects/app True

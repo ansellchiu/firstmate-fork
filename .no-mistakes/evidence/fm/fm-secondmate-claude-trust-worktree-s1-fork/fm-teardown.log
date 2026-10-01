@@ -69,6 +69,12 @@ ok - an unreadable ship receipt refuses teardown as unreadable, not as missing
 ok - a host without jq warns that receipts are unavailable instead of refusing cleanup
 ok - the archive and report-receipt steps warn instead of refusing when jq is unavailable
 ok - --force lifts the no-receipt refusal without fabricating a receipt
+ok - --standdown stands down a never-started dispatch with no receipt
+ok - --standdown still refuses a dirty worktree
+ok - --standdown still refuses a worktree with commits beyond its base
+ok - --standdown does not lift the receipt gate for a landed ship
+ok - --standdown counts commits landed on main as commits beyond the dispatch base
+ok - --standdown fails closed when the record carries no dispatch base
 ok - a merge proved during cleanup reaches the index before the record is discarded
 ok - a ledger row for a different head never authorizes a parked-run abort
 ok - a malformed ledger row never authorizes a parked-run abort
