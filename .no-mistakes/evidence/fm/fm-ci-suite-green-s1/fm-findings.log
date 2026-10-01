@@ -1,0 +1,22 @@
+ok - slug rules normalize, cap, and refuse symbol-only titles
+ok - record writes a stamped pending entry per task
+ok - record dedups identical evidence and refuses slug collisions
+ok - record refuses malformed input without writing
+ok - triage closes an entry once, with the note preserved verbatim
+ok - malformed files never crash the scan and never hide entries
+ok - the fleet listing bounds its output and discloses the remainder
+ok - cleanup preserves the findings file and surfaces pending entries
+ok - cleanup without findings prints no findings surface
+ok - ship briefs carry the incidental-findings section
+ok - scout and secondmate scaffolds stay findings-free
+ok - the brief's record command binds the scaffolding home's data dir
+ok - an entry whose status value is empty is pending and closable
+ok - recording a dismissed slug again reopens it as a fresh pending entry
+ok - record trims field whitespace once, so dedup compares what was written
+ok - record and triage serialize, so a rewrite cannot drop a concurrent append
+ok - record and triage refuse a task id the pending scan could not reach
+ok - the unit separator is rejected where the field contract claims it is
+ok - an inserted status line stays inside its own block
+ok - a torn entry neither blocks nor silently absorbs the retry
+ok - the brief's record command binds the scaffolding home's state dir
+ok - the promoted ship instructions bind the promoting home

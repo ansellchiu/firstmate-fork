@@ -1,0 +1,4 @@
+# pi version under test: 0.99.1
+ok - pi (0.99.1) calm=off: the steer landed exactly once, submit read unknown, the generating composer read unknown, and a draft on it stays pending
+ok - pi (0.99.1) calm=on: the steer landed exactly once, submit read empty, the generating composer read empty, and a draft on it stays pending
+ok - pi (0.99.1): the working-composer guard verified both presentations
