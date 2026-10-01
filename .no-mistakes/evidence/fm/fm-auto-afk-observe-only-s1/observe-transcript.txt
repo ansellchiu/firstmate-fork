@@ -1,0 +1,38 @@
+=== default-off (config/pi-auto-afk=<absent>, idle=0.2s countdown=1s, actions=wait:1500)
+--- Pi UI trace:
+subscriptions=0
+--- state/.pi-auto-afk-observations:
+<none>
+--- state/ after run:
+.lock
+
+=== observe-expiry (config/pi-auto-afk=observe, idle=0.5s countdown=2s, actions=wait:2800)
+--- Pi UI trace:
+subscribe
+setStatus firstmate-auto-afk Auto-AFK in 2s - any Pi input cancels; /afk enters now
+setStatus firstmate-auto-afk Auto-AFK in 1s - any Pi input cancels; /afk enters now
+setStatus firstmate-auto-afk <cleared>
+notify Auto-AFK would enter now (observe mode; no away posture entered)
+subscriptions=1
+--- state/.pi-auto-afk-observations:
+2026-10-01T04:26:45.335Z	observe	countdown-start	idle=0.5	countdown=2
+2026-10-01T04:26:47.338Z	observe	would-enter	idle=0.5	countdown=2
+--- state/ after run:
+.lock
+.pi-auto-afk-observations
+
+=== observe-cancel (config/pi-auto-afk=observe, idle=0.3s countdown=3s, actions=wait:800,raw:x,wait:500)
+--- Pi UI trace:
+subscribe
+setStatus firstmate-auto-afk Auto-AFK in 3s - any Pi input cancels; /afk enters now
+setStatus firstmate-auto-afk <cleared>
+setStatus firstmate-auto-afk Auto-AFK in 3s - any Pi input cancels; /afk enters now
+subscriptions=1
+--- state/.pi-auto-afk-observations:
+2026-10-01T04:26:48.092Z	observe	countdown-start	idle=0.3	countdown=3
+2026-10-01T04:26:48.588Z	observe	cancelled	idle=0.3	countdown=3	remaining=3
+2026-10-01T04:26:48.890Z	observe	countdown-start	idle=0.3	countdown=3
+--- state/ after run:
+.lock
+.pi-auto-afk-observations
+

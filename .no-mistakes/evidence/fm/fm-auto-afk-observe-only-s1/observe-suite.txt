@@ -1,0 +1,15 @@
+ok - absent config/pi-auto-afk leaves the session untouched: no status, no input listener, no writes
+ok - only the exact value observe arms it; any other value stays off
+ok - on an opted-in home the idle deadline opens a visible countdown and records it
+ok - a repaint delayed by a blocked event loop reports the real time left, not a decremented count
+ok - one raw terminal byte cancels the countdown, is returned unchanged, and is recorded
+ok - extension-sourced input does not count as the captain
+ok - a submitted interactive message cancels it too, as a backup for the raw listener
+ok - expiry reports the observation and enters no away posture
+ok - non-TUI modes stay inert
+ok - a worker that does not hold the home lock observes nothing
+ok - a lock acquired after session_start arms the observer on the next observed input
+ok - without the raw listener the observer stays inert rather than running half-armed
+ok - a secondmate home, which is idle by design, stays inert
+ok - an existing away posture, legacy flag, or unfinished return suppresses the observer
+ok - session shutdown drops the listener and every pending timer

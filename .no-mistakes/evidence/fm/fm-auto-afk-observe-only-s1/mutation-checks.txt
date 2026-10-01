@@ -1,0 +1,6 @@
+### Mutation A: count extension-sourced input as the captain
+not ok - extension input cancelled the countdown: 2026-10-01T04:27:06.391Z	observe	countdown-start	idle=0.2	countdown=1
+
+### Mutation B: session_shutdown no longer clears timers
+265:    // standDown removed
+not ok - a timer survived session shutdown and reached expiry
