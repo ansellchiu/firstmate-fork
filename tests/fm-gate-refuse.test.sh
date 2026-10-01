@@ -307,6 +307,12 @@ SH
     "window=firstmate:fm-task-x1" "endpoint_task_id=task-x1" \
     "worktree=$case_dir/wt" "project=$case_dir/project" \
     "kind=ship" "mode=no-mistakes" "spawn_gen=spawn-gate-refuse-task-x1"
+  FM_HOME="$case_dir" FM_STATE_OVERRIDE="$case_dir/state" \
+    "$ROOT/bin/fm-receipt.sh" write-landing --task task-x1 \
+      --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not record the teardown fixture's landing receipt"
   touch "$case_dir/state/.last-watcher-beat"
   printf '%s\n' "$case_dir"
 }

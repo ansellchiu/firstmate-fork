@@ -428,6 +428,9 @@
 # success line and state/<id>.meta omit them.
 # Every fresh spawn or relaunch records a new spawn_gen= incarnation token so durable
 # consumers can distinguish a replacement worker that reuses the same task id.
+# A fresh ship or scout spawn also records dispatch_base=<sha>, the worktree HEAD
+# the worker was dispatched at; a relaunch keeps the original value. It is how
+# fm-teardown.sh --standdown proves a worktree has no commits beyond its base.
 # When the home session's frozen trace-context decision is enabled (see
 # docs/configuration.md and bin/fm-trace-context-lib.sh), the meta also records
 # one W3C traceparent= carrier, the same value injected into the pane as
@@ -4530,6 +4533,10 @@ else
   SPAWN_FRESH_COMMIT_PENDING=1
 fi
 SPAWN_META_PATH=$SPAWN_META_TMP
+DISPATCH_BASE=
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ -n "$WT" ]; then
+  DISPATCH_BASE=$(git -C "$WT" rev-parse --verify --quiet HEAD 2>/dev/null || true)
+fi
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
@@ -4558,6 +4565,7 @@ preserve_relaunch_meta() {
   echo "effort=${EFFORT:-default}"
   [ -z "${BUSY_GEN:-}" ] || echo "busy_gen=$BUSY_GEN"
   echo "spawn_gen=$SPAWN_GEN"
+  [ -z "$DISPATCH_BASE" ] || echo "dispatch_base=$DISPATCH_BASE"
   # Default-off writes no traceparent= line.
   # backend= is written only for a non-default (non-tmux) backend, so the
   # default path's meta stays byte-identical (absent backend= means tmux;

@@ -62,11 +62,40 @@ make_case() {
   cat > "$fakebin/tmux" <<'SH'
 #!/usr/bin/env bash
 set -u
+# Windows this fake has been told to kill. Kept in a file beside the fake, so the
+# ledger is per-case and a closed window stops being listed - real tmux stops
+# listing it, and fm_backend_tmux_kill settles an ambiguous kill status by
+# re-reading the inventory, so a fake that always relists is read as a window
+# that survived its close.
+_fm_killed="$0.killed"
+if [ "${1:-}" = "kill-window" ]; then
+  _target=
+  _prev=
+  for _arg in "$@"; do
+    if [ "$_prev" = -t ]; then _target=$_arg; fi
+    _prev=$_arg
+  done
+  [ -n "$_target" ] || exit 1
+  # Targets arrive in tmux's exact-match form, "=session:=window".
+  _target=${_target#=}
+  printf '%s\n' "${_target#*:=}" >> "$_fm_killed"
+  exit 0
+fi
 if [ "${1:-}" = "list-windows" ]; then
+  _listed=
   if [ -n "${FM_FAKE_TMUX_WINDOWS:-}" ]; then
-    printf '%s\n' "$FM_FAKE_TMUX_WINDOWS"
+    _listed=$FM_FAKE_TMUX_WINDOWS
   elif [ -n "${FM_FAKE_TMUX_WINDOW:-}" ]; then
-    printf '%s\n' "${FM_FAKE_TMUX_WINDOW#*:}"
+    _listed=${FM_FAKE_TMUX_WINDOW#*:}
+  fi
+  if [ -n "$_listed" ]; then
+    printf '%s\n' "$_listed" | while IFS= read -r _window; do
+      [ -n "$_window" ] || continue
+      if [ -s "$_fm_killed" ] && grep -qxF -- "$_window" "$_fm_killed"; then
+        continue
+      fi
+      printf '%s\n' "$_window"
+    done
   fi
   exit 0
 fi
