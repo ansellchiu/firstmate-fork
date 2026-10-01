@@ -2590,8 +2590,10 @@ HPACE_RACE="$TMP_ROOT/registration-pacing-race"; new_home "$HPACE_RACE"
 fm_test_track_procevent_home "$HPACE_RACE"
 PACE_RACE_LOG="$TMP_ROOT/registration-pacing-race.log"
 pe_register "$HPACE_RACE" lavish pace-race-src -- "$FAST_SOURCE" "$PACE_RACE_LOG" >/dev/null
-FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=3 pe "$HPACE_RACE" start pace-race-src >/dev/null
-FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=3 \
+# The floor only has to outlast the claim wait and re-registration below; a
+# short floor let a slow runner wake and launch before it was superseded.
+FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=15 pe "$HPACE_RACE" start pace-race-src >/dev/null
+FM_PROCEVENT_LAUNCH_FLOOR_SECONDS=15 \
   pe "$HPACE_RACE" start pace-race-src > "$TMP_ROOT/registration-pacing-race.out" 2>&1 &
 PACE_RACE_PID=$!
 wait_for "$FM_PROCEVENT_CLAIM_ROOT/pace-race-src.claim" \
