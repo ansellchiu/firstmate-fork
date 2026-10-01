@@ -433,8 +433,10 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       | if $v == null then null else ($v | trim) end;
     def hold_close:
       "\\)(?=[[:space:]]*(?:\\z|\\((?:repo|kind|priority|hold-kind|hold-until):|\\((?:since|merged|reported|done)[[:space:]]))";
+    def hold_balanced:
+      "(?:[^()]|(?<p>\\((?:[^()]|\\g<p>)*\\)))*";
     def without_hold:
-      gsub("(?s)\\(hold:.*?" + hold_close; "");
+      gsub("(?s)\\(hold:(?:.*?" + hold_close + "|" + hold_balanced + "\\))"; "");
     def metadata($rest; $key):
       cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
     # LOAD-BEARING, do not remove as a duplicate definition of the kind field.
@@ -453,7 +455,8 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif ($rest | test("^SHIP(?![A-Za-z0-9_])")) then "ship"
         else null end;
     def hold_metadata($rest):
-      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>.*?)" + hold_close);
+      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>.*?)" + hold_close)
+      // cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>" + hold_balanced + ")\\)");
     def metadata_word($rest; $key):
       cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
     def url_pattern: "https?://[^[:space:])\"<>]+";
@@ -506,7 +509,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       ($line | test("^[-*][[:space:]]+\\[[ xX]\\][[:space:]]+[^[:space:]]+[[:space:]]+-[[:space:]]+"))
       or ($line | test("^[-*][[:space:]]+\\*\\*[^*]+\\*\\*[[:space:]]+-[[:space:]]+"));
     def unclosed_hold($line):
-      $line | test("(?s)\\(hold:(?!.*" + hold_close + ")");
+      $line | test("(?s)\\(hold:(?!.*" + hold_close + ")(?!" + hold_balanced + "\\))");
     def parse_row($line; $section; $order):
       row_match($line) as $m
       | if $m == null then

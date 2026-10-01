@@ -1116,6 +1116,9 @@ test_backlog_multiline_hold_and_structural_since_parsing() {
 - [ ] paren-hold - Hold note with its own parenthetical (since 2026-10-06) (hold: waiting on fix (PR 12), since captain asked) (hold-kind: captain)
 - [ ] paren-multi - Multi-line hold with inner parenthetical (since 2026-10-07) (hold: waiting on (PR 9), since
   captain asked) (hold-kind: captain)
+- [ ] hold-then-blocked - Parked thing (repo: firstmate) (hold: parked) blocked-by: upstream - waits
+  Captain hold set: 2026-10-08T12:00:00Z
+- [ ] paren-hold-blocked - Paren hold then blocker (since 2026-10-09) (hold: fix (PR 12), since asked) blocked-by: upstream - waits
 - [ ] prose-only - Fix, since upgrade breaks (repo: firstmate) (kind: ship)
 - [ ] single-line-since - Single line with since prose in hold (repo: firstmate) (kind: ship) (since 2026-10-03) (hold: wait for captain, since we need input) (hold-kind: captain)
   Captain hold set: 2026-10-03T12:00:00Z
@@ -1154,6 +1157,15 @@ EOF
         | .since == "2026-10-07"
           and (.hold_reason | contains("captain asked"))
           and .hold_kind == "captain")
+      and ([.backlog.records[] | select(.id == "hold-then-blocked")][0]
+        | .hold_reason == "parked"
+          and .hold_set == "2026-10-08T12:00:00Z"
+          and .title == "Parked thing"
+          and .blocked_by == "upstream")
+      and ([.backlog.records[] | select(.id == "paren-hold-blocked")][0]
+        | .since == "2026-10-09"
+          and .hold_reason == "fix (PR 12), since asked"
+          and .title == "Paren hold then blocker")
   ' >/dev/null || fail "multi-line hold or structural since parsing failed: $snap"
   out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --secondmate-home-summary) || fail "home summary failed"
   printf '%s' "$out" | jq -e '
