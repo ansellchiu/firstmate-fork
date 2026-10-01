@@ -76,8 +76,9 @@
 # when known, otherwise its durable identifier.
 # A Charted Next row MAY carry `filed`, the durable filed date (YYYY-MM-DD, or
 # that date with a UTC timestamp) the template orders the section by, newest
-# first; a row with no comparable date keeps its payload order after every dated
-# row. Anything else in that field refuses rather than sorting on garbage.
+# first; a row with no comparable date, including the literal `unknown` for a
+# non-ISO source date, keeps its payload order after every dated row. Anything
+# else in that field refuses rather than sorting on garbage.
 #
 # The board path is stable - $FM_HOME/.lavish/bearings-board.html - so a
 # re-invocation rebuilds the same file in place, which keeps the same Lavish
@@ -126,7 +127,7 @@ validate_payload() {  # <data.json>
         else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $filed) catch false
         end);
     def optional_filed:
-      (has("filed") | not) or (.filed == null) or (.filed | valid_filed);
+      (has("filed") | not) or (.filed == null) or (.filed == "unknown") or (.filed | valid_filed);
     def optional_string($name): (has($name) | not) or (.[$name] | type == "string");
     def optional_https_url($name):
       (has($name) | not)

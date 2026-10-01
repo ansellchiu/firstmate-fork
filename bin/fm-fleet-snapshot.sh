@@ -23,6 +23,9 @@
 #     normalized current_role, requires_child_metadata, blocked_by_ids,
 #     unresolved_blocker_ids, captain_actionable, hold_set, hold_age_days,
 #     and hold_bucket fields.
+#     Rows whose hold reason spans multiple lines are assembled before parsing.
+#     Metadata fields such as since are extracted structurally outside the
+#     hold reason, preventing hold-reason prose from leaking into them.
 #     Repeated blocker tokens remain ordered; a blocker resolves only when its
 #     structured record is Done, and missing ids stay open.
 #     There is no separate decision type: any captain-held task is the same
@@ -33,7 +36,8 @@
 #     hold reason or body prose is ever matched. The buckets are total and
 #     mutually exclusive, so every captain hold lands in exactly one and none
 #     can fall through: "blocked" when any blocker is unresolved, else "dated"
-#     when hold_until is still in the future, else "aged" when an undated hold
+#     when hold_until is a valid ISO date still in the future (a non-ISO value
+#     is not undated either, so it stays "live"), else "aged" when an undated hold
 #     is at least FM_SNAPSHOT_UNDATED_HOLD_AGE_DAYS old (default 14; legacy
 #     unstamped holds fall back to `since`), else "live". A non-captain or Done
 #     row carries null.
@@ -406,6 +410,14 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       if ($d | type) != "string" then null
       elif ($d | test("T")) then try ($d | fromdateiso8601) catch null
       else try (($d + "T00:00:00Z") | fromdateiso8601) catch null end;
+    def valid_iso_date:
+      . as $d
+      | type == "string"
+      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
+      and (if test("T")
+        then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
+        else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
+        end);
     def days_between($from; $to):
       (timestamp_epoch($from)) as $a
       | (timestamp_epoch($to)) as $b
@@ -419,8 +431,12 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
     def cap($rest; $re):
       (((($rest | capture($re)?) // {}) | .v) // null) as $v
       | if $v == null then null else ($v | trim) end;
+    def hold_balanced:
+      "(?:[^()]|(?<p>\\((?:[^()]|\\g<p>)*\\)))*";
+    def without_hold:
+      gsub("(?s)\\(hold:(?:" + hold_balanced + "\\)|[^)]*\\))"; "");
     def metadata($rest; $key):
-      cap($rest; ".*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
+      cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
     # LOAD-BEARING, do not remove as a duplicate definition of the kind field.
     # tasks-axi 0.2.5 omits the (kind: ...) metadata when a title starts with
     # uppercase SCOUT or SHIP at a JavaScript word boundary (ASCII letters,
@@ -437,15 +453,16 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif ($rest | test("^SHIP(?![A-Za-z0-9_])")) then "ship"
         else null end;
     def hold_metadata($rest):
-      cap($rest; ".*\\(hold:[[:space:]]*(?<v>[^)]*)");
+      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>" + hold_balanced + ")\\)")
+      // cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>[^)]*)");
     def metadata_word($rest; $key):
-      cap($rest; ".*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
+      cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
     def url_pattern: "https?://[^[:space:])\"<>]+";
     def wrapped_url_pattern: "<?" + url_pattern + ">?";
     def links($rest): [$rest | scan(url_pattern)];
     def strip_trailing_metadata:
       reduce range(0; 20) as $_ (.;
-        sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
+        sub("(?s)[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
     def strip_title_artifacts:
       sub("[[:space:]]+-[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
       | sub("[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
@@ -459,6 +476,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
       | trim;
     def title_of($rest):
       $rest
+      | without_hold
       | gsub(wrapped_url_pattern; "")
       | sub("[[:space:]]*blocked-by:[[:space:]]+[^[:space:])]+[[:space:]]+-[[:space:]]+.*$"; "")
       | gsub("[[:space:]]*blocked-by:[[:space:]]+[^[:space:]]+"; "")
@@ -482,12 +500,14 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif $done != null then {verb:"done",date:$done}
         else {verb:null,date:null} end;
     def row_match($line):
-      (($line | capture("^[-*][[:space:]]+\\[(?<check>[ xX])\\][[:space:]]+(?<id>[^[:space:]]+)[[:space:]]+-[[:space:]]+(?<rest>.*)$")?) //
-       (($line | capture("^[-*][[:space:]]+\\*\\*(?<id>[^*]+)\\*\\*[[:space:]]+-[[:space:]]+(?<rest>.*)$")?)
+      (($line | capture("^[-*][[:space:]]+\\[(?<check>[ xX])\\][[:space:]]+(?<id>[^[:space:]]+)[[:space:]]+-[[:space:]]+(?<rest>(?s).*)$")?) //
+       (($line | capture("^[-*][[:space:]]+\\*\\*(?<id>[^*]+)\\*\\*[[:space:]]+-[[:space:]]+(?<rest>(?s).*)$")?)
         | if . == null then null else . + {check:" "} end));
     def structured_row($line):
       ($line | test("^[-*][[:space:]]+\\[[ xX]\\][[:space:]]+[^[:space:]]+[[:space:]]+-[[:space:]]+"))
       or ($line | test("^[-*][[:space:]]+\\*\\*[^*]+\\*\\*[[:space:]]+-[[:space:]]+"));
+    def unclosed_hold($line):
+      $line | test("(?s)\\(hold:(?!" + hold_balanced + "\\))");
     def parse_row($line; $section; $order):
       row_match($line) as $m
       | if $m == null then
@@ -523,15 +543,48 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
              body_lines:[],
              body_excerpt:null}
         end;
+    def commit_pending($pending; $section; $order):
+      if unclosed_hold($pending) and ($pending | test("\n")) then
+        ($pending | split("\n")) as $parts
+        | parse_row($parts[0]; $section; $order)
+        | .body_lines = [$parts[1:][] | trim | select(. != "")]
+      else parse_row($pending; $section; $order) end;
     reduce inputs as $line
-      ({path:$path,present:true,records:[],section:null,order:0};
+      ({path:$path,present:true,records:[],section:null,order:0,pending_row:null};
        if ($line | test("^##[[:space:]]+")) then
-         .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
+         (if .pending_row != null then
+            .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
+          else . end)
+         | .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
        elif .section == null or ($line | trim) == "" then
-         .
+         (if .pending_row != null then
+            .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
+          else . end)
+       elif .pending_row != null then
+         if structured_row($line) then
+           .order += 1 | .records += [commit_pending(.pending_row; .section; .order)]
+           | if unclosed_hold($line) then
+               .pending_row = $line
+             else
+               .pending_row = null
+               | .order += 1
+               | .records += [parse_row($line; .section; .order)]
+             end
+         else
+           .pending_row += "\n" + $line
+           | if (unclosed_hold(.pending_row) | not) then
+               .order += 1
+               | .records += [parse_row(.pending_row; .section; .order)]
+               | .pending_row = null
+             else . end
+         end
        elif structured_row($line) then
-         .order += 1
-         | .records += [parse_row($line; .section; .order)]
+         if unclosed_hold($line) then
+           .pending_row = $line
+         else
+           .order += 1
+           | .records += [parse_row($line; .section; .order)]
+         end
        elif ((.records | length) > 0 and (.records[-1].structured == true) and ($line | test("^[[:space:]]+"))) then
          ($line | trim) as $body
          | if $body == "" then .
@@ -540,6 +593,10 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
          .order += 1
          | .records += [{order:.order,state:.section,structured:false,id:null,raw:$line,body_lines:[],body_excerpt:null}]
        end)
+    | if .pending_row != null then
+        .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
+      else . end
+    | del(.pending_row)
     | .records |= map(
         if (.body_lines | length) > 0 then
           .hold_set = cap(.body_lines[0]; "^Captain hold set:[[:space:]]*(?<v>[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?)$")
@@ -573,7 +630,7 @@ backlog_json() {  # [<backlog-path>] - defaults to this home's $BACKLOG
           | .hold_bucket =
               (if .hold_kind != "captain" or .hold_reason == null or .state == "done" then null
                elif (.unresolved_blocker_ids | length) > 0 then "blocked"
-               elif .hold_until != null and .hold_until > $today then "dated"
+               elif (.hold_until | valid_iso_date) and .hold_until > $today then "dated"
                elif .hold_until == null and .hold_age_days != null
                     and .hold_age_days >= $age_days then "aged"
                else "live" end)
@@ -997,6 +1054,14 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
     | def trunc($n):
       tostring | gsub("\\s+"; " ")
       | if length > $n then .[:$n] + "…" else . end;
+    def valid_iso_date:
+      . as $d
+      | type == "string"
+      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
+      and (if test("T")
+        then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
+        else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
+        end);
     def filed_epoch:
       (.since // null) as $filed
       | if ($filed | type) != "string" then null
@@ -1139,7 +1204,7 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
           captain_actionable:(.captain_actionable // false),
           repo:((.repo // null) | if . == null then null else trunc(120) end),
           kind:((.kind // null) | if . == null then null else trunc(40) end),
-          since:((.since // null) | if . == null then null else trunc(40) end)}]
+          since:((.since // null) | if . == null then null elif valid_iso_date then . else "unknown" end)}]
           | ((map(select(.captain_actionable != true)) | newest_filed_first)
              + (map(select(.captain_actionable == true)) | newest_filed_first))
           | .[:$queued_n]),

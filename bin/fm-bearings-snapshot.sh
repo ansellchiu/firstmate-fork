@@ -378,6 +378,18 @@ MODEL=$(printf '%s' "$SNAP" | jq \
     | if $n <= 0 then ""
       elif length > $n then (if $n == 1 then "…" else (.[:($n - 1)] + "…") end)
       else . end;
+  def is_iso_date:
+    . as $d
+    | type == "string"
+    and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
+    and (if test("T")
+      then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
+      else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
+      end);
+  def as_iso_date_or_unknown:
+    if . == null then null
+    elif is_iso_date then .
+    else "unknown" end;
   def live_captain_call: .hold_bucket == "live";
   def projected_deferred_hold:
     .hold_bucket != null and .hold_bucket != "live";
@@ -398,7 +410,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
       end;
   def hold_note:
     if .hold_bucket == "blocked" then bounded_blocker_note(70)
-    elif .hold_bucket == "dated" then ("until " + (.hold_until // "-"))
+    elif .hold_bucket == "dated" then ("until " + ((.hold_until | as_iso_date_or_unknown) // "-"))
     elif .hold_bucket == "aged" and .hold_age_days != null then
       ("held " + (.hold_age_days | tostring) + "d")
     else null end;
@@ -421,7 +433,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
     {id, title:(.title | trunc(60)),
      blocked_by:((.unresolved_blocker_ids // []) | if length > 0 then join(",") else "-" end | trunc(120)),
      reason:(hold_gate_reason | trunc(40)), owner:$owner,
-     filed:((.since // null) | trunc(40))};
+     filed:((.since | as_iso_date_or_unknown) | trunc(40))};
   def round_robin_landed($n):
     . as $groups
     | [range(0; (($groups | map(length) | max) // 0)) as $i

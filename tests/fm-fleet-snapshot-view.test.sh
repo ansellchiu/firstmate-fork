@@ -1094,6 +1094,106 @@ EOF
   pass "home-summary excludes kind=secondmate from unowned_current and terminal_in_flight"
 }
 
+test_backlog_multiline_hold_and_structural_since_parsing() {
+  local home fakebin snap
+  home=$(make_home multiline-hold-since)
+  fakebin=$(make_fakebin "$home")
+  cat > "$home/data/backlog.md" <<'EOF'
+## In flight
+
+## Queued
+- [ ] leading-since - Leading since with multi-line hold (since 2026-10-01) (hold: wait for captain,
+  since we need input
+  from multiple people) (hold-kind: captain)
+  Captain hold set: 2026-10-01T12:00:00Z
+  Indented note line
+- [ ] trailing-since - Trailing since with multi-line hold (hold: wait for captain,
+  since we need input
+  from multiple people) (since 2026-10-02) (hold-kind: captain)
+  Captain hold set: 2026-10-02T12:00:00Z
+- [ ] prose-since - since the upgrade builds fail, since upgrade (since v2 upgrade) (since 2026-10-04)
+- [ ] repo-prose - repo: wrong title prose (repo: firstmate) (since 2026-10-05)
+- [ ] paren-hold - Hold note with its own parenthetical (since 2026-10-06) (hold: waiting on fix (PR 12), since captain asked) (hold-kind: captain)
+- [ ] paren-multi - Multi-line hold with inner parenthetical (since 2026-10-07) (hold: waiting on (PR 9), since
+  captain asked) (hold-kind: captain)
+- [ ] hold-then-blocked - Parked thing (repo: firstmate) (hold: parked) blocked-by: upstream - waits
+  Captain hold set: 2026-10-08T12:00:00Z
+- [ ] paren-hold-blocked - Paren hold then blocker (since 2026-10-09) (hold: fix (PR 12), since asked) blocked-by: upstream - waits
+- [ ] hold-blocked-paren - Thing (repo: firstmate) (since 2026-10-10) (hold: parked) blocked-by: upstream - waits on fix (PR 12)
+- [ ] hold-then-prose - Prose after hold (hold: parked) see https://example.com/pull/1 (repo: firstmate) (since 2026-10-11)
+- [ ] stray-paren - Sad hold (repo: firstmate) (since 2026-01-01) (hold: blocked :( on vendor) (hold-kind: captain)
+  Captain hold set: 2026-09-01T00:00:00Z
+- [ ] prose-only - Fix, since upgrade breaks (repo: firstmate) (kind: ship)
+- [ ] single-line-since - Single line with since prose in hold (repo: firstmate) (kind: ship) (since 2026-10-03) (hold: wait for captain, since we need input) (hold-kind: captain)
+  Captain hold set: 2026-10-03T12:00:00Z
+
+## Done
+EOF
+  snap=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --json) || fail "fleet snapshot failed"
+  printf '%s' "$snap" | jq -e '
+    ([.backlog.records[] | select(.id == "leading-since")][0]) as $lead
+    | ([.backlog.records[] | select(.id == "trailing-since")][0]) as $trail
+    | ([.backlog.records[] | select(.id == "single-line-since")][0]) as $single
+    | ([.backlog.records[] | select(.id == "prose-since")][0]) as $prose
+    | ([.backlog.records[] | select(.id == "repo-prose")][0]) as $repo
+    | $lead.since == "2026-10-01"
+      and ($lead.hold_reason | contains("since we need input"))
+      and $lead.hold_kind == "captain"
+      and $lead.hold_set == "2026-10-01T12:00:00Z"
+      and $lead.body_lines == ["Captain hold set: 2026-10-01T12:00:00Z", "Indented note line"]
+      and $trail.since == "2026-10-02"
+      and ($trail.hold_reason | contains("since we need input"))
+      and $trail.hold_kind == "captain"
+      and $trail.hold_set == "2026-10-02T12:00:00Z"
+      and $single.since == "2026-10-03"
+      and $single.hold_reason == "wait for captain, since we need input"
+      and $single.hold_kind == "captain"
+      and $single.hold_set == "2026-10-03T12:00:00Z"
+      and $prose.since == "2026-10-04"
+      and $repo.repo == "firstmate"
+      and $repo.since == "2026-10-05"
+      and ([.backlog.records[] | select(.id == "paren-hold")][0]
+        | .since == "2026-10-06"
+          and .hold_reason == "waiting on fix (PR 12), since captain asked"
+          and .hold_kind == "captain"
+          and .title == "Hold note with its own parenthetical")
+      and ([.backlog.records[] | select(.id == "paren-multi")][0]
+        | .since == "2026-10-07"
+          and (.hold_reason | contains("captain asked"))
+          and .hold_kind == "captain")
+      and ([.backlog.records[] | select(.id == "hold-then-blocked")][0]
+        | .hold_reason == "parked"
+          and .hold_set == "2026-10-08T12:00:00Z"
+          and .title == "Parked thing"
+          and .blocked_by == "upstream")
+      and ([.backlog.records[] | select(.id == "paren-hold-blocked")][0]
+        | .since == "2026-10-09"
+          and .hold_reason == "fix (PR 12), since asked"
+          and .title == "Paren hold then blocker")
+      and ([.backlog.records[] | select(.id == "hold-blocked-paren")][0]
+        | .hold_reason == "parked"
+          and .repo == "firstmate"
+          and .since == "2026-10-10"
+          and .blocked_by == "upstream")
+      and ([.backlog.records[] | select(.id == "stray-paren")][0]
+        | .hold_set == "2026-09-01T00:00:00Z"
+          and .title == "Sad hold"
+          and .since == "2026-01-01"
+          and .hold_kind == "captain"
+          and .body_lines == ["Captain hold set: 2026-09-01T00:00:00Z"])
+      and ([.backlog.records[] | select(.id == "hold-then-prose")][0]
+        | .hold_reason == "parked"
+          and .repo == "firstmate"
+          and .since == "2026-10-11")
+  ' >/dev/null || fail "multi-line hold or structural since parsing failed: $snap"
+  out=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$SNAPSHOT" --secondmate-home-summary) || fail "home summary failed"
+  printf '%s' "$out" | jq -e '
+    ([.queued[] | select(.id == "prose-only")][0].since) == "unknown"
+      and ([.queued[] | select(.id == "paren-hold")][0].since) == "2026-10-06"
+  ' >/dev/null || fail "home-summary queued since must show unknown for a non-date: $out"
+  pass "backlog multi-line hold notes assemble cleanly and since is extracted structurally"
+}
+
 test_empty_fleet_json
 test_fixture_snapshot_json
 test_home_summary_excludes_secondmate_from_child_inventory
@@ -1112,3 +1212,4 @@ test_scout_reports_include_teardown_reports
 test_backlog_tasks_axi_forms_and_overrides
 test_view_renders_snapshot
 test_view_renders_dead_secondmate_agent_status
+test_backlog_multiline_hold_and_structural_since_parsing
