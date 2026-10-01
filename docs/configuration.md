@@ -708,6 +708,22 @@ The sweep must finish inside `FM_CHECK_TIMEOUT` (default 30), because a run the 
 So a budget larger than that timeout allows is cut down to what fits instead of being refused, and the cut is reported in the report line.
 A budget that is not a whole number from 1 to 120 is still refused outright.
 
+## Plan payback ledger (data/value-ledger)
+
+[`bin/fm-value-ledger.sh`](../bin/fm-value-ledger.sh) records what each subscription plan carried, priced at API-equivalent cost, per percentage point of quota and against its monthly fee.
+Its header owns the measurement rules, the row formats, and every action; this section owns the layout only.
+`data/value-ledger/lanes.json` is the pool registry, written by `fm-value-ledger.sh init` and then edited by hand.
+Each pool carries its quota window, plan tier and fee, billing-cycle start, attribution rules, excluded clients, and unseen surfaces, and each fact names its source.
+A rule with a `provider` charges a model only when the sample's client,provider,model capture shows that client reached it through that provider alone, so pi `gpt-*` usage counts toward Codex Plus only through `openai-codex`.
+`excluded` names clients that must put nothing into the pool, such as antigravity-cli for Claude Max, and the rollup's conservation block asserts each one.
+`premise` names the claim a pool's figures test, such as the primary-lane call's premise that Claude Max is idle, with the points-a-day threshold the rollup and panel judge it by.
+A cycle start left `null` keeps the payback multiple `missing` rather than guessed; a registered one is any past billing date, rolled forward in whole months to the current cycle.
+`ledger.jsonl` is append-only, `captures/<sample id>/` holds the raw instrument output each sample was derived from, and `dashboard.json` with `plan-payback.html` are generated and disposable.
+Optional `prices/*.json` files hold first-party per-model prices, shaped as `{"models": {"<model>": {"input", "output", "cache_read", "cache_write", "tolerance_pct"}}}` in USD per million tokens, and feed only the price check.
+Manual samples are taken within twenty minutes of the top of an SGT hour, because a later read cannot be aligned to tokscale's hourly buckets.
+`fm-value-ledger.sh arm` writes and binds `state/value-ledger.check.sh`, which samples and rolls up once a day at the first sweep after 00:15 SGT and prints one line only when an instrument failed, a quota read was not fresh, the row could not be written, or whole days are missing.
+`disarm` removes the shim, its trust binding, and the alert markers.
+
 ## Mail plane (.env)
 
 The mail plane (bin/fm-mail.sh) reads unseen IMAP messages and sends one SMTP message.
