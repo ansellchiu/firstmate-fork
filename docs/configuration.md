@@ -713,8 +713,11 @@ A budget that is not a whole number from 1 to 120 is still refused outright.
 [`bin/fm-value-ledger.sh`](../bin/fm-value-ledger.sh) records what each subscription plan carried, priced at API-equivalent cost, per percentage point of quota and against its monthly fee.
 Its header owns the measurement rules, the row formats, and every action; this section owns the layout only.
 `data/value-ledger/lanes.json` is the pool registry, written by `fm-value-ledger.sh init` and then edited by hand.
-Each pool carries its quota window, plan tier and fee, billing-cycle start, attribution rules, and unseen surfaces, and each fact names its source.
-A cycle start left `null` keeps the payback multiple `missing` rather than guessed.
+Each pool carries its quota window, plan tier and fee, billing-cycle start, attribution rules, excluded clients, and unseen surfaces, and each fact names its source.
+A rule with a `provider` charges a model only when the sample's client,provider,model capture shows that client reached it through that provider alone, so pi `gpt-*` usage counts toward Codex Plus only through `openai-codex`.
+`excluded` names clients that must put nothing into the pool, such as antigravity-cli for Claude Max, and the rollup's conservation block asserts each one.
+`premise` names the claim a pool's figures test, such as the primary-lane call's premise that Claude Max is idle, with the points-a-day threshold the rollup and panel judge it by.
+A cycle start left `null` keeps the payback multiple `missing` rather than guessed; a registered one is any past billing date, rolled forward in whole months to the current cycle.
 `ledger.jsonl` is append-only, `captures/<sample id>/` holds the raw instrument output each sample was derived from, and `dashboard.json` with `plan-payback.html` are generated and disposable.
 Optional `prices/*.json` files hold first-party per-model prices, shaped as `{"models": {"<model>": {"input", "output", "cache_read", "cache_write", "tolerance_pct"}}}` in USD per million tokens, and feed only the price check.
 Manual samples are taken within twenty minutes of the top of an SGT hour, because a later read cannot be aligned to tokscale's hourly buckets.

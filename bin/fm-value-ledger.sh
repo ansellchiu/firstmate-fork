@@ -5,8 +5,8 @@
 # Usage:
 #   fm-value-ledger.sh init                 write data/value-ledger/lanes.json when absent
 #   fm-value-ledger.sh sample [--actor A]   capture raw instrument output and append one sample row
-#   fm-value-ledger.sh rollup [--dry]       derive the rollup row from the ledger and its captures
-#   fm-value-ledger.sh verify               re-derive the latest rollup and diff it against the stored row
+#   fm-value-ledger.sh rollup [--dry] [--actor A]  derive the rollup row from the ledger and its captures
+#   fm-value-ledger.sh verify [--actor A]   re-derive the latest rollup, diff it against the stored row, log the run
 #   fm-value-ledger.sh dashboard            write dashboard.json and the one-panel plan-payback.html
 #   fm-value-ledger.sh check                the daily trigger; prints one line only when a human must act
 #   fm-value-ledger.sh arm | disarm         write and register, or remove, state/value-ledger.check.sh
@@ -36,7 +36,8 @@
 #  - Determinism: rollup is a pure function of the ledger prefix plus the captures. Its row
 #    is keyed by an input hash, so a re-run appends nothing, and verify diffs a re-derivation
 #    against the stored row with zero tolerance (only written_at differs).
-#  - Cost: every sample records its actor (check, manual, agent); rollup counts them.
+#  - Cost: every sample, rollup and verify row records its actor (check, manual, agent);
+#    rollup counts them per run kind from the ledger rows up to its last sample.
 #  - Pre-conditions for a number to be called measured: the tokscale cost used here is
 #    tokscale's own (LiteLLM) price. Hourly buckets mix models, so they cannot be re-priced
 #    from a first-party table; the first-party table instead checks tokscale's per-model
@@ -67,6 +68,37 @@ export TZ=Asia/Singapore
 ALIGN_MIN=20
 CONTAM_USD=1
 BAND_MAX=0.25
+EPS=0.000001
+
+# Shared jq definitions.
+#  cycle_start($day): the registered billing-cycle start rolled forward in whole months to the
+#    latest one at or before $day, so cycle-to-date never spans two cycles. A billing day past
+#    the end of a short month falls on that month's last day.
+#  owns/ambiguous: an hourly bucket matched by a rule is owned when every model matches the
+#    rule's model_re and, for a rule with a provider, every model was served to that client only
+#    through that provider in the same sample's models capture. Otherwise it is ambiguous.
+# shellcheck disable=SC2016
+JQ_DEFS='
+def p2: tostring | if length < 2 then "0" + . else . end;
+def dim($y; $m): [31, (if ($y % 4 == 0 and $y % 100 != 0) or $y % 400 == 0 then 29 else 28 end), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][$m - 1];
+def cycle_start($day):
+  if . == null then null else
+    . as $reg
+    | ($reg | split("-") | map(tonumber)) as [$y, $m, $d]
+    | ($day | split("-") | map(tonumber)) as [$ty, $tm, $td]
+    | (if $td >= ([$d, dim($ty; $tm)] | min) then [$ty, $tm] elif $tm == 1 then [$ty - 1, 12] else [$ty, $tm - 1] end) as [$cy, $cm]
+    | "\($cy)-\($cm | p2)-\([$d, dim($cy; $cm)] | min | p2)"
+    | if . < $reg then $reg else . end
+  end;
+def owns($models): . as $e
+  | ($e.models | length) > 0 and ($e.models | all(test($e.rule.model_re)))
+    and ($e.rule.provider == null
+         or ($e.models | all(. as $mdl | [$models[] | select(.client == $e.rule.client and .model == $mdl) | .provider] | unique == [$e.rule.provider])));
+def ambiguous($models): (.models | length) > 0 and (owns($models) | not);
+def split_pool($pool; $bundle; $models; $lo; $hi):
+  [ $pool.rules[] as $r | ($bundle[$r.client].entries // [])[] | select(.hour >= $lo and .hour < $hi) | . + {rule: $r} ] as $c
+  | {own: ($c | map(select(owns($models)))), amb: ($c | map(select(ambiguous($models))))};
+'
 
 usage() { sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 die() { printf 'fm-value-ledger: %s\n' "$*" >&2; exit 1; }
@@ -94,6 +126,9 @@ action_init() {
       "cycle_start": null,
       "cycle_start_src": "unknown - the billing day is not exposed by quota-axi; set it from the Anthropic billing page, YYYY-MM-DD",
       "rules": [{"client": "claude", "model_re": "^claude-"}],
+      "excluded": [{"client": "antigravity-cli", "why": "antigravity-cli serves Anthropic models on Google's quota, not Claude Max"}],
+      "premise": {"claim": "Claude Max is idle", "src": "open primary-lane call",
+                  "idle_max_pp_per_day": 2, "threshold_src": "under 2 points a day is under 15% of the seven-day window"},
       "unseen_surfaces": ["claude.ai web", "Claude Desktop", "phone", "other machines"],
       "codeburn": {"provider": "claude", "clients": ["claude"]}
     },
@@ -105,7 +140,7 @@ action_init() {
                "price_src": "developers.openai.com/codex/pricing (Plus USD 20/month)"},
       "cycle_start": null,
       "cycle_start_src": "unknown - set it from the ChatGPT billing page, YYYY-MM-DD",
-      "rules": [{"client": "codex", "model_re": "^gpt-"}, {"client": "pi", "model_re": "^gpt-"}],
+      "rules": [{"client": "codex", "model_re": "^gpt-"}, {"client": "pi", "model_re": "^gpt-", "provider": "openai-codex"}],
       "unseen_surfaces": ["ChatGPT web", "other machines"],
       "codeburn": {"provider": "codex", "clients": ["codex"]}
     }
@@ -138,11 +173,14 @@ action_sample() {
   dir="$CAPS/$id"
   mkdir -p "$dir" || return 1
   today=$(fmt_at "$ep" +%Y-%m-%d)
-  since=$(jq -r '[.pools[].cycle_start // empty] | min // empty' "$LANES")
+  # Backfill from the earliest current cycle start, and at least from yesterday so the
+  # daily pair across a cycle boundary is still covered.
+  since=$(jq -r --arg today "$today" --arg yday "$(fmt_at $((ep - 86400)) +%Y-%m-%d)" "$JQ_DEFS"'
+    [.pools[].cycle_start // empty | cycle_start($today)] | if length == 0 then empty else . + [$yday] | min end' "$LANES")
   if [ -z "$since" ]; then
-    since=$(date -r $((ep - ${FM_VALUE_SINCE_DAYS:-7} * 86400)) +%Y-%m-%d)
+    since=$(fmt_at $((ep - ${FM_VALUE_SINCE_DAYS:-7} * 86400)) +%Y-%m-%d)
   fi
-  clients=$(jq -r '[.pools[].rules[].client] | unique | .[]' "$LANES")
+  clients=$(jq -r '[.pools[] | (.rules[].client, (.excluded // [])[].client)] | unique | .[]' "$LANES")
 
   capture_cmd "$dir/quota.json" quota-axi --json && jq -e '.providers' "$dir/quota.json" >/dev/null 2>&1 || fail="$fail quota-axi"
   capture_cmd "$dir/hourly-all.json" tokscale hourly --since "$since" --until "$today" --json && jq -e '.entries' "$dir/hourly-all.json" >/dev/null 2>&1 || fail="$fail tokscale-hourly"
@@ -204,9 +242,9 @@ bundle_for() {
   jq -n "${args[@]}" "$expr"
 }
 
-# derive: print the rollup row body (no id/written_at) as JSON on stdout.
+# derive <actor>: print the rollup row body (no id/written_at) as JSON on stdout.
 derive() {
-  local samples last cur_id pair_file p clients
+  local actor=$1 samples last cur_id pair_file p clients
   samples=$(jq -c -s '[.[] | select(.schema == "fm.value.sample.v1")] | sort_by(.taken_at)' "$LEDGER" 2>/dev/null) || return 1
   [ "$(jq 'length' <<<"$samples")" -ge 1 ] || { printf 'no samples\n' >&2; return 2; }
   last=$(jq -c '.[-1]' <<<"$samples")
@@ -228,21 +266,20 @@ derive() {
 
   for p in $(jq -r '.pools[].id' "$LANES"); do
     clients=$(jq -r --arg p "$p" '.pools[] | select(.id == $p) | [.rules[].client] | unique | .[]' "$LANES")
-    for i in $(seq 1 $((n - 1))); do
+    for ((i = 1; i < n; i++)); do
       local prev cur
       prev=$(jq -c ".[$((i - 1))]" <<<"$samples"); cur=$(jq -c ".[$i]" <<<"$samples")
       cur_id=$(jq -r .id <<<"$cur")
       # shellcheck disable=SC2086
       bundle_for "$CAPS/$cur_id" $clients | jq -c --arg p "$p" --argjson prev "$prev" --argjson cur "$cur" \
-        --argjson align "$ALIGN_MIN" --argjson contam "$CONTAM_USD" --slurpfile lanes "$LANES" '
+        --argjson align "$ALIGN_MIN" --argjson contam "$CONTAM_USD" --slurpfile lanes "$LANES" \
+        --slurpfile models "$CAPS/$cur_id/models.json" "$JQ_DEFS"'
         . as $bundle
         | ($lanes[0].pools[] | select(.id == $p)) as $pool
         | $prev.pools[$p] as $a | $cur.pools[$p] as $b
         | ($prev.hour_sgt) as $lo | ($cur.hour_sgt) as $hi
-        | [ $pool.rules[] as $r | ($bundle[$r.client].entries // [])[]
-            | select(.hour >= $lo and .hour < $hi) | . + {rule: $r} ] as $cands
-        | ($cands | map(select(. as $e | ($e.models | length) > 0 and ($e.models | all(test($e.rule.model_re)))))) as $own
-        | ($cands | map(select(. as $e | ($e.models | all(test($e.rule.model_re)) | not)))) as $amb
+        | split_pool($pool; $bundle; $models[0].entries; $lo; $hi) as $parts
+        | $parts.own as $own | $parts.amb as $amb
         | ($own | map(select(.clients != [.rule.client]))) as $leak
         | ($own | map(.cost) | add // 0) as $api
         | ($amb | map(.cost) | add // 0) as $ambusd
@@ -257,6 +294,7 @@ derive() {
            elif ($leak | length) > 0 then "attribution leak"
            else null end) as $skip
         | {pool: $p, prev: $prev.id, cur: $cur.id, window: [$lo, $hi],
+           span_h: ((($cur.taken_at | fromdateiso8601) - ($prev.taken_at | fromdateiso8601)) / 3600),
            pp_used: $pp, api_value: $api, ambiguous_usd: $ambusd, buckets: ($own | length),
            skipped: $skip,
            contaminated: ($skip == null and $pp >= 1 and $api < $contam),
@@ -265,16 +303,26 @@ derive() {
     done
   done
 
+  # Runs are counted from every ledger row up to and including the last sample, so the
+  # count is a function of the ledger prefix and a re-run of rollup does not change it.
+  local runs
+  runs=$(jq -c -s --arg lid "$(jq -r .id <<<"$last")" '
+    (map(.id) | index($lid)) as $k | .[0:$k + 1] | map(select(.actor != null))
+    | {actor_counts: (group_by(.actor) | map({key: .[0].actor, value: length}) | from_entries),
+       run_counts: (group_by(.schema) | map({key: (.[0].schema | split(".")[2]), value: (group_by(.actor) | map({key: .[0].actor, value: length}) | from_entries)}) | from_entries)}' "$LEDGER") || return 1
+
   jq -n -c --slurpfile pairs "$pair_file" --slurpfile viol "$violations_file" --argjson samples "$samples" \
-    --slurpfile lanes "$LANES" --argjson last "$last" --arg capdir "$CAPS" \
+    --slurpfile lanes "$LANES" --argjson last "$last" --arg capdir "$CAPS" --arg actor "$actor" --argjson runs "$runs" \
     --argjson bandmax "$BAND_MAX" '
     def r4: (. * 10000 | round) / 10000;
     ($last.id) as $lid
     | { schema: "fm.value.rollup.v1",
+        actor: $actor,
         lanes_version: $lanes[0].version,
         through_sample: $lid,
         sample_ids: ($samples | map(.id)),
-        actor_counts: ($samples | group_by(.actor) | map({key: .[0].actor, value: length}) | from_entries),
+        actor_counts: $runs.actor_counts,
+        run_counts: $runs.run_counts,
         capture_violations: $viol,
         pools: ($lanes[0].pools | map(
           . as $pool
@@ -299,7 +347,19 @@ derive() {
                             + (if $band then " (band \($band.lo | r4)..\($band.hi | r4))" else " (band unbounded)" end)
                             + (if $biased then " - biased low: \($pool.unseen_surfaces | join(", ")) unseen" else "" end)
                             + (if ($width != null and $width < $bandmax) then "" else " - indicative only, band too wide" end))
-                } else {v: null, unit: "USD/pp", status: "missing", why: "no counted pair with 1 or more points used"} end)
+                } else {v: null, unit: "USD/pp", status: "missing", why: "no counted pair with 1 or more points used"} end),
+              premise: (if $pool.premise == null then null else
+                ($pp | map(select(.pp_used != null and .pp_used >= 0 and .skipped != "reset between samples"))) as $use
+                | ($use | map(.pp_used) | add // 0) as $u
+                | (($use | map(.span_h) | add // 0) / 24) as $days
+                | (if $days > 0 then $u / $days else null end) as $rate
+                | $pool.premise + {
+                    pp_used: $u, days: ($days | r4), pp_per_day: (if $rate == null then null else ($rate | r4) end),
+                    basis: "quota points used across measured, same-window pairs, aligned or not",
+                    verdict: (if $days < 1 then "unknown: under a day of measured quota"
+                              elif $rate <= $pool.premise.idle_max_pp_per_day then "holds: idle"
+                              else "fails: in use" end)}
+              end)
             } } ) | from_entries)
       }' > "${pair_file}.out" || { rm -f "$pair_file" "$violations_file"; return 1; }
 
@@ -315,22 +375,17 @@ derive() {
     [ -z "$cb_prov" ] || cb_text=$(cat "$lcap/codeburn-$cb_prov.txt" 2>/dev/null || true)
     # shellcheck disable=SC2086
     out=$(bundle_for "$lcap" $clients | jq -c --arg p "$p" --argjson last "$last" --arg cb "$cb_text" \
-      --slurpfile lanes "$LANES" --slurpfile all "$lcap/hourly-all.json" --slurpfile models "$lcap/models.json" \
-      --slurpfile prices <(cat "$VL_DIR"/prices/*.json 2>/dev/null | jq -s '.') --argjson roll "$out" '
+      --slurpfile lanes "$LANES" --slurpfile models "$lcap/models.json" \
+      --slurpfile prices <(cat "$VL_DIR"/prices/*.json 2>/dev/null | jq -s '.') --argjson roll "$out" "$JQ_DEFS"'
       def r4: (. * 10000 | round) / 10000;
       . as $bundle
       | ($lanes[0].pools[] | select(.id == $p)) as $pool
       | $last.hour_sgt as $hi
-      | [ $pool.rules[] as $r | ($bundle[$r.client].entries // [])[] | select(.hour < $hi) | . + {rule: $r} ] as $cands
-      | ($cands | map(select(. as $e | ($e.models | length) > 0 and ($e.models | all(test($e.rule.model_re)))))) as $own
-      | ($cands | map(select(. as $e | ($e.models | all(test($e.rule.model_re)) | not)))) as $amb
-      | ($pool.cycle_start // null) as $cs
+      | split_pool($pool; $bundle; $models[0].entries; ""; $hi) as $parts
+      | $parts.own as $own | $parts.amb as $amb
+      | ($pool.cycle_start | cycle_start($last.hour_sgt[0:10])) as $cs
       | ($own | map(select($cs != null and .hour[0:10] >= $cs)) | map(.cost) | add // 0) as $ctd
       | ($amb | map(select($cs != null and .hour[0:10] >= $cs)) | map(.cost) | add // 0) as $ctd_amb
-      # (d) conservation over the whole capture span, all pools of this registry.
-      | ($all[0].entries | map(select(.hour < $hi)) | map(.cost) | add // 0) as $total
-      | ([ $lanes[0].pools[].rules[].client ] | unique) as $rc
-      | ($roll.pools[$p]) as $pr
       | ($pool.codeburn // null) as $cbp
       | (($cb | capture("Cost +\\$(?<c>[0-9,.]+)") | .c | gsub(","; "") | tonumber) // null) as $cbcost
       | ([ $pool.rules[] | select(.client as $c | ($cbp.clients // []) | index($c)) as $r | ($bundle[$r.client].entries // [])[] | . ] | map(.cost) | add // 0) as $ledger_for_cb
@@ -340,20 +395,13 @@ derive() {
           cycle_to_date: (if $cs == null then {v: null, unit: "USD", status: "missing", why: "cycle_start not registered in lanes.json"}
                           elif ($last.since > $cs) then {v: null, unit: "USD", status: "missing", why: "backfill capture starts after cycle_start"}
                           else {v: ($ctd | r4), unit: "USD", status: "derived", ambiguous_usd_excluded: ($ctd_amb | r4),
+                                cycle_start: $cs, cycle_start_registered: $pool.cycle_start,
                                 src: "captures/\($last.id)/hourly-*.json hours \($cs)..<\($hi)"} end),
           payback: (if $cs == null or ($last.since > $cs) then {v: null, status: "missing", why: "needs cycle-to-date"}
                     else {v: ($ctd / $pool.plan.price_usd_month | r4), unit: "x fee", status: "derived",
                           basis: "cycle-to-date realised value over monthly fee, not a run-rate",
                           fee_usd: $pool.plan.price_usd_month, tier_confirmed: $pool.plan.tier_confirmed,
                           bias: (if ($pool.unseen_surfaces | length) > 0 then "low: unseen surfaces; ambiguous hours excluded" else null end)} end),
-          conservation: {
-            total_usd: ($total | r4),
-            registry_clients: $rc,
-            this_pool_attributed_usd: ($own | map(.cost) | add // 0 | r4),
-            this_pool_ambiguous_usd: ($amb | map(.cost) | add // 0 | r4),
-            leaks: ($own | map(select(.clients != [.rule.client])) | length),
-            ok: (($own | map(select(.clients != [.rule.client])) | length) == 0)
-          },
           numerator_check: (if $cbcost == null then {status: "missing", why: "codeburn capture absent or unreadable"}
                             else {status: "derived", codeburn_usd: $cbcost, ledger_usd: ($ledger_for_cb | r4),
                                   delta_pct: (if $cbcost > 0 then ((($ledger_for_cb - $cbcost) / $cbcost * 1000 | round) / 10) else null end),
@@ -367,16 +415,57 @@ derive() {
                      ok: (if $m.cost > 0 then ((($fp - $m.cost) / $m.cost * 100) | fabs) <= ($px.tolerance_pct // 2) else true end)} end))
         }')
   done
+
+  # Conservation over the last sample's capture span: the all-client total reconciles against
+  # attributed + ambiguous + unmatched registry draw + named exclusions + unregistered clients,
+  # and each named exclusion (antigravity-cli from claude-max) must put nothing into its pool.
+  clients=$(jq -r '[.pools[] | (.rules[].client, (.excluded // [])[].client)] | unique | .[]' "$LANES")
+  # shellcheck disable=SC2086
+  out=$(bundle_for "$lcap" $clients | jq -c --argjson last "$last" --argjson roll "$out" --argjson eps "$EPS" \
+    --slurpfile lanes "$LANES" --slurpfile all "$lcap/hourly-all.json" --slurpfile models "$lcap/models.json" "$JQ_DEFS"'
+    def r4: (. * 10000 | round) / 10000;
+    def usd: map(.cost) | add // 0;
+    . as $bundle
+    | $last.hour_sgt as $hi
+    | def drawn($c): ($bundle[$c].entries // []) | map(select(.hour < $hi)) | usd;
+    ($lanes[0].pools | map(split_pool(.; $bundle; $models[0].entries; ""; $hi))) as $parts
+    | ($parts | map(.own | usd) | add // 0) as $att
+    | ($parts | map(.amb | usd) | add // 0) as $amb
+    | ([$lanes[0].pools[].rules[].client] | unique) as $rc
+    | ([$lanes[0].pools[] | (.excluded // [])[].client] | unique - $rc) as $xc
+    | ($rc | map(drawn(.)) | add // 0) as $reg
+    | ($xc | map(drawn(.)) | add // 0) as $exc
+    | ($all[0].entries | map(select(.hour < $hi)) | usd) as $total
+    | ($reg - $att - $amb) as $unmatched
+    | ($total - $reg - $exc) as $unreg
+    | [ $lanes[0].pools | to_entries[] | .key as $k | .value as $pool | ($pool.excluded // [])[] | .client as $c
+        | ($parts[$k].own | map(select(any(.clients[]; . == $c))) | usd) as $in
+        | {pool: $pool.id, client: $c, why, client_usd: (drawn($c) | r4), in_pool_usd: ($in | r4),
+           ok: ($in == 0), assertion: "\($c) is excluded from \($pool.id)"} ] as $excl
+    | ($parts | map(.own | map(select(.clients != [.rule.client])) | length) | add // 0) as $leaks
+    | $roll + {conservation: {
+        total_usd: ($total | r4), attributed_usd: ($att | r4), ambiguous_usd: ($amb | r4),
+        unmatched_registry_usd: ($unmatched | r4), excluded_usd: ($exc | r4), unregistered_usd: ($unreg | r4),
+        registry_clients: $rc, excluded_clients: $xc, exclusions: $excl, leaks: $leaks,
+        reconciled: ($unmatched >= -$eps and $unreg >= -$eps),
+        ok: ($unmatched >= -$eps and $unreg >= -$eps and $leaks == 0 and ($excl | all(.ok)))}}') || { rm -f "$pair_file" "${pair_file}.out" "$violations_file"; return 1; }
   rm -f "$pair_file" "${pair_file}.out" "$violations_file"
   printf '%s\n' "$out"
 }
 
 action_rollup() {
-  local dry=0 body hash id existing
-  [ "${1:-}" != "--dry" ] || dry=1
+  local dry=0 actor=manual body hash id existing
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --dry) dry=1; shift ;;
+      --actor) actor=${2:-}; shift 2 ;;
+      *) die "unknown rollup option: $1" ;;
+    esac
+  done
+  case $actor in check|manual|agent) ;; *) die "actor must be check, manual, or agent" ;; esac
   need_lanes
   [ -s "$LEDGER" ] || die "no ledger yet (run sample first)"
-  body=$(derive) || die "rollup could not derive"
+  body=$(derive "$actor") || die "rollup could not derive"
   hash=$( { cat "$LANES"; printf '%s\n' "$body"; } | shasum -a 256 | cut -c1-16)
   id="r-$hash"
   if [ "$dry" = 1 ]; then jq -c --arg id "$id" '{id: $id} + .' <<<"$body"; return 0; fi
@@ -386,21 +475,34 @@ action_rollup() {
   printf 'rolled up: %s\n' "$id"
   jq -r '.pools | to_entries[] | "\(.key): \(.value.dollars_per_pp.display // .value.dollars_per_pp.why) | payback \(.value.payback.v // "missing")"' <<<"$body"
   jq -r '"actors: " + (.actor_counts | to_entries | map("\(.key)=\(.value)") | join(" "))' <<<"$body"
+  jq -r '.pools | to_entries[] | select(.value.premise) | "\(.key) premise \"\(.value.premise.claim)\": \(.value.premise.verdict)"' <<<"$body"
 }
 
 action_verify() {
-  local stored fresh
+  local actor=manual stored fresh result rc=0
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --actor) actor=${2:-}; shift 2 ;;
+      *) die "unknown verify option: $1" ;;
+    esac
+  done
+  case $actor in check|manual|agent) ;; *) die "actor must be check, manual, or agent" ;; esac
   need_lanes
   stored=$(jq -c -s '[.[] | select(.schema == "fm.value.rollup.v1")] | .[-1] | del(.written_at)' "$LEDGER") || return 1
   [ "$stored" != "null" ] || die "no stored rollup to verify"
-  fresh=$(action_rollup --dry) || return 1
+  fresh=$( (action_rollup --dry --actor "$(jq -r '.actor // "manual"' <<<"$stored")") ) || return 1
   if [ "$(jq -S -c . <<<"$stored")" = "$(jq -S -c . <<<"$fresh")" ]; then
+    result=match
     printf 'verified: re-derivation matches the stored rollup exactly\n'
   else
+    result=mismatch; rc=1
     printf 'MISMATCH: stored rollup differs from its re-derivation\n' >&2
     diff <(jq -S . <<<"$stored") <(jq -S . <<<"$fresh") >&2
-    return 1
   fi
+  jq -c -n --arg at "$(TZ=UTC fmt_at "$(now_epoch)" +%Y-%m-%dT%H:%M:%SZ)" --arg actor "$actor" \
+    --arg rollup "$(jq -r .id <<<"$stored")" --arg result "$result" \
+    '{schema: "fm.value.verify.v1", id: "v-\($at)", at: $at, actor: $actor, rollup: $rollup, result: $result}' >> "$LEDGER" || return 1
+  return "$rc"
 }
 
 # ---------------------------------------------------------------- dashboard (one panel)
@@ -415,7 +517,7 @@ action_dashboard() {
     {panel: "realised value vs plan price", through_sample: $r.through_sample, alert: (if $alert == "" then null else $alert end),
      pools: ($lanes[0].pools | map(. as $p | {id: $p.id, fee_usd: $p.plan.price_usd_month,
         cycle_to_date: $r.pools[$p.id].cycle_to_date, payback: $r.pools[$p.id].payback,
-        dollars_per_pp: $r.pools[$p.id].dollars_per_pp}))}' > "$VL_DIR/dashboard.json" || return 1
+        dollars_per_pp: $r.pools[$p.id].dollars_per_pp, premise: $r.pools[$p.id].premise}))}' > "$VL_DIR/dashboard.json" || return 1
   jq -r '
     def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;");
     def bar($v; $fee; $y): (($fee * 2) as $max
@@ -434,7 +536,9 @@ action_dashboard() {
     "</svg>",
     "<table border=\"1\" cellpadding=\"4\"><tr><th>pool</th><th>fee USD/mo</th><th>cycle-to-date USD</th><th>payback</th><th>dollars per point</th></tr>",
     (.pools[] | "<tr><td>\(.id)</td><td>\(.fee_usd)</td><td>\(.cycle_to_date.v // "missing")</td><td>\(.payback.v // "missing")</td><td>\(.dollars_per_pp.display // .dollars_per_pp.why | esc)</td></tr>"),
-    "</table></body>"' "$VL_DIR/dashboard.json" > "$VL_DIR/plan-payback.html" || return 1
+    "</table>",
+    (.pools[] | select(.premise) | "<p><b>\(.id) premise</b> \"\(.premise.claim | esc)\" (\(.premise.src | esc)): <b>\(.premise.verdict | esc)</b> - \(.premise.pp_per_day // "no") points a day over \(.premise.days) days, idle at or under \(.premise.idle_max_pp_per_day)</p>"),
+    "</body>"' "$VL_DIR/dashboard.json" > "$VL_DIR/plan-payback.html" || return 1
   printf 'wrote: %s\n' "$VL_DIR/plan-payback.html"
 }
 
@@ -455,7 +559,7 @@ action_check() {
     line="plan payback: sample failed - ${err:-instrument error}"
   else
     [ -z "$err" ] || line="plan payback: ${err#warn: }"
-    if ! action_rollup >/dev/null 2>&1; then line="plan payback: sample written but rollup failed${line:+; $line}"; fi
+    if ! action_rollup --actor check >/dev/null 2>&1; then line="plan payback: sample written but rollup failed${line:+; $line}"; fi
     action_dashboard >/dev/null 2>&1 || true
     if [ -n "$lastday" ]; then
       gap=$(( ( $(day_epoch "$today") - $(day_epoch "$lastday") ) / 86400 ))
@@ -511,7 +615,7 @@ case "${1:-check}" in
   init) action_init ;;
   sample) shift; action_sample "$@" ;;
   rollup) shift; action_rollup "$@" ;;
-  verify) action_verify ;;
+  verify) shift; action_verify "$@" ;;
   dashboard) action_dashboard ;;
   check) action_check ;;
   arm) action_arm ;;
