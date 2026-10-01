@@ -47,6 +47,26 @@ umask 022
 # strips this to verify real refusal.
 export FM_GATE_REFUSE_BYPASS=1
 
+# Machine-wide guard seams for every suite that reaches this library.
+# bin/fm-watch.sh reads the real process table and load average once per poll to
+# catch a leaked worker probe (docs/worker-process-leak-rca.md), so any test that
+# starts a watcher would otherwise depend on what else is running on the machine:
+# on a box at load 40+ the load backstop woke watchers mid-case.
+# bin/fm-test-run.sh pins both for the tests it runs; pinning them here makes a
+# direct `bash tests/<file>.test.sh` hermetic too, and reaches the watcher-starting
+# suites that never source tests/wake-helpers.sh. A suite or case that sets its own
+# value still wins, including the leak-guard cases that drive these very checks.
+# FM_FAKE_PROCS is honored when set at all (empty means an empty sample), while
+# FM_FAKE_LOADAVG is honored only when non-empty.
+if [ -z "${FM_FAKE_PROCS+x}" ]; then
+  FM_FAKE_PROCS=''
+  export FM_FAKE_PROCS
+fi
+if [ -z "${FM_FAKE_LOADAVG:-}" ]; then
+  FM_FAKE_LOADAVG='0.00 0.00'
+  export FM_FAKE_LOADAVG
+fi
+
 # Collapse bin/fm-spawn.sh's launch postcondition to a single immediate read for
 # the whole suite. That postcondition waits for a real harness process to take
 # the pane foreground, which no fake tmux can ever produce, so leaving the
