@@ -1050,7 +1050,14 @@ test_ship_teardown_removes_orca_worktree_when_id_path_matches() {
   fm_write_meta "$state/$id.meta" \
     "window=fm-$id" "endpoint_task_id=$id" "terminal=term-ship-match" "worktree=$wt" "project=$proj" \
     "harness=claude" "kind=ship" "mode=local-only" "yolo=off" \
-    "backend=orca" "orca_worktree_id=wt-ship-match::/orca/wt-ship-match"
+    "backend=orca" "orca_worktree_id=wt-ship-match::/orca/wt-ship-match" \
+    "spawn_gen=orca-ship-match-test"
+  FM_HOME="$TMP_ROOT/ship-match-home" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" \
+    FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-receipt.sh" write-landing --task "$id" \
+      --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not record the matched Orca fixture's landing receipt"
   orca_case ship-match
   printf '{"ok":true,"result":{"worktree":{"id":"wt-ship-match::/orca/wt-ship-match","path":"%s"}}}\n' "$wt" > "$RESP/1.out"
   neutral=$(neutral_fm_root "$CASE_DIR/neutral")

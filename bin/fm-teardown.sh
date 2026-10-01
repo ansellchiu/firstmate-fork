@@ -161,7 +161,7 @@
 # leased home releases its durable treehouse lease so the pool slot is freed,
 # never left leased forever. If the treehouse return fails, teardown leaves the
 # leased home and state in place instead of hiding a still-held lease.
-# Usage: fm-teardown.sh <task-id> [--force] [--legacy-record]
+# Usage: fm-teardown.sh <task-id> [--force] [--legacy-record] [--standdown]
 #   --force skips ordinary-task dirty and landed-work checks, skips scout report
 #   checks, and discards secondmate child work for kind=secondmate. Only use it
 #   when the captain has explicitly said to discard the work.
@@ -175,6 +175,21 @@
 #   an abandoned attempt left behind never counts as a published incarnation:
 #   the record still reads as a legacy record, so the endpoint gate runs again
 #   and the retry still needs --legacy-record.
+#   --standdown declares that this dispatch never became work: it is how the
+#   watcher's auto-standdown stands a never-started worker down. It is NOT a
+#   second --force. Its ONLY effect is to lift the structural receipt gate below,
+#   which otherwise refuses a ship task with no completion receipt, and only
+#   when teardown itself confirms live that the task never started: no
+#   completion receipt exists, the status log carries no done: or failed:
+#   declaration, the worktree is clean (crew_is_never_started in
+#   bin/fm-classify-lib.sh, the same check the watcher applies), and HEAD has
+#   no commits beyond the dispatch_base= SHA bin/fm-spawn.sh recorded. Commits
+#   that already landed on main still count as commits beyond that base. It
+#   fails closed: a record with no dispatch_base=, or one that does not resolve
+#   in the worktree, refuses outright. When the other conditions fail, the flag
+#   is ignored and teardown refuses exactly as it would without it. It never
+#   relaxes the dirty-worktree or unlanded-work refusals; only --force can
+#   authorize discarding work.
 #
 # Transient / stale worktree git lock recovery (teardown-lock-race): a crew process
 # killed mid-git-operation can leave a .git/worktrees/<wt>/index.lock (or, for a
@@ -304,11 +319,13 @@ fi
 ID=$1
 FORCE=
 LEGACY_RECORD_GIVEN=0
+STANDDOWN=0
 shift
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --force) FORCE=--force ;;
     --legacy-record) LEGACY_RECORD_GIVEN=1 ;;
+    --standdown) STANDDOWN=1 ;;
     *)
       echo "error: invalid teardown request" >&2
       exit 2
@@ -3338,8 +3355,27 @@ fi
 # exactly as it lifts those and never fabricates a receipt. A scout's report
 # receipt is written here at completion. The archive is append-once and both
 # steps are idempotent, and they run BEFORE the pending-close record below,
-# so an interrupted cleanup always retries safely. Not for kind=secondmate.
-if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
+# so an interrupted cleanup always retries safely. Not for kind=secondmate, an
+# Orca allocation-cleanup record, or a --standdown that teardown confirms never
+# started: both represent a launch that never became work and therefore has no
+# landing or report to receipt. An unconfirmed --standdown is ignored here.
+STANDDOWN_CONFIRMED=0
+if [ "$STANDDOWN" -eq 1 ] && { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
+   && [ "$CLEANUP_RECOVERY" != orca ]; then
+  STANDDOWN_BASE=$(fm_meta_get "$META" dispatch_base)
+  if [ -z "$STANDDOWN_BASE" ] || [ -z "$WT" ] \
+     || ! git -C "$WT" rev-parse --verify --quiet "$STANDDOWN_BASE^{commit}" >/dev/null 2>&1; then
+    echo "REFUSED: --standdown cannot prove task $ID never started: its record carries no dispatch_base= that resolves in worktree ${WT:-<none>}, so commits beyond its base cannot be ruled out. Nothing was changed; tear it down without --standdown, or with --force after explicit approval." >&2
+    exit 1
+  fi
+  STANDDOWN_AHEAD=$(git -C "$WT" rev-list --count "$STANDDOWN_BASE..HEAD" 2>/dev/null || echo unknown)
+  if [ "$STANDDOWN_AHEAD" = 0 ] && [ ! -e "$STATE/$ID.receipt" ] \
+     && crew_is_never_started "$ID" "$STATE"; then
+    STANDDOWN_CONFIRMED=1
+  fi
+fi
+if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } \
+   && [ "$CLEANUP_RECOVERY" != orca ] && [ "$STANDDOWN_CONFIRMED" -eq 0 ]; then
   if [ "$KIND" = ship ] && [ "$FORCE" != "--force" ]; then
     RECEIPT_GATE_RC=0
     FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
@@ -3646,6 +3682,16 @@ if [ "$KIND" = secondmate ]; then
     handoff_wake_retire_stage_restore \
       || echo "error: receiver wake restoration failed; recovery state remains at $HANDOFF_WAKE_RETIRE_STAGE" >&2
     exit "$rc"
+  fi
+  # A nested remote retirement addresses its control state inside the home it
+  # just removed. Nothing below is still owed there: attempting the generic
+  # task-record cleanup would recreate that retired home one state directory at
+  # a time. The parent-side remote teardown owns its route and reply cleanup.
+  if [ ! -e "$STATE" ] && [ ! -L "$STATE" ]; then
+    HANDOFF_WAKE_RETIRE_STAGE=
+    HANDOFF_WAKE_RETIRE_LOCK=
+    echo "teardown $ID complete (secondmate home $HOME_PATH)"
+    exit 0
   fi
   handoff_wake_retire_stage_commit \
     || { echo "error: receiver wake cleanup failed; preserving the secondmate route for retry" >&2; exit 1; }

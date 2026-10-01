@@ -287,6 +287,12 @@ SH
     "kind=ship" \
     "mode=local-only" \
     "spawn_gen=findings-test-task-x1"
+  FM_HOME="$case_dir" FM_STATE_OVERRIDE="$case_dir/state" \
+    "$ROOT/bin/fm-receipt.sh" write-landing --task task-x1 \
+      --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not record the findings fixture's landing receipt"
   printf '%s\n' "$case_dir"
 }
 

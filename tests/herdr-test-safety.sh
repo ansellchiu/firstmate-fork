@@ -43,3 +43,45 @@ herdr_refuse_if_default() { # <session>
 herdr_safe_stop_and_delete() { # <session>
   fm_herdr_lab_teardown "$1"
 }
+
+# herdr_test_agent_prepare <dir> <lab-helper>:
+# Build a token-free long-lived stand-in for real fm-spawn tests. The launcher
+# registers the pane through the isolated lab helper before execing a process
+# whose basename is part of the production harness vocabulary, so the launch
+# postcondition proves a real live agent instead of racing a short-lived shell.
+HERDR_TEST_AGENT_LAUNCHER=
+herdr_test_agent_prepare() {
+  local dir=$1 helper=$2 helper_path=${3:-$PATH} helper_q agent_q helper_path_q
+  mkdir -p "$dir" || return 1
+  ln -sf /bin/sleep "$dir/codex-test-agent" || return 1
+  printf -v helper_q '%q' "$helper"
+  printf -v agent_q '%q' "$dir/codex-test-agent"
+  printf -v helper_path_q '%q' "$helper_path"
+  cat > "$dir/launch" <<SH
+#!/usr/bin/env bash
+set -eu
+[ -z "\${1:-}" ] || printf '%s\n' "\$1"
+PATH=$helper_path_q $helper_q run "\${HERDR_SESSION:?}" pane report-agent "\${HERDR_PANE_ID:?}" \
+  --source fm-real-herdr-test --agent codex-test-agent --state idle --seq 1 >/dev/null
+exec $agent_q 600
+SH
+  chmod +x "$dir/launch" || return 1
+  HERDR_TEST_AGENT_LAUNCHER="$dir/launch"
+}
+
+herdr_test_agent_command() { # [marker]
+  local launcher_q marker_q
+  [ -n "$HERDR_TEST_AGENT_LAUNCHER" ] || return 1
+  printf -v launcher_q '%q' "$HERDR_TEST_AGENT_LAUNCHER"
+  printf -v marker_q '%q' "${1:-}"
+  printf '%s %s\n' "$launcher_q" "$marker_q"
+}
+
+herdr_test_write_landing_receipt() { # <root> <home> <task-id>
+  local root=$1 home=$2 task_id=$3
+  FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_ROOT_OVERRIDE="$root" "$root/bin/fm-receipt.sh" write-landing \
+      --task "$task_id" --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null
+}

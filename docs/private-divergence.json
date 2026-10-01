@@ -267,7 +267,10 @@
       "paths": [
         "bin/fm-watch.sh",
         "bin/fm-classify-lib.sh",
+        "bin/fm-teardown.sh",
+        "bin/fm-spawn.sh",
         "tests/fm-watch-triage.test.sh",
+        "tests/fm-teardown.test.sh",
         "tests/fm-gotmp.test.sh",
         "tests/lib.sh",
         "tests/wake-helpers.sh"
