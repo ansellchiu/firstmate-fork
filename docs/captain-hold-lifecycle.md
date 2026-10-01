@@ -127,10 +127,12 @@ For a main-home call, the reconcile option is the recovery path for whatever sti
 ## Structured read surfaces
 
 `bin/fm-fleet-snapshot.sh` parses canonical tasks-axi `(hold: ...)`, `(hold-kind: ...)`, and `(hold-until: ...)` metadata alongside existing backlog fields.
+A hold reason that spans several lines is assembled into its row before parsing, and fields such as `since` are read only outside the hold reason, so hold prose cannot leak into them.
 It resolves every repeated `blocked-by:` edge against structured Done records and keeps missing blockers unresolved.
 It then assigns every captain hold exactly one `hold_bucket`, decided only from structured fields - `hold_kind`, `state`, `hold_until`, `unresolved_blocker_ids`, and the machine-written hold-set timestamp.
 Hold reason and body prose are never matched, so no wording can hide, reveal, or reclassify a decision.
-The buckets are total and mutually exclusive: `blocked` when any blocker is unresolved, else `dated` while `hold_until` is in the future, else `aged` when an undated hold's hold-set timestamp is at least `FM_SNAPSHOT_UNDATED_HOLD_AGE_DAYS` old (default 14, floored elapsed days), else `live`.
+The buckets are total and mutually exclusive: `blocked` when any blocker is unresolved, else `dated` while `hold_until` is a valid ISO date in the future, else `aged` when an undated hold's hold-set timestamp is at least `FM_SNAPSHOT_UNDATED_HOLD_AGE_DAYS` old (default 14, floored elapsed days), else `live`.
+A non-ISO `hold_until` is neither dated nor undated, so it stays a `live` call.
 No captain hold can fall through them and none can match two, which is what keeps a hold from vanishing from every view.
 `captain_actionable` - waiting on the captain now - is exactly `hold_bucket == "live"`.
 Existing undated holds without a hold-set stamp fall back to the task's `since` date.
@@ -141,6 +143,7 @@ Its secondmate-home summary classifies an actionable captain hold as `captain_de
 `bin/fm-bearings-snapshot.sh` places each captain hold by its `hold_bucket` and inspects no prose of its own.
 A `live` hold is a default Captain's Call entry.
 A `blocked`, `dated`, or `aged` hold leaves the default Captain's Call, renders as a Charted Next gate stating why - the blocking work, the `until <date>`, or the floored age - and contributes to the concrete `omitted[]` disclosure.
+A non-ISO `since` or `hold_until` renders as `unknown` rather than as a date.
 `--all-decisions` reveals every captain hold available within the remote-summary bound and drops its gate, so an available hold is never in both Captain's Call and Charted Next.
 An actively worked held task may also appear in Underway, which reports running work independently of those decision buckets.
 
