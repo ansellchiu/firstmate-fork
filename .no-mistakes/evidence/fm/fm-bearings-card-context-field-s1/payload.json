@@ -1,0 +1,50 @@
+{
+  "schema": "fm-bearings-board.v1",
+  "home": "firstmate",
+  "generated": "2026-10-01T03:45Z",
+  "prs_live": false,
+  "underway": [],
+  "landed": [],
+  "charted": [],
+  "charted_more": 0,
+  "captains_call": [
+    {
+      "key": "t-401",
+      "type": "decision",
+      "repo": "firstmate",
+      "title": "Watcher stand-down policy",
+      "about": "Watcher auto-standdown was restored in #6; two homes still idle-loop overnight.",
+      "decide": "Keep auto-standdown, or switch to an explicit captain-armed watch?",
+      "context": "Option A — keep auto-standdown (recommended)\n• Changes nothing further; #6 already restored it and main CI passes.\n• Cost: a watcher may stand down during a slow PR and miss one landing until the next /bearings.\n\nOption B — captain-armed watch\n• Watchers run only when you arm them from the board.\n• Cost: one extra tap per session; overnight idle loops stop entirely.\n\nWhy now: secondmate-2 burned ~40 idle polls last night.\nDone already: <script>alert(1)</script> leak probe merged; tests realigned.\nWould falsify A: another missed landing this week.",
+      "options": [
+        {
+          "value": "keep",
+          "label": "Keep auto-standdown",
+          "hint": "no change",
+          "recommended": true
+        },
+        {
+          "value": "armed",
+          "label": "Captain-armed watch",
+          "hint": "one tap per session"
+        }
+      ],
+      "allow_freeform": true
+    },
+    {
+      "key": "t-402",
+      "type": "decision",
+      "repo": "firstmate",
+      "title": "Rename the fleet board",
+      "about": "Short summary only.",
+      "decide": "Rename?",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        }
+      ],
+      "allow_freeform": true
+    }
+  ]
+}
