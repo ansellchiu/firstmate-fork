@@ -92,10 +92,15 @@ PI_CONFIG="$TMP_ROOT/piconfig"
 mkdir -p "$PROJECT/.pi/extensions/lib" "$HOME_DIR/config" "$PI_CONFIG"
 cp "$ROOT/.pi/extensions/fm-calm.ts" "$PROJECT/.pi/extensions/fm-calm.ts"
 for f in fm-calm-assistant-layout.ts fm-calm-operational-user-layout.ts \
-  fm-calm-visibility.ts fm-calm-working-ship.ts fm-operational-input.ts; do
+  fm-calm-preservation.ts fm-calm-visibility.ts fm-calm-working-ship-sprite.ts \
+  fm-calm-working-ship.ts fm-operational-input.ts; do
   cp "$ROOT/.pi/extensions/lib/$f" "$PROJECT/.pi/extensions/lib/$f"
 done
 fm_git_init_commit "$PROJECT"
+
+# The hull Calm must draw mid-turn: the working ship's contract glyphs.
+WORKING_SHIP_HULL='╲▁▁▁╱'
+
 
 # The faux provider: a real pi turn that stays in its working state long enough
 # to be observed, with no model call behind it.
@@ -223,12 +228,12 @@ check_presentation() {  # <calm on|off> <expected-submit-verdict> <expected-gene
   if [ "$calm" = on ]; then
     i=0
     while [ "$i" -lt 240 ] \
-      && ! printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq '\__/'; do
+      && ! printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq "$WORKING_SHIP_HULL"; do
       sleep 0.05
       generating=$(tmux -L "$SOCKET" capture-pane -e -p -t "$session" -S 0 -E - 2>/dev/null)
       i=$((i + 1))
     done
-    printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq '\__/' \
+    printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq "$WORKING_SHIP_HULL" \
       || fail_pi "Calm never drew its working ship, so a cleared composer border proves nothing (calm=$calm)"
   fi
   ! printf '%s\n' "$generating" | fm_composer_strip_ansi | grep -Fq FM_LIVE_WORKING_DONE \

@@ -198,6 +198,12 @@ a { color: inherit; text-decoration: none; }
 .bb-ctx__k { font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--text-faint); white-space: nowrap; }
 .bb-ctx__v { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.4; min-width: 0; }
+/* Progressive-disclosure reasoning: closed by default, wraps at iPad width. */
+.bb-more { border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-card-warm); min-width: 0; }
+.bb-more__sum { cursor: pointer; padding: 8px 12px; font-family: var(--font-mono); font-size: var(--fs-2xs);
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.bb-more__body { margin: 0; padding: 0 12px 12px; font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
 .bb-decision__link { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--ocean-600); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .bb-decision__link:hover { text-decoration: underline; }
 /* One rhythm owner: the answer form is a flex column with the same 12px gap as
@@ -231,6 +237,7 @@ a { color: inherit; text-decoration: none; }
 .bb-limit.is-visible { display: inline; }
 .bb-freeform { width: 100%; font-family: var(--font-sans); font-size: var(--fs-sm); color: var(--text-strong);
   background: var(--surface-card); border: 1.5px solid var(--border-default); border-radius: var(--radius-sm); padding: 8px 11px; }
+.bb-note-help { margin: 4px 0 0; font-size: var(--fs-xs, 12px); color: var(--text-muted, #777); }
 .bb-freeform:focus { outline: none; border-color: var(--rust-400); box-shadow: var(--focus-ring); }
 
 /* ---- compact rows (Underway / Landed / Charted) ---- */
@@ -513,6 +520,12 @@ __FM_BEARINGS_BOARD_DATA__
       if (item.about) ctx.appendChild(ctxRow("about", item.about));
       if (item.decide) ctx.appendChild(ctxRow("decide", item.decide));
       pad.appendChild(ctx);
+      if (item.context) {
+        var more = el("details", "bb-more");
+        more.appendChild(el("summary", "bb-more__sum", "context"));
+        more.appendChild(el("p", "bb-more__body", item.context));
+        pad.appendChild(more);
+      }
     }
 
     var form = document.createElement("form");
@@ -537,8 +550,10 @@ __FM_BEARINGS_BOARD_DATA__
     if (item.allow_freeform) {
       var ff = document.createElement("input");
       ff.type = "text"; ff.name = "note"; ff.className = "bb-freeform";
-      ff.placeholder = item.freeform_hint || "or answer in your own words…";
+      ff.placeholder = "Note for firstmate - does not answer this card";
+      ff.setAttribute("aria-label", "Note for firstmate (does not answer this card)");
       form.appendChild(ff);
+      form.appendChild(el("p", "bb-note-help", "A note is read by firstmate and does not answer or close this card. Choose an option to answer."));
     }
 
     var foot = el("div", "bb-decision__foot");
@@ -560,6 +575,7 @@ __FM_BEARINGS_BOARD_DATA__
       var value = fd.get("answer");
       var note = (fd.get("note") || "").trim();
       var displayAnswer = value ? (note ? value + " - " + note : value) : note;
+      var verb = value ? "answer" : "note";
       if (!displayAnswer) return;
       if (utf8ByteLength(displayAnswer) > 512) {
         answerLimit.textContent = "Answer is too long to queue (512 bytes maximum).";
@@ -573,11 +589,12 @@ __FM_BEARINGS_BOARD_DATA__
           schema: "fm-bearings-answer.v1",
           question: item.key,
           selection: value || "",
-          note: note
+          note: note,
+          options: item.options.map(function (o) { return o.value; })
         };
         if (item.close) ctxData.close = item.close;
         window.lavish.queuePrompt(
-          "Captain's Call answer - " + item.title + ": " + displayAnswer,
+          "Captain's Call " + verb + " - " + item.title + ": " + displayAnswer,
           { tag: "choice", text: item.title + " -> " + displayAnswer, element: form,
             data: ctxData }
         );

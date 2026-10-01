@@ -2323,7 +2323,7 @@ while :; do
 done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_MARKER_ROOT="$marker_root" FM_TRIGGER_FILE="$trigger" FM_STOP_FILE="$stop" node --input-type=module 2>&1 <<'EOF'
+  PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_MARKER_ROOT="$marker_root" FM_TRIGGER_FILE="$trigger" FM_STOP_FILE="$stop" node --input-type=module > "$TMP_ROOT/pi-session-replacement-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -2486,8 +2486,8 @@ if (liveArms().length !== 1) {
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 process.exit(0);
 EOF
-)
   status=$?
+  out=$(cat "$TMP_ROOT/pi-session-replacement-node-output")
   expect_code 0 "$status" "Pi session replacement must auto-arm and carry an in-flight actionable close"
   [ -z "$out" ] || fail "Pi session-replacement handoff test printed output: $out"
   pass "Pi session replacement auto-arms and carries its in-flight actionable close"
@@ -2906,7 +2906,10 @@ printf 'watcher: started pid=%s (beacon fresh) recovery-generation=g4\n' "$$"
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_SECOND_FILE="$second" FM_STOP_FILE="$stop" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module 2>&1 <<'EOF'
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
+  PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_SECOND_FILE="$second" FM_STOP_FILE="$stop" FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=2 node --input-type=module > "$TMP_ROOT/pi-successor-failure-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -2987,8 +2990,8 @@ if (armPids().length !== 4) throw new Error(`the settled delivery launched anoth
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 process.exit(0);
 EOF
-)
   status=$?
+  out=$(cat "$TMP_ROOT/pi-successor-failure-node-output")
   expect_code 0 "$status" "Pi must keep the live retry arm when a stale recovery confirmation is rejected"
   [ -z "$out" ] || fail "Pi stale-recovery retirement test printed output: $out"
   pass "Pi keeps its live retry arm when a stale recovery confirmation is rejected"
@@ -3403,7 +3406,10 @@ while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.05; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
   handoff="$home/state/extensions/pi-primary-watch/session-replacement-actionable.json"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_HANDOFF_FILE="$handoff" FM_PI_ARM_READY_TIMEOUT_MS=3000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=200 node --input-type=module 2>&1 <<'EOF'
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
+  PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_HANDOFF_FILE="$handoff" FM_PI_ARM_READY_TIMEOUT_MS=3000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=200 node --input-type=module > "$TMP_ROOT/pi-late-retiring-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -3457,8 +3463,8 @@ if (!messages.some((message) => message.includes("signal: outcome on an untermin
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 process.exit(0);
 EOF
-)
   status=$?
+  out=$(cat "$TMP_ROOT/pi-late-retiring-node-output")
   expect_code 0 "$status" "Pi must persist an actionable close that is still restoring when its session is replaced"
   [ -z "$out" ] || fail "Pi unterminated actionable row test printed output: $out"
   pass "Pi queues an unterminated actionable row before its restoration runs"
@@ -3597,7 +3603,10 @@ printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
 while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_PI_ARM_READY_TIMEOUT_MS=4000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=1 node --input-type=module 2>&1 <<'EOF'
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
+  PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_LOG="$log" FM_STOP_FILE="$stop" FM_PI_ARM_READY_TIMEOUT_MS=4000 FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 FM_WATCH_REARM_RETRY_BASE_MS=5 FM_WATCH_REARM_RETRY_MAX_MS=10 FM_WATCH_REARM_RETRY_LIMIT=1 node --input-type=module > "$TMP_ROOT/pi-retired-restoration-node-output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -3668,8 +3677,8 @@ if (prompts[1].includes("could not restore watcher continuity")) {
 writeFileSync(process.env.FM_STOP_FILE, "stop\n");
 process.exit(0);
 EOF
-)
   status=$?
+  out=$(cat "$TMP_ROOT/pi-retired-restoration-node-output")
   expect_code 0 "$status" "Pi must keep a retired restoration verdict off an inherited wake"
   [ -z "$out" ] || fail "Pi retired restoration verdict test printed output: $out"
   pass "Pi keeps a retired session's restoration verdict off an inherited wake"
@@ -4750,7 +4759,7 @@ while [ ! -e "$FM_RELEASE_FILE" ]; do sleep 0.02; done
 printf 'signal: lock handoff\n'
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
-  out=$(PLUGIN="$plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_RELEASE_FILE="$release" node 2>&1 <<'EOF'
+  PLUGIN="$plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_RELEASE_FILE="$release" node > "$TMP_ROOT/opencode-close-lock-node-output" 2>&1 <<'EOF'
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -4790,21 +4799,22 @@ try {
   other.kill("SIGTERM");
 }
 EOF
-)
   status=$?
+  out=$(cat "$TMP_ROOT/opencode-close-lock-node-output")
   expect_code 0 "$status" "OpenCode close handler must verify session-lock ownership before successor launch"
   [ -z "$out" ] || fail "OpenCode close lock test printed output: $out"
   pass "OpenCode close handler verifies session-lock ownership before successor launch"
 }
 
 test_opencode_watch_arm_coordinates_with_turnend_guard() {
-  local arm_plugin guard_plugin repo home log guard_log out status
+  local arm_plugin guard_plugin repo home log guard_log node_output out status
   arm_plugin="$ROOT/.opencode/plugins/fm-primary-watch-arm.js"
   guard_plugin="$ROOT/.opencode/plugins/fm-primary-turnend-guard.js"
   repo="$TMP_ROOT/opencode-coordinate-root"
   home="$TMP_ROOT/opencode-coordinate-home"
   log="$TMP_ROOT/opencode-coordinate-arm.log"
   guard_log="$TMP_ROOT/opencode-coordinate-guard.log"
+  node_output="$TMP_ROOT/opencode-coordinate-node-output"
   mkdir -p "$repo/bin" "$home/state" "$home/config"
   git init -q "$repo"
   : > "$repo/AGENTS.md"
@@ -4821,7 +4831,10 @@ printf 'guard should not run\n' >&2
 exit 2
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh" "$repo/bin/fm-turnend-guard.sh"
-  out=$(ARM_PLUGIN="$arm_plugin" GUARD_PLUGIN="$guard_plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_GUARD_LOG="$guard_log" node 2>&1 <<'EOF'
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
+  ARM_PLUGIN="$arm_plugin" GUARD_PLUGIN="$guard_plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_GUARD_LOG="$guard_log" node > "$node_output" 2>&1 <<'EOF'
 import { existsSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -4863,21 +4876,22 @@ if (promptBody) {
   process.exit(1);
 }
 EOF
-)
   status=$?
+  out=$(cat "$node_output")
   expect_code 0 "$status" "OpenCode turn-end guard must let the auto-arm plugin establish supervision first"
   [ -z "$out" ] || fail "OpenCode coordination test printed output: $out"
   pass "OpenCode watcher plugin coordinates with the turn-end guard"
 }
 
 test_opencode_healthy_arm_output_does_not_suppress_guard() {
-  local arm_plugin guard_plugin repo home log guard_log out status
+  local arm_plugin guard_plugin repo home log guard_log node_output out status
   arm_plugin="$ROOT/.opencode/plugins/fm-primary-watch-arm.js"
   guard_plugin="$ROOT/.opencode/plugins/fm-primary-turnend-guard.js"
   repo="$TMP_ROOT/opencode-external-healthy-root"
   home="$TMP_ROOT/opencode-external-healthy-home"
   log="$TMP_ROOT/opencode-external-healthy-arm.log"
   guard_log="$TMP_ROOT/opencode-external-healthy-guard.log"
+  node_output="$TMP_ROOT/opencode-external-healthy-node-output"
   mkdir -p "$repo/bin" "$home/state" "$home/config"
   git init -q "$repo"
   : > "$repo/AGENTS.md"
@@ -4894,7 +4908,10 @@ printf 'guard ran after external healthy watcher\n' >&2
 exit 2
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh" "$repo/bin/fm-turnend-guard.sh"
-  out=$(ARM_PLUGIN="$arm_plugin" GUARD_PLUGIN="$guard_plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_GUARD_LOG="$guard_log" node 2>&1 <<'EOF'
+  # Stock macOS Bash 3.2 does not treat a quoted heredoc body as literal while
+  # scanning for the closing ")" of a command substitution, so an apostrophe in
+  # this JavaScript opens a shell quote that swallows it. Capture through a file.
+  ARM_PLUGIN="$arm_plugin" GUARD_PLUGIN="$guard_plugin" WORKTREE="$repo" FM_HOME="$home" FM_ARM_LOG="$log" FM_GUARD_LOG="$guard_log" node > "$node_output" 2>&1 <<'EOF'
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -4940,8 +4957,8 @@ if (!promptBody.includes("TURN WOULD END BLIND")) {
   process.exit(1);
 }
 EOF
-)
   status=$?
+  out=$(cat "$node_output")
   expect_code 0 "$status" "OpenCode watch plugin must not treat external healthy output as an owned arm"
   [ -z "$out" ] || fail "OpenCode external-healthy test printed output: $out"
   pass "OpenCode healthy arm output does not suppress the turn-end guard"

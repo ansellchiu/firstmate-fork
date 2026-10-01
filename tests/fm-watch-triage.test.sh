@@ -2346,6 +2346,11 @@ test_unchanged_stale_repeat_absorbed_but_changed_reason_surfaces() {
     || fail "four identical stale notifications produced $wakes full-context wakes (expected exactly 1): $(cat "$out")"
 
   # A materially changed reason must still reach firstmate immediately.
+  # Retire the routine batch the four absorbed rounds above left pending: its
+  # window has expired by now, so it would flush as a heartbeat and end the
+  # cycle before the stale escalation below is ever evaluated. That is carry-over
+  # from the previous sub-case, not the behaviour under test here.
+  rm -f "$state/.wake-batch" "$state/.wake-batch-opened" "$state/.wake-record-manifest"
   printf 'quiet pane (tick 9)\n' > "$capture_file"
   printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
   printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.stale-$key"
@@ -2358,8 +2363,13 @@ test_unchanged_stale_repeat_absorbed_but_changed_reason_surfaces() {
     FM_STALE_ESCALATE_SECS=240 FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
   wait_for_exit "$pid" 60 || { reap "$pid"; fail "a materially changed stale reason was suppressed: $(cat "$out")"; }
-  grep -F "possible wedge" "$out" >/dev/null \
-    || fail "the changed wedge-escalation reason did not surface: $(cat "$out")"
+  # The absorbed repeat above surfaces the bare "stale: <window>" line, so the
+  # escalation's own idle detail is what distinguishes a surfaced changed reason
+  # from another absorbed repeat. This pane is deliberately a bare shell with a
+  # stopped crew, which the escalation classifies as agent-dead rather than a
+  # wedge; either way it must reach firstmate instead of being absorbed.
+  grep -F "stale: $window (idle" "$out" >/dev/null \
+    || fail "the changed stale escalation reason did not surface: $(cat "$out")"
   unset FM_FAKE_CREW_STATE
   pass "an unchanged stale notification already handled is absorbed, while a materially changed reason still surfaces"
 }
@@ -3808,8 +3818,8 @@ SH
 
   git -C "$proj" worktree add -q -b "$task" "$wt" main
 
-  printf 'window=%s\nendpoint_task_id=%s\nworktree=%s\nproject=%s\nkind=ship\nmode=local-only\nspawn_gen=1\n' \
-    "$window" "$task" "$wt" "$proj" > "$state/$task.meta"
+  printf 'window=%s\nendpoint_task_id=%s\nworktree=%s\nproject=%s\nkind=ship\nmode=local-only\nspawn_gen=1\ndispatch_base=%s\n' \
+    "$window" "$task" "$wt" "$proj" "$(git -C "$wt" rev-parse HEAD)" > "$state/$task.meta"
   touch "$state/$task.status"
   sig=$(seen_sig "$state/$task.status"); printf '%s' "$sig" > "$state/.seen-${task}_status"
 

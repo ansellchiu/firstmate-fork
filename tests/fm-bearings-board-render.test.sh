@@ -165,6 +165,30 @@ test_an_omitted_kind_keeps_the_existing_queued_rendering() {
   pass "an omitted kind renders exactly as queued work always did"
 }
 
+test_a_decision_context_renders_collapsed_and_is_absent_without_the_field() {
+  local home data out
+  home=$(make_home context)
+  data="$home/payload.json"
+  jq -n '{schema:"fm-bearings-board.v1", home:"render-home", generated:"2026-10-01T00:00Z",
+    prs_live:false, underway:[], landed:[], charted:[], charted_more:0, captains_call:[
+      {key:"with-ctx", type:"decision", repo:"sample", title:"With context", about:"a", decide:"d",
+       context:"Reasoning line one.\nLine two.", options:[{value:"yes",label:"Yes"}], allow_freeform:true},
+      {key:"no-ctx", type:"decision", repo:"sample", title:"No context", about:"a", decide:"d",
+       options:[{value:"yes",label:"Yes"}], allow_freeform:true}]}' > "$data"
+  PATH="$home/fakebin:$PATH" FM_HOME="$home" \
+    FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_PROCEVENT_CLAIM_ROOT="$home/procevent-claims" \
+    "$BOARD" build "$data" >/dev/null || fail "the board did not build with a context field"
+  out=$(node "$HARNESS" "$home/.lavish/bearings-board.html") || fail "the board could not be rendered"
+  printf '%s' "$out" | jq -e '
+    (.decisions | length) == 2
+      and .decisions[0].tag == "details" and .decisions[0].open == false
+      and .decisions[0].context == "Reasoning line one.\nLine two."
+      and .decisions[1].context == null
+  ' >/dev/null || fail "the decision context did not render collapsed, or leaked onto a card without it: $out"
+  pass "a decision context renders behind a closed disclosure and is absent when omitted"
+}
+
 test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status() {
   local home out
   home=$(make_home underway-name)
@@ -228,6 +252,7 @@ test_charted_rows_without_a_filed_date_follow_the_dated_rows_in_payload_order() 
   pass "charted rows with no filed date follow the dated rows in payload order"
 }
 
+test_a_decision_context_renders_collapsed_and_is_absent_without_the_field
 test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status
 test_an_underway_identifier_label_is_not_replaced_by_run_status
 test_charted_next_reads_newest_filed_first

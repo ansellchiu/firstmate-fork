@@ -156,6 +156,7 @@ validate_payload() {  # <data.json>
           and optional_string("hint")] | all)
       and (optional_string("about"))
       and (optional_string("decide"))
+      and ((has("context") | not) or (.context | type == "string" and length <= 8000))
       and (optional_string("detail"))
       and (optional_https_url("pr_url"))
       and optional_subject

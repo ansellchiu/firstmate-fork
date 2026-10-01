@@ -275,6 +275,11 @@ new_git_world() {
   printf '%s\n' "instructions" > "$root/AGENTS.md"
   mkdir -p "$root/bin" "$root/.agents/skills"
   printf '%s\n' "echo spawn" > "$root/bin/fm-spawn.sh"
+  # A real spawn enumerates this home's extensions through the root's own
+  # bin/fm-ext.sh and refuses rather than launch without a wrapper the home may
+  # have configured, so a world without it never reaches the convergence below.
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$root/bin/fm-ext.sh"
+  chmod +x "$root/bin/fm-ext.sh"
   printf '%s\n' "skill" > "$root/.agents/skills/example.md"
   git -C "$root" add -A
   git -C "$root" commit -qm initial

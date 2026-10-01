@@ -241,6 +241,17 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
   [ "$rc" -ne 0 ] || fail "an invalid structured version subject was accepted"
 
   write_valid_payload "$data"
+  jq '.captains_call[0].context = 7' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-string captains_call context was accepted"
+
+  write_valid_payload "$data"
+  jq '.captains_call[0].context = (reduce range(8001) as $i (""; . + "x"))' "$data" > "$data.tmp" \
+    && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "an over-long captains_call context was accepted"
+
+  write_valid_payload "$data"
   jq '.captains_call[0].type = "verdict"' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
   set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
   [ "$rc" -ne 0 ] || fail "an unknown captains_call type was accepted"
@@ -318,6 +329,8 @@ test_build_injects_binds_then_arms() {
   assert_contains "$out" "bound: " "build did not report the answer binding: $out"
   assert_contains "$out" "armed: " "the first build did not arm the board source: $out"
   assert_present "$board" "build reported success without a board"
+  assert_contains "$(cat "$board")" "does not answer this card" \
+    "the built board does not say that a note is not an answer"
 
   # Round-trip: apart from the reconcile choice the build adds to every
   # decision card, the payload extracted from the built page is the same JSON

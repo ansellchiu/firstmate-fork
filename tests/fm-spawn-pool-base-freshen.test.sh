@@ -177,6 +177,8 @@ test_stale_pool_base_refreshes_before_branching() {
   branch_head=$(git -C "$POOL_DIR" rev-parse HEAD)
   [ "$branch_head" = "$current" ] || fail "spawn left the pooled worktree on stale history"
   [ "$branch_head" != "$INITIAL_SHA" ] || fail "fixture did not prove origin/main advanced past the pool base"
+  assert_grep "dispatch_base=$branch_head" "$HOME_DIR/state/$id.meta" \
+    "spawn did not record the worktree HEAD it dispatched at as dispatch_base="
   if [ "${FM_TEST_EVIDENCE:-0}" = 1 ]; then
     printf '# observed spawn: %s\n' "$(printf '%s\n' "$out" | tail -n 1)"
     printf '# observed base: HEAD=%s origin/main=%s advanced-main=%s\n' \
@@ -744,7 +746,38 @@ test_pool_slot_claim_follows_the_spawn_outcome() {
 }
 
 test_remote_seeded_home_spawns_from_treehouse_pool
+# The shared pool is keyed on repo identity, so a home holding its OWN clone of
+# a project is handed a linked worktree of a DIFFERENT clone of the same origin.
+# That slot is a managed pool slot like any other and must carry this task's
+# claim, or teardown later has no evidence of who holds it and force-returns it
+# out from under whoever took it next.
+test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
+  local rec id out status mate
+  id='pool-slot-cross-clone-r1'
+  rec=$(make_case slot-cross-clone "$id")
+  read_case_record "$rec"
+  lay_out_as_pool_slot
+  # The spawning home's own clone of the same origin, standing in for a
+  # secondmate home's projects/<name>.
+  mate="$CASE_DIR/mate-clone"
+  git clone --quiet "file://$CASE_DIR/origin.git" "$mate"
+  PROJECT_DIR=$mate
+
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  expect_code 0 "$status" \
+    "spawn from a same-origin clone's Treehouse slot should launch"$'\n'"$out"
+  [ -f "$SLOT_CLAIM" ] \
+    || fail "spawn left a same-origin clone's Treehouse slot unclaimed: $out"
+  grep -Fq "task=$id" "$SLOT_CLAIM" \
+    || fail "the cross-clone slot claim does not name the spawned task: $(cat "$SLOT_CLAIM")"
+  grep -Fq "home=$HOME_DIR" "$SLOT_CLAIM" \
+    || fail "the cross-clone slot claim does not name the spawning home: $(cat "$SLOT_CLAIM")"
+  pass "a Treehouse slot owned by a same-origin clone is claimed by the spawning task"
+}
+
 test_pool_slot_claim_follows_the_spawn_outcome
+test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
 test_stale_pool_base_refreshes_before_branching
 test_non_main_default_branch_refreshes_before_branching

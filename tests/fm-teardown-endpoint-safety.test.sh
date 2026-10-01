@@ -967,6 +967,39 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
   pass "fm-teardown: a pool slot claimed by another task is left alone while the task's own cleanup finishes"
 }
 
+# The same reassignment where the record's project is a DIFFERENT clone of the
+# same origin than the clone owning the slot - the shape the shared pool hands a
+# home that holds its own clone. The slot is still a managed pool slot, so its
+# ownership must be read the same way; an accounting that cannot see it at all
+# would skip every ownership check and force-return the slot from under the task
+# that now holds it.
+test_reassigned_cross_clone_pool_slot_is_left_alone() {
+  local dir id=stale-task other=reassigned-task mate rc
+  dir=$(make_case slot-reassigned-cross-clone)
+  mark_case_as_treehouse_pool "$dir"
+  git clone -q --bare "$dir/project" "$dir/origin.git"
+  git -C "$dir/project" remote add origin "file://$dir/origin.git"
+  mate="$dir/mate-clone"
+  git clone -q "file://$dir/origin.git" "$mate"
+  [ "$(git -C "$dir/pool/1/project" rev-parse --path-format=absolute --git-common-dir)" \
+    != "$(git -C "$mate" rev-parse --path-format=absolute --git-common-dir)" ] \
+    || fail "the cross-clone case was vacuous: the slot and the project share one common dir"
+  fm_write_meta "$dir/home/state/$id.meta" \
+    "window=firstmate:fm-$id" "endpoint_task_id=$id" \
+    "worktree=$dir/worktree" "project=$mate" "kind=scout"
+  claim_pool_slot "$dir" "$other" "$dir/other-home"
+
+  set +e
+  run_case "$dir" "$id" > "$dir/stdout" 2> "$dir/stderr"
+  rc=$?
+  set -e
+
+  [ "$rc" -eq 0 ] \
+    || fail "teardown of a cross-clone task whose slot was reassigned failed: $(cat "$dir/stderr")"
+  assert_reassigned_slot_left_alone "$dir" "$id" "$other" "reassigned same-origin cross-clone slot"
+  pass "fm-teardown: a reassigned pool slot owned by a same-origin clone is left alone"
+}
+
 # The two states that must never become a false refusal: the task's own claim,
 # and no claim at all (a slot taken before claims existed, or already returned).
 test_own_and_absent_slot_claims_still_tear_down() {
@@ -1406,6 +1439,7 @@ test_reused_pool_slot_refuses_before_touching_the_other_task
 test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot
+test_reassigned_cross_clone_pool_slot_is_left_alone
 test_own_and_absent_slot_claims_still_tear_down
 test_recorded_endpoint_that_changed_directory_still_tears_down
 test_project_lock_anchors_at_the_local_root_across_home_layouts

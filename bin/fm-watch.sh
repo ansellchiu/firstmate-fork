@@ -1150,6 +1150,55 @@ wedge_dead_record() {  # <window> <since-file> <triage-label> <idle-age> <pane-h
   wake "$reason"
 }
 
+# Auto-standdown for a worker that never genuinely started (introduced with the
+# stale-escalation tracking below, and dropped by a later reconciliation that kept
+# this call site). Tears the dispatch down through guarded teardown, preserves the
+# brief, re-queues the item with the blocker, and reports one loud wake. A refused
+# or failed teardown returns 1 so the caller keeps normal escalation.
+auto_standdown_task() {  # <task> <window> <blocker>
+  local task=$1 win=$2 blocker=$3 data brief_path teardown_bin state_dir config_dir loud_reason key backlog_file backlog_root teardown_out
+  state_dir="$STATE"
+  config_dir="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+  data=$(grep '^data=' "$state_dir/$task.meta" 2>/dev/null | cut -d= -f2- || true)
+  [ -n "$data" ] || data="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
+  brief_path="data/$task/brief.md"
+
+  teardown_bin="$SCRIPT_DIR/fm-teardown.sh"
+  [ -x "$teardown_bin" ] || teardown_bin="$FM_ROOT/bin/fm-teardown.sh"
+
+  # Carry teardown's own refusal into the log: "refused or failed" alone leaves
+  # nothing to tell a protective refusal apart from a broken standdown path.
+  teardown_out="$state_dir/.standdown-$task.log"
+  if ! ( unset FM_ROOT_OVERRIDE && FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$state_dir" FM_DATA_OVERRIDE="$data" FM_CONFIG_OVERRIDE="$config_dir" "$teardown_bin" "$task" --standdown ) >"$teardown_out" 2>&1; then
+    triage_log "auto-standdown: teardown of $task refused or failed; keeping normal escalation: $(tr '\n' ' ' < "$teardown_out" 2>/dev/null | cut -c1-400)"
+    return 1
+  fi
+  rm -f "$teardown_out"
+
+  if command -v tasks-axi >/dev/null 2>&1; then
+    backlog_file="$data/backlog.md"
+    if [ -f "$backlog_file" ]; then
+      backlog_root=$(fm_backlog_root "$data" 2>/dev/null || echo "$FM_HOME")
+      (
+        cd "$backlog_root" 2>/dev/null && \
+        tasks-axi reopen "$task" --file "$backlog_file" >/dev/null 2>&1 && \
+        tasks-axi update "$task" --body "Auto-standdown: $blocker" --file "$backlog_file" >/dev/null 2>&1
+      ) || true
+    fi
+  fi
+
+  loud_reason="check: auto-standdown: task $task stood down ($blocker); brief preserved at $brief_path"
+  fm_wake_append check "auto-standdown-$task" "$loud_reason" || exit 1
+
+  key=$(window_key "$win")
+  rm -f "$state_dir/.stale-$key" "$state_dir/.stale-since-$key" "$state_dir/.wedge-escalations-$key" \
+        "$state_dir/.hash-$key" "$state_dir/.count-$key" "$state_dir/.paused-$key" \
+        "$state_dir/.stale-sig-$key"
+  clear_write_tracking "$key" 2>/dev/null || true
+
+  wake "$loud_reason"
+}
+
 # Repeat-poll wedge-timer bookkeeping for an already-classified stale hash
 # absorbed as provably-working - repairs a missing/corrupt timer (self-heals a
 # watcher restart between recording the hash and recording the timer), or

@@ -64,6 +64,11 @@ new_world() {
   printf 'r1\n' > "$w/main/README.md"
   mkdir -p "$w/main/bin" "$w/main/.agents/skills"
   printf 'echo a\n' > "$w/main/bin/tool.sh"
+  cat > "$w/main/bin/fm-ext.sh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$w/main/bin/fm-ext.sh"
   printf 's1\n' > "$w/main/.agents/skills/note.md"
   git -C "$w/main" add -A
   git -C "$w/main" commit -qm c1
@@ -758,7 +763,7 @@ test_bootstrap_sweep_surfaces_skipped_home() {
 
 # --- T10: spawning a secondmate fast-forwards its worktree before launch ------
 test_spawn_fast_forwards_before_launch() {
-  local w c1 c2 fakebin
+  local w c1 c2 fakebin out
   w=$(new_world spawn-ff)
   c1=$(head_of "$w/main")
   git -C "$w/main" worktree add -q --detach "$w/sm" "$c1"
@@ -778,15 +783,15 @@ exit 0
 SH
   chmod +x "$fakebin/tmux"
 
-  PATH="$fakebin:$BASE_PATH" TMUX='' \
+  out=$(PATH="$fakebin:$BASE_PATH" TMUX='' \
     FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" \
     FM_STATE_OVERRIDE="$w/home/state" FM_DATA_OVERRIDE="$w/home/data" \
     FM_PROJECTS_OVERRIDE="$w/home/projects" FM_CONFIG_OVERRIDE="$w/home/config" \
     FM_SPAWN_NO_GUARD=1 \
-    "$ROOT/bin/fm-spawn.sh" sm "$w/sm" codex --secondmate >/dev/null 2>&1 || true
+    "$ROOT/bin/fm-spawn.sh" sm "$w/sm" codex --secondmate 2>&1) || true
 
   [ "$(head_of "$w/sm")" = "$c2" ] \
-    || fail "spawn did not fast-forward the secondmate worktree to the primary's HEAD"
+    || fail "spawn did not fast-forward the secondmate worktree to the primary's HEAD: $out"
   pass "T10 spawn fast-forwards a secondmate worktree to the primary's local HEAD before launch"
 }
 
@@ -919,6 +924,11 @@ new_remote_world() {
   printf 'v1\n' > "$w/main/AGENTS.md"
   mkdir -p "$w/main/bin" "$w/main/.agents/skills"
   printf 'echo a\n' > "$w/main/bin/tool.sh"
+  cat > "$w/main/bin/fm-ext.sh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$w/main/bin/fm-ext.sh"
   printf 's1\n' > "$w/main/.agents/skills/note.md"
   git -C "$w/main" add -A
   git -C "$w/main" commit -qm c1

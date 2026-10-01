@@ -80,12 +80,12 @@
 #   bin/fm-backend.sh's fm_backend_detect, with cmux fallback details in
 #   docs/cmux-backend.md),
 #   then tmux.
-#   Spawn-capable backends are the reference tmux adapter and experimental
-#   herdr, zellij, orca, and cmux. Orca owns both the task worktree and
-#   terminal, so ship/scout Orca spawns do not run treehouse get; cmux is a
-#   session provider only, exactly like herdr/zellij, so it does. An
-#   auto-detected herdr or cmux spawn prints a loud stderr notice;
-#   auto-detected tmux stays silent; zellij and orca are never auto-detected.
+#   Spawn-capable backends are the reference tmux adapter, verified herdr
+#   adapter, and experimental zellij, orca, and cmux adapters. Orca owns both
+#   the task worktree and terminal, so ship/scout Orca spawns do not run
+#   treehouse get; cmux is a session provider only, exactly like herdr/zellij,
+#   so it does. Auto-detected herdr stays silent like tmux; auto-detected cmux
+#   prints a loud stderr notice; zellij and orca are never auto-detected.
 #   codex-app is not a known backend yet; docs/codex-app-backend.md owns that
 #   blocked backend contract. Default tmux spawns do not write backend= to meta;
 #   absent backend= means tmux. cmux does not support --secondmate spawns yet.
@@ -428,6 +428,9 @@
 # success line and state/<id>.meta omit them.
 # Every fresh spawn or relaunch records a new spawn_gen= incarnation token so durable
 # consumers can distinguish a replacement worker that reuses the same task id.
+# A fresh ship or scout spawn also records dispatch_base=<sha>, the worktree HEAD
+# the worker was dispatched at; a relaunch keeps the original value. It is how
+# fm-teardown.sh --standdown proves a worktree has no commits beyond its base.
 # When the home session's frozen trace-context decision is enabled (see
 # docs/configuration.md and bin/fm-trace-context-lib.sh), the meta also records
 # one W3C traceparent= carrier, the same value injected into the pane as
@@ -4030,7 +4033,11 @@ fi
 # bin/fm-claude-trust.sh owns the structural scope test for both shapes and
 # refuses anything that is neither this project's own isolated worktree nor a
 # seeded secondmate home marked for this id; a refusal blocks the spawn rather
-# than launching a worker that would wedge. Refusing here rather than beside the
+# than launching a worker that would wedge. A crewmate a secondmate home spawns
+# takes the worktree shape, and the shared treehouse pool hands it a worktree of
+# whichever clone of that origin is free - often the primary home's - so the
+# worktree scope test accepts a clone sharing the project's origin identity
+# rather than only the exact clone the home knows. Refusing here rather than beside the
 # arm keeps this in the same class as the two worktree refusals just above: no
 # temp root, no retired relaunch wiring and no busy record exists yet to strand,
 # so the refusal names the endpoint the same way they do and leaves nothing else
@@ -4530,6 +4537,10 @@ else
   SPAWN_FRESH_COMMIT_PENDING=1
 fi
 SPAWN_META_PATH=$SPAWN_META_TMP
+DISPATCH_BASE=
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ -n "$WT" ]; then
+  DISPATCH_BASE=$(git -C "$WT" rev-parse --verify --quiet HEAD 2>/dev/null || true)
+fi
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
@@ -4558,6 +4569,7 @@ preserve_relaunch_meta() {
   echo "effort=${EFFORT:-default}"
   [ -z "${BUSY_GEN:-}" ] || echo "busy_gen=$BUSY_GEN"
   echo "spawn_gen=$SPAWN_GEN"
+  [ -z "$DISPATCH_BASE" ] || echo "dispatch_base=$DISPATCH_BASE"
   # Default-off writes no traceparent= line.
   # backend= is written only for a non-default (non-tmux) backend, so the
   # default path's meta stays byte-identical (absent backend= means tmux;

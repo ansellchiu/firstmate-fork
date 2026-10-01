@@ -419,9 +419,11 @@ cmd_silent() {
 # `choice`. A freeform `message` row is captain prose and is deliberately never a
 # source of decision keys. A row that does not carry both a slug-shaped `question`
 # and the versioned `selection` and `note` fields inside its `Context data:` block
-# is skipped. A time-limited rollout branch accepts the old question/answer
-# shape only for ordinary answers and rejects its bare or annotated reconcile
-# values because old rows do not separate the selected option from its note.
+# is skipped. A selection answers only when it is one of the card's authored
+# `options`; a note alone, or a value no option carries, is never an answer and
+# stays announced for firstmate to read and act on. The old question/answer
+# shape feeds nothing, because a bare freeform answer there cannot be told
+# from a question.
 # The question cap is 128 so any task id fits, including the long legacy
 # `<origin>-decision-<key>` identities pre-collapse decks still carry; the
 # security property is the slug SHAPE, which is unchanged.
@@ -470,7 +472,7 @@ cmd_choice_rows() {
       my $ctx = $1;
       my $data = eval { decode_json($ctx) };
       next unless ref($data) eq "HASH";
-      my ($key, $selected, $note, $answer, $legacy);
+      my ($key, $selected, $note, $answer);
       if (defined($data->{schema}) && !ref($data->{schema})
           && $data->{schema} eq "fm-bearings-answer.v1") {
         $key = $data->{question};
@@ -480,21 +482,21 @@ cmd_choice_rows() {
           || !defined($note) || ref($note);
         next unless $selected eq "" || $selected =~ /\A[A-Za-z0-9._-]{1,128}\z/;
         next unless length($note) <= 512;
-        next unless length($selected) || length($note);
-        $answer = length($selected) ? $selected : $note;
-        $legacy = 0;
-      # Time-limited compatibility for captures from pre-change boards; remove
-      # once no board carrying the old question/answer context can remain armed.
-      } elsif (!exists($data->{schema}) && !exists($data->{selection})
-          && !exists($data->{note})) {
-        $key = $data->{question};
-        $answer = $data->{answer};
-        next if !defined($key) || ref($key) || !defined($answer) || ref($answer);
-        next unless length($answer) && length($answer) <= 512;
-        next if $answer eq "reconcile" || index($answer, "reconcile - ") == 0;
-        $selected = "";
-        $note = "";
-        $legacy = 1;
+        # Only a selection that is one of the authored options of the card
+        # answers it. A note, or a value no option carries, answers nothing:
+        # it stays announced for firstmate to read, never a keyed answer.
+        # ponytail: a context with no `options` list (a board armed before the
+        # list existed) cannot be checked, so its slug-shaped selection stands.
+        if (exists $data->{options}) {
+          next unless ref($data->{options}) eq "ARRAY";
+          $selected = "" unless grep { defined($_) && !ref($_) && $_ eq $selected } @{$data->{options}};
+        }
+        next unless length($selected);
+        $answer = $selected;
+      # A pre-change board bare question/answer context cannot be told from a
+      # question and cannot be checked against the options of the card, so it feeds
+      # no intake and stays announced only: it falls through to the else below.
+      # Remove nothing here; the old shape simply has no branch.
       } else {
         next;
       }
@@ -511,13 +513,12 @@ cmd_choice_rows() {
       if (defined $seen{$key}) { $choices[$seen{$key}] = undef }
       $seen{$key} = scalar @choices;
       push @choices, {
-        key => $key, selection => $selected, note => $note, legacy => $legacy,
+        key => $key, selection => $selected, note => $note,
         answer => $answer, label => $label, mode => $mode
       };
     }
     for my $choice (grep { defined } @choices) {
       if ($selection eq "reconciles") {
-        next if $choice->{legacy};
         if ($choice->{selection} eq "reconcile") {
           print length($choice->{note})
             ? "$choice->{key}\t$choice->{note}\n"
@@ -550,7 +551,7 @@ cmd_read() {
   [ -f "$file" ] && [ ! -L "$file" ] || die "result file does not exist: $file"
   lifecycle=$(cmd_classify "$file")
   session_ended=$(session_field "$file" session_ended)
-  perl -e '
+  perl -MJSON::PP -e '
     use strict; use warnings;
     my ($path, $lifecycle, $session_ended) = @ARGV;
     open my $fh, "<", $path or exit 1;
@@ -662,6 +663,20 @@ cmd_read() {
         my $comment = defined $f->{prompt} ? $f->{prompt} : "";
         my $body = length $elem ? $elem : $comment;
         emit_body($body);
+        # A choice carries the card key and the captain words in its context;
+        # print them so a note that answered nothing still reaches firstmate.
+        if ($tag eq "choice" && $comment =~ /Context data:\s*(\{.*\})/s) {
+          my $d = eval { JSON::PP::decode_json($1) };
+          if (ref($d) eq "HASH" && defined($d->{question}) && !ref($d->{question})) {
+            my $sel = defined($d->{selection}) && !ref($d->{selection}) ? $d->{selection} : "";
+            my $nt = defined($d->{note}) && !ref($d->{note}) ? $d->{note} : "";
+            my $key = $d->{question};
+            $_ =~ s/[\x00-\x1f\x7f]/ /g for ($key, $sel, $nt);
+            print "card_key: $key\n";
+            print "card_selection: ", (length $sel ? $sel : "(none - a note alone answers nothing)"), "\n" if exists $d->{selection};
+            print "card_note: $nt\n" if length $nt;
+          }
+        }
         if ($tag ne "choice" && length $comment) {
           print "prompt:\n";
           emit_body($comment);

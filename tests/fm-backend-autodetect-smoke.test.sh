@@ -36,6 +36,12 @@ assert_contains_local() {  # <haystack> <needle> <msg>
     *) fail "$3"$'\n'"--- got ---"$'\n'"$1" ;;
   esac
 }
+assert_not_contains_local() {  # <haystack> <needle> <msg>
+  case "$1" in
+    *"$2"*) fail "$3"$'\n'"--- got ---"$'\n'"$1" ;;
+    *) : ;;
+  esac
+}
 
 command -v herdr >/dev/null 2>&1 || { echo "skip: herdr not found"; exit 0; }
 command -v jq >/dev/null 2>&1 || { echo "skip: jq not found (required by the herdr adapter)"; exit 0; }
@@ -82,6 +88,8 @@ on_exit() {
 }
 trap on_exit EXIT
 "$HERDR_LAB_HELPER" provision "$HERDR_LAB_SESSION" || fail "could not provision isolated Herdr lab session"
+herdr_test_agent_prepare "$TMP_ROOT/herdr-agent" "$HERDR_LAB_HELPER" \
+  || fail "could not prepare the long-lived stand-in agent"
 
 # --- scratch world: FM_HOME with NO backend config, one throwaway project ---
 
@@ -115,16 +123,16 @@ env -u TMUX -u FM_BACKEND PATH="$PATH" HERDR_ENV=1 \
   FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
   FM_CONFIG_OVERRIDE="$CONFIG" FM_PROJECTS_OVERRIDE="$TMP_ROOT/unused-projects" \
   FM_SPAWN_NO_GUARD=1 \
-  "$ROOT/bin/fm-spawn.sh" "$ID" "$PROJ" "sh -c 'echo autodetect-smoke-ok'" --mode no-mistakes --yolo off \
+  "$ROOT/bin/fm-spawn.sh" "$ID" "$PROJ" "$(herdr_test_agent_command autodetect-smoke-ok)" --mode no-mistakes --yolo off \
   >"$OUT_FILE" 2>"$ERR_FILE"
 status=$?
 [ "$status" -eq 0 ] || fail "fm-spawn.sh did not succeed auto-detecting herdr"$'\n'"--- stdout ---"$'\n'"$(cat "$OUT_FILE")"$'\n'"--- stderr ---"$'\n'"$(cat "$ERR_FILE")"
 
-assert_contains_local "$(cat "$ERR_FILE")" "NOTICE" \
-  "fm-spawn.sh did not print the auto-detect notice to stderr when selecting herdr"
-assert_contains_local "$(cat "$ERR_FILE")" "EXPERIMENTAL herdr backend" \
-  "fm-spawn.sh's auto-detect notice did not flag herdr as experimental"
-pass "real herdr: fm-spawn.sh auto-detects herdr from HERDR_ENV=1 (no explicit config) and prints the loud notice"
+assert_not_contains_local "$(cat "$ERR_FILE")" "EXPERIMENTAL" \
+  "fm-spawn.sh's Herdr auto-detection retained the obsolete experimental label"
+assert_not_contains_local "$(cat "$ERR_FILE")" "--backend tmux to opt out" \
+  "fm-spawn.sh's Herdr auto-detection retained the obsolete tmux opt-out steer"
+pass "real herdr: fm-spawn.sh auto-detects verified herdr from HERDR_ENV=1 (no explicit config) without an opt-out steer"
 
 META="$STATE/$ID.meta"
 [ -f "$META" ] || fail "fm-spawn.sh did not write a meta file for $ID"
@@ -163,6 +171,8 @@ pass "real herdr: the auto-detected spawn's launch command actually ran in the h
 # --- teardown completes the trivial spawn/teardown cycle --------------------
 
 TEARDOWN_OUT="$TMP_ROOT/teardown.out"
+herdr_test_write_landing_receipt "$ROOT" "$TMP_ROOT" "$ID" \
+  || fail "could not record the auto-detect fixture's landing receipt"
 FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
   FM_CONFIG_OVERRIDE="$CONFIG" \
   "$ROOT/bin/fm-teardown.sh" "$ID" >"$TEARDOWN_OUT" 2>&1

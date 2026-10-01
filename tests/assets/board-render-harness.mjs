@@ -5,7 +5,7 @@
 // Usage: node board-render-harness.mjs <built-board.html>
 // Prints one JSON document:
 //   { stats:[{n,label}], underway:[{title,sub,badges}],
-//     charted:[{title,sub,badges,pickable}], empty, more, error }
+//     charted:[{title,sub,badges,pickable}], decisions:[{context,tag,open}], empty, more, error }
 import { readFileSync } from "node:fs";
 
 const html = readFileSync(process.argv[2], "utf8");
@@ -122,5 +122,16 @@ const errorText = [...byId.entries()]
 const empty = ch.children.filter((c) => c.className.includes("bb-empty")).map((c) => c.textContent);
 const more = ch.children.filter((c) => c.className.includes("bb-morechip")).map((c) => c.textContent);
 
+// Decision cards: the progressive-disclosure block each one rendered, if any.
+const cardsRoot = [...byId.values()].find((n) => n.querySelectorAll(".bb-decision").length) || new Node("div");
+const decisions = cardsRoot.querySelectorAll(".bb-decision").map((card) => {
+  const more = card.querySelectorAll("bb-more")[0];
+  return {
+    context: more ? more.children.find((c) => c.className.includes("bb-more__body"))?.textContent ?? null : null,
+    tag: more?.tagName ?? null,
+    open: more ? more.attributes.open !== undefined : null,
+  };
+});
+
 process.stdout.write(
-  JSON.stringify({ stats, underway, charted, empty, more, error: errorText }) + "\n");
+  JSON.stringify({ stats, underway, charted, decisions, empty, more, error: errorText }) + "\n");
