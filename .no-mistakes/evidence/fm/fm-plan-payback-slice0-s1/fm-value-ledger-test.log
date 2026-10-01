@@ -1,0 +1,19 @@
+ok - an aligned pair yields a banded, bias-labelled dollars per point
+ok - a figure whose quantization band is too wide does not count
+ok - samples are never paired across a reset
+ok - a one second resetsAt jitter is not read as a reset
+ok - a pair where quota moved without local draw is flagged and excluded
+ok - a read taken late in its hour is not paired
+ok - pi gpt rows attribute to codex-plus, mixed hours stay ambiguous, foreign clients cannot leak into claude-max
+ok - rollup is idempotent and verify re-derives it exactly
+ok - a capture altered after the sample is detected
+ok - payback is cycle-to-date over the fee, and missing until the cycle start is registered
+ok - the check has exactly one print path and runs once a day
+ok - a pool whose quota read is not fresh prints the alert
+ok - arm writes and binds the byte-static shim and disarm removes it
+ok - the panel renders the pools and the alert state
+ok - pi gpt usage outside provider openai-codex is never charged to codex-plus
+ok - conservation reconciles the all-client total and asserts the antigravity-cli exclusion
+ok - cycle-to-date never spans two billing cycles
+ok - the claude-max idle premise is tested in the rollup and the panel
+ok - rollup and verify rows carry an actor and are counted from the ledger

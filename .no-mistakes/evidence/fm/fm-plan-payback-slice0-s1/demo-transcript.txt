@@ -1,0 +1,147 @@
+$ fm-value-ledger.sh init
+wrote: $FM_HOME/data/value-ledger/lanes.json
+$ FM_VALUE_NOW='2026-09-29 00:05 SGT' fm-value-ledger.sh sample --actor manual   # claude 90% left, codex 70% left
+sampled: s-20260928T160550Z actor=manual
+$ FM_VALUE_NOW='2026-09-30 00:05 SGT' fm-value-ledger.sh sample --actor manual   # claude 84% left, codex 62% left
+sampled: s-20260929T160551Z actor=manual
+$ FM_VALUE_NOW='2026-10-01 00:05 SGT' fm-value-ledger.sh sample --actor manual   # claude 78% left, codex 52% left
+sampled: s-20260930T160551Z actor=manual
+$ FM_VALUE_NOW='2026-10-02 00:05 SGT' fm-value-ledger.sh sample --actor manual   # claude 73% left, codex 44% left
+sampled: s-20261001T160552Z actor=manual
+$ fm-value-ledger.sh rollup --actor manual
+rolled up: r-39e11afa0844a4a9
+claude-max: USD 2.6471/pp (band 2.5..2.8125) - biased low: claude.ai web, Claude Desktop, phone, other machines unseen | payback 0.45
+codex-plus: USD 0.8462/pp (band 0.8148..0.88) - biased low: ChatGPT web, other machines unseen | payback 1.1
+actors: manual=4
+claude-max premise "Claude Max is idle": fails: in use
+$ fm-value-ledger.sh rollup --actor manual   # re-run
+unchanged: r-39e11afa0844a4a9
+rollup rows in ledger: 1
+$ fm-value-ledger.sh verify --actor manual
+verified: re-derivation matches the stored rollup exactly
+--- latest rollup row (pools, conservation, actor_counts):
+{
+  "pools": {
+    "claude-max": {
+      "api_value_usd": 45,
+      "pp_used": 17,
+      "dollars_per_pp": {
+        "v": 2.6471,
+        "unit": "USD/pp",
+        "status": "derived",
+        "band": {
+          "lo": 2.5,
+          "hi": 2.8125
+        },
+        "counts": true,
+        "bias": "low: unseen surfaces move quota without local draw",
+        "display": "USD 2.6471/pp (band 2.5..2.8125) - biased low: claude.ai web, Claude Desktop, phone, other machines unseen"
+      },
+      "cycle_to_date": {
+        "v": 45,
+        "unit": "USD",
+        "status": "derived",
+        "ambiguous_usd_excluded": 0,
+        "cycle_start": "2026-09-20",
+        "cycle_start_registered": "2026-09-20",
+        "src": "captures/s-20261001T160552Z/hourly-*.json hours 2026-09-20..<2026-10-02 00:00"
+      },
+      "payback": {
+        "v": 0.45,
+        "unit": "x fee",
+        "status": "derived",
+        "basis": "cycle-to-date realised value over monthly fee, not a run-rate",
+        "fee_usd": 100,
+        "tier_confirmed": false,
+        "bias": "low: unseen surfaces; ambiguous hours excluded"
+      },
+      "premise": {
+        "claim": "Claude Max is idle",
+        "src": "open primary-lane call",
+        "idle_max_pp_per_day": 2,
+        "threshold_src": "under 2 points a day is under 15% of the seven-day window",
+        "pp_used": 17,
+        "days": 3,
+        "pp_per_day": 5.6666,
+        "basis": "quota points used across measured, same-window pairs, aligned or not",
+        "verdict": "fails: in use"
+      }
+    },
+    "codex-plus": {
+      "api_value_usd": 22,
+      "pp_used": 26,
+      "dollars_per_pp": {
+        "v": 0.8462,
+        "unit": "USD/pp",
+        "status": "derived",
+        "band": {
+          "lo": 0.8148,
+          "hi": 0.88
+        },
+        "counts": true,
+        "bias": "low: unseen surfaces move quota without local draw",
+        "display": "USD 0.8462/pp (band 0.8148..0.88) - biased low: ChatGPT web, other machines unseen"
+      },
+      "cycle_to_date": {
+        "v": 22,
+        "unit": "USD",
+        "status": "derived",
+        "ambiguous_usd_excluded": 4,
+        "cycle_start": "2026-09-25",
+        "cycle_start_registered": "2026-09-25",
+        "src": "captures/s-20261001T160552Z/hourly-*.json hours 2026-09-25..<2026-10-02 00:00"
+      },
+      "payback": {
+        "v": 1.1,
+        "unit": "x fee",
+        "status": "derived",
+        "basis": "cycle-to-date realised value over monthly fee, not a run-rate",
+        "fee_usd": 20,
+        "tier_confirmed": true,
+        "bias": "low: unseen surfaces; ambiguous hours excluded"
+      },
+      "premise": null
+    }
+  },
+  "conservation": {
+    "total_usd": 96,
+    "attributed_usd": 67,
+    "ambiguous_usd": 4,
+    "unmatched_registry_usd": 0,
+    "excluded_usd": 25,
+    "unregistered_usd": 0,
+    "registry_clients": [
+      "claude",
+      "codex",
+      "pi"
+    ],
+    "excluded_clients": [
+      "antigravity-cli"
+    ],
+    "exclusions": [
+      {
+        "pool": "claude-max",
+        "client": "antigravity-cli",
+        "why": "antigravity-cli serves Anthropic models on Google's quota, not Claude Max",
+        "client_usd": 25,
+        "in_pool_usd": 0,
+        "ok": true,
+        "assertion": "antigravity-cli is excluded from claude-max"
+      }
+    ],
+    "leaks": 0,
+    "reconciled": true,
+    "ok": true
+  },
+  "actor_counts": {
+    "manual": 4
+  }
+}
+$ fm-value-ledger.sh dashboard
+wrote: $FM_HOME/data/value-ledger/plan-payback.html
+$ FM_VALUE_NOW="2026-10-03 00:20 SGT" fm-value-ledger.sh check   # healthy day
+(exit 0, no output)
+$ FM_VALUE_NOW="2026-10-04 00:20 SGT" fm-value-ledger.sh check   # quota-axi failing
+plan payback: sample failed - fm-value-ledger: instrument failed: quota-axi
+$ FM_VALUE_NOW="2026-10-04 00:40 SGT" fm-value-ledger.sh check   # same day retry
+(no second alert)
