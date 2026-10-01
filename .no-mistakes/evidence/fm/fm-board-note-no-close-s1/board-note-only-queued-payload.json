@@ -1,0 +1,16 @@
+[
+  {
+    "prompt": "Captain's Call note - Memory budget: i want to see the explanation for why our memory is growing as compared to admiral's latest upstream",
+    "data": {
+      "schema": "fm-bearings-answer.v1",
+      "question": "memory-budget",
+      "selection": "",
+      "note": "i want to see the explanation for why our memory is growing as compared to admiral's latest upstream",
+      "options": [
+        "raise-budget",
+        "hold-budget",
+        "reconcile"
+      ]
+    }
+  }
+]

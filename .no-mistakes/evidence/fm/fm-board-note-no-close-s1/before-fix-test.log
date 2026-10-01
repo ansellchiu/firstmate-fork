@@ -1,0 +1,10 @@
+not ok - a bare legacy freeform answer fed the keyed-answer intake (unexpected: 'sample-old-shape')
+--- output ---
+sample-membership-call	gold-only	Membership: gold-only - captain detail
+sample-gated-work	go	Gated work: go	release
+sample-nonexistent-call	yes	Absent call: yes
+sample-headline-call	f1-when-fp-gold	Headline: f1-when-fp-gold
+sample-note-only	why is memory growing vs upstream	Note only
+sample-free-value	maybe	Free value
+sample-note-select	yes	Yes - because reasons
+sample-old-shape	yes	Old answer: yes

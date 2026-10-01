@@ -1,0 +1,44 @@
+$ fm-procevent-lavish.sh answers result.toon   # keyed answers that may close a call
+other-card	hold-budget	Other card -> hold-budget
+(exit 0)
+
+$ fm-procevent-lavish.sh read result.toon   # what firstmate reads
+SESSION-ENDING MESSAGE: (none)
+
+declared_items: 3
+presented_items: 3
+malformed_items: 0
+complete: yes
+lifecycle: feedback
+session_ended: true
+annotation_count: 3
+session_ending_message_count: 0
+
+ANNOTATIONS
+ANNOTATION 1 of 3
+element_uid: 1
+element_selector: section#call > form:nth-of-type(1)
+tag: choice
+text:
+| Memory budget -> note
+card_key: memory-budget
+card_selection: (none - a note alone answers nothing)
+card_note: i want to see the explanation for why our memory is growing as compared to admiral's latest upstream
+ANNOTATION 2 of 3
+element_uid: 2
+element_selector: section#call > form:nth-of-type(2)
+tag: choice
+text:
+| Other card -> hold-budget
+card_key: other-card
+card_selection: hold-budget
+card_note: keep it tight
+ANNOTATION 3 of 3
+element_uid: 3
+element_selector: s
+tag: choice
+text:
+| x
+END ANNOTATIONS
+END LAVISH RESULT (3 of 3)
+(exit 0)
