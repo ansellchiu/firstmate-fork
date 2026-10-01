@@ -1573,13 +1573,18 @@ test_bound_channel_answers_close_at_answer_time() {
     --reason "captain old bare reconcile pending" --repo sample --origin "$id" >/dev/null
   run_captain "$home" hold sample-old-reconcile-note --title "Captain call: old annotated reconcile" \
     --reason "captain old annotated reconcile pending" --repo sample --origin "$id" >/dev/null
+  for c in note-only free-value note-select; do
+    run_captain "$home" hold sample-$c --title "Captain call: $c" \
+      --reason "captain $c pending" --repo sample --origin "$id" >/dev/null
+  done
   tasks_in "$home" add sample-gated-work "Gated sample work" --kind ship --repo sample \
     --body 'Gated work plan.' >/dev/null
   run_captain "$home" hold sample-gated-work --reason "captain go needed" >/dev/null
   run_captain "$home" complete "$id" --claims-checked 1 \
     sample-membership-call sample-headline-call sample-forged-call sample-invalid-close-call \
     sample-source-reconcile sample-bare-reconcile sample-old-shape sample-old-reconcile \
-    sample-old-reconcile-note sample-gated-work >/dev/null \
+    sample-old-reconcile-note sample-note-only sample-free-value sample-note-select \
+    sample-gated-work >/dev/null \
     || fail "completion failed for the deck's inventoried calls"
 
   artifact="$home/data/$id/review.html"
@@ -1600,7 +1605,7 @@ session:
   status: feedback
   session_ended: true
   ended_by: user
-prompts[13]{uid,prompt,selector,tag,text}:
+prompts[16]{uid,prompt,selector,tag,text}:
   "1","Reconcile first\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-source-reconcile\",\n  \"selection\": \"reconcile\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(6)",choice,"Reconcile"
   "2","Membership: gold-only - captain detail\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-membership-call\",\n  \"selection\": \"gold-only\",\n  \"note\": \"captain detail\"\n}","section#call > form:nth-of-type(1)",choice,"Membership: gold-only - captain detail"
   "3","Headline: f1-when-fp-gold\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-headline-call\",\n  \"selection\": \"f1-when-fp-gold\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(2)",choice,"Headline: f1-when-fp-gold"
@@ -1610,6 +1615,9 @@ prompts[13]{uid,prompt,selector,tag,text}:
   "7","Reconcile this - re-check latest publication\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-source-reconcile\",\n  \"selection\": \"reconcile\",\n  \"note\": \"re-check latest publication\"\n}","section#call > form:nth-of-type(6)",choice,"Reconcile - re-check latest publication"
   "8","Second reconcile\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-bare-reconcile\",\n  \"selection\": \"reconcile\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(7)",choice,"Reconcile"
   "9","Headline final: f1-when-fp-gold\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-headline-call\",\n  \"selection\": \"f1-when-fp-gold\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(2)",choice,"Headline: f1-when-fp-gold"
+  "13","Note only\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-note-only\",\n  \"selection\": \"\",\n  \"note\": \"why is memory growing vs upstream\",\n  \"options\": [\"yes\", \"no\", \"reconcile\"]\n}","section#call > form:nth-of-type(11)",choice,"Note only"
+  "14","Free value\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-free-value\",\n  \"selection\": \"maybe\",\n  \"note\": \"\",\n  \"options\": [\"yes\", \"no\", \"reconcile\"]\n}","section#call > form:nth-of-type(11)",choice,"Free value"
+  "15","Yes - because reasons\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-note-select\",\n  \"selection\": \"yes\",\n  \"note\": \"because reasons\",\n  \"options\": [\"yes\", \"no\", \"reconcile\"]\n}","section#call > form:nth-of-type(11)",choice,"Yes - because reasons"
   "10","Old board answer\n\nContext data:\n{\n  \"question\": \"sample-old-shape\",\n  \"answer\": \"yes\"\n}","section#call > form:nth-of-type(8)",choice,"Old answer: yes"
   "11","Old board reconcile\n\nContext data:\n{\n  \"question\": \"sample-old-reconcile\",\n  \"answer\": \"reconcile\"\n}","section#call > form:nth-of-type(9)",choice,"Old reconcile"
   "12","Old board reconcile note\n\nContext data:\n{\n  \"question\": \"sample-old-reconcile-note\",\n  \"answer\": \"reconcile - verify publication\"\n}","section#call > form:nth-of-type(10)",choice,"Old reconcile note"
@@ -1631,8 +1639,17 @@ EOF
     "an unsupported card close mode defaulted to completion"
   assert_not_contains "$out" "sample-source-reconcile" \
     "a reconcile selection leaked into keyed answers"
-  assert_contains "$out" "sample-old-shape	yes" \
-    "an ordinary legacy board choice was discarded during rollout"
+  assert_not_contains "$out" "sample-old-shape" \
+    "a bare legacy freeform answer fed the keyed-answer intake"
+  assert_not_contains "$out" "sample-note-only" \
+    "a note that selects no authored option was emitted as an answer"
+  assert_not_contains "$out" "sample-free-value" \
+    "a value matching no authored option was emitted as an answer"
+  assert_contains "$out" "sample-note-select	yes" \
+    "a selection carrying a note stopped being the answer"
+  [ "$(run_lavish "$home" read "$result" | grep -c '^card_note: why is memory growing vs upstream')" -ge 1 ] \
+    && [ "$(run_lavish "$home" read "$result" | grep -c '^card_key: sample-note-only')" -ge 1 ] \
+    || fail "a note-only submission was not surfaced for firstmate"
   assert_not_contains "$out" "sample-old-reconcile" \
     "a legacy reconcile-shaped value reached keyed answers"
   out=$(run_lavish "$home" reconciles "$result") || fail "could not read captured reconcile selections"
@@ -1687,9 +1704,15 @@ SH
   assert_contains "$out" "captain note: re-check latest publication" \
     "the annotated reconcile selection lost its note provenance"
   show=$(tasks_in "$home" show sample-old-shape --full)
-  assert_contains "$show" "state: done" "an ordinary legacy board choice did not close its task"
-  assert_contains "$show" "Resolution mode: answered" \
-    "an ordinary legacy board choice did not use the keyed-answer intake"
+  assert_contains "$show" "state: queued" "a bare legacy freeform answer closed its task"
+  assert_contains "$show" "held: yes" "a bare legacy freeform answer released its task"
+  for c in sample-note-only sample-free-value; do
+    show=$(tasks_in "$home" show $c --full)
+    assert_contains "$show" "state: queued" "$c was closed without an authored option"
+    assert_contains "$show" "held: yes" "$c was released without an authored option"
+  done
+  show=$(tasks_in "$home" show sample-note-select --full)
+  assert_contains "$show" "state: done" "a selection carrying a note did not close its call"
   show=$(tasks_in "$home" show sample-old-reconcile --full)
   assert_contains "$show" "state: queued" "a bare legacy reconcile value closed its task"
   assert_contains "$show" "held: yes" "a bare legacy reconcile value released its task"

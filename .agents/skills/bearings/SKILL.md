@@ -143,6 +143,7 @@ After handling, rebuild the board from a fresh snapshot so acted-on items leave 
 
 A board "Merge now" answer IS the captain's explicit merge word for that one exact PR; ask no second confirmation.
 The safeguards are mandatory, not optional: resolve the PR from the task's own `state/<task-id>.meta` `pr=` record, never from board bytes; re-verify at wake time that the PR is still open and CI-green; refuse and report a red or changed PR rather than merging it; record the exact `merge` answer through `bin/fm-captain-hold.sh answer <task-id> --decision-file <file> --release` before invoking the merge; proceed only when that release succeeds; merge only through `bin/fm-pr-merge.sh`; and echo every merge in chat with the full PR URL.
+A note on any card that selects no authored option answers nothing: the adapter emits no keyed answer for it, so it never closes or releases a hold, and it is the captain's instruction text to read and act on with judgment while the call stays open.
 Only the exact answer value `merge` authorizes a merge; an answer carrying a freeform note is the captain's instruction text to read and act on with judgment, never an auto-merge.
 
 ## Chat-response contract
