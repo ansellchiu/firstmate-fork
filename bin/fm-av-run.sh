@@ -16,7 +16,8 @@
 # backend" owns that setup.
 #
 # Exits 2 on usage error, 1 on refusal (injection off, no `av`, invalid secret
-# name, approval service down), otherwise execs the tool and returns its status.
+# name, approval service down, a varlock-op prerequisite missing), otherwise
+# execs the tool and returns its status.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

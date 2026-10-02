@@ -257,6 +257,7 @@ That approval bound is checked before the tool is exec'd rather than wrapped aro
 The cost is that when no Direct Access rule matches, the check spends one approval prompt before the real call makes its own, which is the already-misconfigured case the rules above exist to fix.
 `config/av-inject` is primary-authoritative and inherited into secondmate homes like the other local config toggles.
 `bin/fm-av-inject-lib.sh`'s header owns the exact mode parsing, key validation, launcher-matching rationale, and injection mechanics, and `bin/fm-av-run.sh --help` output owns its calling syntax.
+
 ## Secret backend (config/secret-backend / FM_SECRET_BACKEND)
 
 The optional local, gitignored `config/secret-backend` selects which backend serves a `bin/fm-av-run.sh` call once `config/av-inject` is on.
