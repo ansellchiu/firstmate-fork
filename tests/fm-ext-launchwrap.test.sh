@@ -525,7 +525,11 @@ case "\${1:-}" in
   has-session|kill-window) exit 0 ;;
   send-keys)
     shift
-    printf '%s\n' "\$*" >> "$dir/launch-lines"
+    line="\$*"
+    # A spawn types a short line sourcing its staged launch file; log the staged command.
+    staged=\$(printf '%s' "\$line" | sed -n "s/.*-l \\. '\\([^']*\\)'.*/\\1/p")
+    [ -z "\$staged" ] || [ ! -f "\$staged" ] || line=\$(cat "\$staged")
+    printf '%s\n' "\$line" >> "$dir/launch-lines"
     exit 0
     ;;
 esac
@@ -597,7 +601,9 @@ run_spawn() {  # <home> <wt> <fakebin> <id> <proj> [extra-env...]
 }
 
 launch_line() {  # <case-dir>
-  grep 'dangerously-skip-permissions' "$1/fake/launch-lines" 2>/dev/null | tail -n 1
+  # The brief doorbell names a fresh operational-inbox record per spawn; normalize it.
+  grep 'dangerously-skip-permissions' "$1/fake/launch-lines" 2>/dev/null | tail -n 1 \
+    | sed -E 's#operational-inbox/[0-9]+-[0-9a-f]+[.]msg#operational-inbox/RECORD.msg#g'
 }
 
 rec=$(spawn_case plain seam-z1 '')
@@ -638,7 +644,7 @@ out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN" "$CASE_ID" "$PROJ_DIR" \
 [ "$rc" -eq 0 ] || fail "a wrapped spawn must succeed, got $rc: $out"
 WRAP_LINE=$(launch_line "$CASE_DIR")
 expected=$(printf '%s' "$BASE_LINE" \
-  | sed "s|$TMP_ROOT/spawn-plain/home|$TMP_ROOT/spawn-wrapped/home|" \
+  | sed "s|$TMP_ROOT/spawn-plain/home|$TMP_ROOT/spawn-wrapped/home|g" \
   | sed "s|=0 claude |=0 '$CASE_DIR/exts/wrap-ext/wrapper' hold -- claude |")
 [ "$WRAP_LINE" = "$expected" ] \
   || { printf 'wrapped: %s\nexpect:  %s\n' "$WRAP_LINE" "$expected"; \

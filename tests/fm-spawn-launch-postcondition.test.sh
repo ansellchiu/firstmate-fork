@@ -126,8 +126,9 @@ out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN" "$CASE_ID" "$PROJ_DIR" \
 [ "$rc" -ne 0 ] || fail "a launch that produced no agent must refuse, got exit 0"
 assert_not_contains "$out" "spawned $CASE_ID" "a dead launch must never report the spawn"
 assert_contains "$out" "no agent came up" "the refusal must say no agent came up"
-assert_contains "$(cat "$HOME_DIR/state/$CASE_ID.status" 2>/dev/null || true)" \
-  "failed:" "a dead launch must record a failed event rather than leave the task reading working"
+# Status lines carry the emission stamp (bin/fm-classify-lib.sh status_stamp_line).
+grep -Eq '^failed( \[at=[0-9]+\])?: no agent came up' "$HOME_DIR/state/$CASE_ID.status" 2>/dev/null \
+  || fail "a dead launch must record a failed event rather than leave the task reading working"
 pass "a launch that leaves a bare shell refuses, prints no spawned line, and records the failure"
 
 # --- postcondition: an adapter that cannot answer must not refuse ------------
