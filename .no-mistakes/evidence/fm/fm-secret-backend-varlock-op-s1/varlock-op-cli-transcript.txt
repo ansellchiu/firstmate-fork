@@ -1,0 +1,47 @@
+# fm-av-run.sh with config/secret-backend=varlock-op (stub varlock/av/security; no real token)
+
+$ bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3YVDVQGRD6DFC6J5ZA99ZHB/bin/fm-av-run.sh --help
+usage: fm-av-run.sh <KEY[,KEY...]> -- <tool> [args...]
+
+Runs <tool> once with the named Automic Vault secrets applied to that process
+only. Secret names are comma- or space-separated and must name the exact keys
+this call needs; there is no default set.
+
+  fm-av-run.sh EXA_API_KEY -- exa-search "query"
+  fm-av-run.sh "TAVILY_API_KEY,BRAVE_SEARCH_API_KEY" -- ./search.sh
+
+Requires config/av-inject on for this home, and a per-secret Direct Access rule
+for the calling agent's launcher in the Automic Vault app.
+
+With config/secret-backend set to varlock-op, EXA_API_KEY, TAVILY_API_KEY,
+BRAVE_SEARCH_API_KEY, LINKUP_API_KEY, and PARALLEL_API_KEY come from varlock
+(1Password, no approval tap); every other key still goes through Automic.
+[exit 0]
+
+$ bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3YVDVQGRD6DFC6J5ZA99ZHB/bin/fm-av-run.sh EXA_API_KEY -- sh -c echo tool sees EXA_API_KEY=${EXA_API_KEY:-unset}
+[stub varlock] argv: run --path /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.oNBNHuD25h/cfg/varlock --filter EXA_API_KEY -- sh -c echo tool sees EXA_API_KEY=${EXA_API_KEY:-unset} | token-in-env: yes
+tool sees EXA_API_KEY=stub-exa
+[exit 0]
+
+$ bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3YVDVQGRD6DFC6J5ZA99ZHB/bin/fm-av-run.sh DEEPSEEK_API_KEY -- sh -c echo tool sees DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-unset}
+[stub av] argv: inject +DEEPSEEK_API_KEY -- sh -c echo tool sees DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-unset}
+tool sees DEEPSEEK_API_KEY=stub-ds
+[exit 0]
+
+$ bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3YVDVQGRD6DFC6J5ZA99ZHB/bin/fm-av-run.sh EXA_API_KEY,DEEPSEEK_API_KEY -- sh -c echo tool sees EXA=${EXA_API_KEY:-unset} DEEPSEEK=${DEEPSEEK_API_KEY:-unset}
+[stub av] argv: inject +DEEPSEEK_API_KEY -- /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.oNBNHuD25h/bin/varlock run --path /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.oNBNHuD25h/cfg/varlock --filter EXA_API_KEY -- sh -c echo tool sees EXA=${EXA_API_KEY:-unset} DEEPSEEK=${DEEPSEEK_API_KEY:-unset}
+[stub varlock] argv: run --path /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.oNBNHuD25h/cfg/varlock --filter EXA_API_KEY -- sh -c echo tool sees EXA=${EXA_API_KEY:-unset} DEEPSEEK=${DEEPSEEK_API_KEY:-unset} | token-in-env: yes
+tool sees EXA=stub-exa DEEPSEEK=stub-ds
+[exit 0]
+
+# bad token (not ops_ form):
+
+$ bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3YVDVQGRD6DFC6J5ZA99ZHB/bin/fm-av-run.sh EXA_API_KEY -- echo SHOULD-NOT-RUN
+error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/secret-backend to automic
+[exit 1]
+
+# no keychain token:
+
+$ bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3YVDVQGRD6DFC6J5ZA99ZHB/bin/fm-av-run.sh EXA_API_KEY -- echo SHOULD-NOT-RUN
+error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/secret-backend to automic
+[exit 1]
