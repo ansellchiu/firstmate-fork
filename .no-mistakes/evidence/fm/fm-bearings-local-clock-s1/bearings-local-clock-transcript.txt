@@ -1,0 +1,20 @@
+$ TZ=Asia/Singapore FM_BEARINGS_NOW=2026-10-02T16:12:07Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-10-02T16:12:07Z","generated_local":"2026-10-03T00:12:07+08:00","today_local":"2026-10-03"}
+$ TZ=America/Los_Angeles FM_BEARINGS_NOW=2026-10-03T03:30:00Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-10-03T03:30:00Z","generated_local":"2026-10-02T20:30:00-07:00","today_local":"2026-10-02"}
+$ TZ=Europe/London FM_BEARINGS_NOW=2026-03-29T00:59:59Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-03-29T00:59:59Z","generated_local":"2026-03-29T00:59:59+00:00","today_local":"2026-03-29"}
+$ TZ=Europe/London FM_BEARINGS_NOW=2026-03-29T01:00:00Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-03-29T01:00:00Z","generated_local":"2026-03-29T02:00:00+01:00","today_local":"2026-03-29"}
+$ TZ=UTC FM_BEARINGS_NOW=2026-10-02T16:12:07Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-10-02T16:12:07Z","generated_local":"2026-10-02T16:12:07+00:00","today_local":"2026-10-02"}
+$ TZ=Asia/Singapore FM_BEARINGS_NOW=2026-10-02T16:12:07Z bin/fm-bearings-snapshot.sh   # default TOON output, head
+schema: fm-bearings.v1
+home: fmb-demo.Qygd/demo
+generated: "2026-10-02T16:12:07Z"
+generated_local: "2026-10-03T00:12:07+08:00"
+today_local: 2026-10-03
+prs: "not_requested (run: /bearings include PRs)"
+$ TZ=Asia/Singapore FM_BEARINGS_NOW=not-a-date bin/fm-bearings-snapshot.sh --json; echo rc=$?
+fm-bearings-snapshot: cannot render local clock from generated=not-a-date
+rc=1
