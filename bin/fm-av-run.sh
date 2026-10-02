@@ -10,6 +10,10 @@
 # eligible vault launcher with a rule for every requested secret name.
 # bin/fm-av-inject-lib.sh's header owns why, and docs/configuration.md
 # "Automic Vault secret injection" owns the operator setup.
+# With config/secret-backend set to varlock-op, the five rapid-recon search keys
+# are served by `varlock run` from a read-only 1Password vault with no approval
+# tap, and every other key stays on Automic; docs/configuration.md "Secret
+# backend" owns that setup.
 #
 # Exits 2 on usage error, 1 on refusal (injection off, no `av`, invalid secret
 # name, approval service down), otherwise execs the tool and returns its status.
@@ -36,6 +40,10 @@ this call needs; there is no default set.
 
 Requires config/av-inject on for this home, and a per-secret Direct Access rule
 for the calling agent's launcher in the Automic Vault app.
+
+With config/secret-backend set to varlock-op, EXA_API_KEY, TAVILY_API_KEY,
+BRAVE_SEARCH_API_KEY, LINKUP_API_KEY, and PARALLEL_API_KEY come from varlock
+(1Password, no approval tap); every other key still goes through Automic.
 USAGE
 }
 

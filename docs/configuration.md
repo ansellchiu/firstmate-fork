@@ -260,13 +260,14 @@ The cost is that when no Direct Access rule matches, the check spends one approv
 ## Secret backend (config/secret-backend / FM_SECRET_BACKEND)
 
 The optional local, gitignored `config/secret-backend` selects which backend serves a `bin/fm-av-run.sh` call once `config/av-inject` is on.
-`automic` (absent, empty, or `automic`) is the Automic Vault behavior above and is the default for every key.
-`varlock-op` serves only `EXA_API_KEY`, `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, `LINKUP_API_KEY`, and `PARALLEL_API_KEY`, the low-value rapid-recon search keys, so an unattended worker needs no per-run approval tap.
+`automic` (absent, empty, or `automic`) is the Automic Vault behavior above for every key.
+`varlock-op` routes per key: `EXA_API_KEY`, `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, `LINKUP_API_KEY`, and `PARALLEL_API_KEY`, the low-value rapid-recon search keys, come from `varlock`, so an unattended worker needs no per-run approval tap for them; every other key stays on the unchanged Automic path.
+A call naming only search keys needs no `av`; a call naming only other keys is exactly the `automic` behavior; a mixed call runs the Automic preflight and approval probe for the other keys and then execs `av inject +OTHER... -- varlock run ... -- <tool>`, so `av` stays outermost and the calling agent remains the launcher its Direct Access rule matches.
 Any other value refuses the call rather than defaulting, because a typo must not route a key through the wrong backend.
 `FM_SECRET_BACKEND` overrides the file with the same values and exists for tests.
-`config/secret-backend` is primary-authoritative and inherited into secondmate homes like `config/av-inject`.
+`config/secret-backend` and `config/varlock/.env.schema` are primary-authoritative and inherited into secondmate homes, local and remote, like `config/av-inject`.
 
-The `varlock-op` backend runs `varlock run --path <home>/config/varlock --filter <keys> -- <tool>` after the same key-name validation as Automic, and refuses without running the tool for a key outside the five, a missing `varlock`, a missing `config/varlock/.env.schema`, or a missing or malformed token.
+The `varlock-op` half runs `varlock run --path <home>/config/varlock --filter <search keys> -- <tool>` after the same key-name validation as Automic, and refuses without running the tool for a missing `varlock`, a missing `config/varlock/.env.schema`, or a missing or malformed token.
 Key names are validated as exact names, so the `--filter` is always the requested keys and never a glob.
 The operator supplies:
 
@@ -276,7 +277,7 @@ The operator supplies:
 
 A well-formed token that 1Password rejects is refused by `varlock` itself, which does not run the tool when resolution fails.
 This backend has no human approval to wait for, so `FM_VAULT_PROBE_TIMEOUT`, `FM_AV_INJECT_PREFLIGHT_DEADLINE`, and `FM_AV_APPROVAL_TIMEOUT` apply to the `automic` backend only.
-It trades the Automic launcher gate for a bearer token on this Mac, which is acceptable only for low-value, individually rate-limited, separately revocable keys; keep everything else on `automic`.
+It trades the Automic launcher gate for a bearer token on this Mac, which is acceptable only for low-value, individually rate-limited, separately revocable keys; every other key stays on `automic`.
 `bin/fm-av-inject-lib.sh`'s header owns the mechanics.
 
 ## Turn-end pane-churn absorb (config/turnend-churn-absorb)

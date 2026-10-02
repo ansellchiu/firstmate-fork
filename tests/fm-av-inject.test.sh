@@ -181,12 +181,48 @@ expect_code 1 "$rc" "a glob must refuse, never reach --filter"
 [ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "an invalid spec must not exec varlock"
 pass "key validation is not bypassed under varlock-op"
 
-# Allowlist: a valid name outside the five is refused without exec.
-out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl 'EXA_API_KEY,DEEPSEEK_API_KEY' /bin/echo no); rc=$?
-expect_code 1 "$rc" "a key outside the allowlist must refuse"
-assert_contains "$out" "DEEPSEEK_API_KEY" "the refusal must name the disallowed key"
+# A search-only call needs no av at all.
+: > "$TMP_ROOT/vl-argv.log"
+out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_FAKE_TOKEN=$FAKE_TOKEN PATH="$VL_BIN:$NO_AV_PATH" "$AV_RUN" EXA_API_KEY -- /bin/echo ran-no-av 2>&1); rc=$?
+expect_code 0 "$rc" "a search-only varlock-op call must not require av"
+assert_contains "$out" "ran-no-av" "the tool must run without av"
+pass "a search-only varlock-op call runs through varlock without the av CLI"
+
+# Per-key routing: a non-search key stays on Automic while varlock-op is selected.
+: > "$TMP_ROOT/vl-argv.log"; : > "$TMP_ROOT/av-argv.log"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl DEEPSEEK_API_KEY /bin/echo ran-automic); rc=$?
+expect_code 0 "$rc" "a non-search key must still be served under varlock-op"
+assert_contains "$out" "ran-automic" "the tool must run"
+assert_contains "$(cat "$TMP_ROOT/av-argv.log")" "inject +DEEPSEEK_API_KEY -- /bin/echo ran-automic" "a non-search key must go through av inject"
+[ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "a non-search-only call must never touch varlock"
+out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_FAKE_TOKEN=$FAKE_TOKEN PATH="$VL_BIN:$NO_AV_PATH" "$AV_RUN" DEEPSEEK_API_KEY -- /bin/echo no 2>&1); rc=$?
+expect_code 1 "$rc" "a non-search key must still require av"
+assert_contains "$out" "Automic Vault" "the refusal must name the missing av CLI"
+pass "under varlock-op a non-search key keeps the unchanged Automic path"
+
+# A mixed call resolves each key through its own backend, av outermost.
+: > "$TMP_ROOT/vl-argv.log"; : > "$TMP_ROOT/vl-env.log"; : > "$TMP_ROOT/av-argv.log"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl 'EXA_API_KEY,DEEPSEEK_API_KEY' /bin/echo ran-mixed); rc=$?
+expect_code 0 "$rc" "a mixed call must run the tool"
+assert_contains "$out" "ran-mixed" "the tool must run"
+aargv=$(cat "$TMP_ROOT/av-argv.log")
+assert_contains "$aargv" "inject +DEEPSEEK_API_KEY -- true" "the Automic approval probe must run for the non-search key"
+assert_contains "$aargv" "inject +DEEPSEEK_API_KEY -- $VL_BIN/varlock run" "av must wrap varlock for the non-search key"
+assert_not_contains "$aargv" "+EXA_API_KEY" "a search key must never reach av"
+vargv=$(cat "$TMP_ROOT/vl-argv.log")
+assert_contains "$vargv" "--filter EXA_API_KEY -- /bin/echo ran-mixed" "varlock must filter only the search key"
+assert_not_contains "$vargv" "DEEPSEEK_API_KEY" "a non-search key must never reach varlock"
+assert_not_contains "$aargv$vargv" "ops_" "the token must never reach argv"
+assert_contains "$(cat "$TMP_ROOT/vl-env.log")" "token-present" "varlock must receive the token in its environment"
+pass "a mixed varlock-op call resolves each key through its own backend"
+
+# The five-key guard still holds for a direct varlock-op request.
+: > "$TMP_ROOT/vl-argv.log"
+( FM_AV_INJECT_KEYARGS=(+EXA_API_KEY +DEEPSEEK_API_KEY); FM_FAKE_TOKEN=$FAKE_TOKEN PATH="$VL_BIN:$PATH" \
+  fm_varlock_op_exec "$CFG_VL" /bin/echo no >/dev/null 2>&1; printf '%s\n' "$FM_AV_INJECT_ERROR" > "$TMP_ROOT/vl-guard.err" )
+assert_contains "$(cat "$TMP_ROOT/vl-guard.err")" "DEEPSEEK_API_KEY" "the direct guard must name the disallowed key"
 [ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "a disallowed key must not exec varlock"
-pass "varlock-op serves only the allowlisted search keys"
+pass "fm_varlock_op_exec itself serves only the allowlisted search keys"
 
 # Missing / malformed token refuses without exec; the tool never runs.
 out=$(run_vl EXA_API_KEY /bin/echo ran-keyless); rc=$?
@@ -204,6 +240,31 @@ expect_code 1 "$rc" "a missing schema must refuse"
 out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_SECRET_BACKEND=garbage PATH="$VL_BIN:$FAKE_BIN:$PATH" "$AV_RUN" EXA_API_KEY -- /bin/echo no 2>&1); rc=$?
 expect_code 1 "$rc" "a garbage backend must refuse the whole call"
 pass "varlock-op refuses without running the tool on a missing or bad token, missing schema, or garbage backend"
+
+# --- secondmate homes inherit the varlock schema ------------------------------
+
+# shellcheck source=/dev/null
+. "$ROOT/bin/fm-config-inherit-lib.sh"
+SM_HOME="$TMP_ROOT/sm-home"; mkdir -p "$SM_HOME/config"
+propagate_inheritable_config "$CFG_VL" "$SM_HOME/config" 2>/dev/null || fail "local propagation must succeed"
+cmp -s "$CFG_VL/varlock/.env.schema" "$SM_HOME/config/varlock/.env.schema" || fail "the schema must reach a local secondmate home"
+: > "$TMP_ROOT/vl-argv.log"
+out=$(env FM_CONFIG_OVERRIDE="$SM_HOME/config" FM_FAKE_TOKEN=$FAKE_TOKEN PATH="$VL_BIN:$FAKE_BIN:$PATH" "$AV_RUN" EXA_API_KEY -- /bin/echo ran-sm 2>&1); rc=$?
+expect_code 0 "$rc" "an inherited home must resolve the schema"
+assert_contains "$(cat "$TMP_ROOT/vl-argv.log")" "--path $SM_HOME/config/varlock" "the inherited home must use its own schema copy"
+
+RM_HOME="$TMP_ROOT/rm-home"; mkdir -p "$RM_HOME/config"
+printf '# schema\n' > "$TMP_ROOT/schema-src"
+sbytes=$(LC_ALL=C wc -c < "$TMP_ROOT/schema-src" | tr -d ' ')
+shash=$(shasum -a 256 "$TMP_ROOT/schema-src" | awk '{print $1}')
+FM_HOME="$RM_HOME" "$ROOT/bin/fm-remote-inherit.sh" put config/varlock/.env.schema "$sbytes" "$shash" 1 \
+  < "$TMP_ROOT/schema-src" >/dev/null 2>&1 || fail "the remote receiver must accept the nested schema path"
+cmp -s "$TMP_ROOT/schema-src" "$RM_HOME/config/varlock/.env.schema" || fail "the schema must reach a remote secondmate home"
+mkdir -p "$TMP_ROOT/rm2/config"; ln -s "$TMP_ROOT/elsewhere" "$TMP_ROOT/rm2/config/varlock"
+FM_HOME="$TMP_ROOT/rm2" "$ROOT/bin/fm-remote-inherit.sh" put config/varlock/.env.schema "$sbytes" "$shash" 1 \
+  < "$TMP_ROOT/schema-src" >/dev/null 2>&1 && fail "the remote receiver must refuse a symlinked schema directory"
+[ ! -e "$TMP_ROOT/elsewhere/.env.schema" ] || fail "a symlinked schema directory must not be written through"
+pass "local and remote secondmate homes inherit config/varlock/.env.schema and resolve it"
 
 # --- preflight: a service that stays down refuses on a bounded poll -----------
 
