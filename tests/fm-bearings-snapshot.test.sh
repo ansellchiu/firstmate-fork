@@ -1050,6 +1050,26 @@ EOF
   pass "repeated snapshots keep the same current landed baseline and ignore prior reports"
 }
 
+# Pin TZ and FM_BEARINGS_NOW across the UTC day boundary so a UTC-derived
+# "local" field would still show 2026-10-02 / 16:12 while the machine local
+# clock is already 2026-10-03 / 00:12 (+08:00).
+test_local_clock_fields_cross_utc_day_boundary() {
+  local home fakebin json
+  home=$(make_home local-clock)
+  : > "$home/data/backlog.md"
+  fakebin=$(make_fakebin "$home")
+  json=$(PATH="$fakebin:$PATH" TZ=Asia/Singapore FM_HOME="$home" \
+    FM_BEARINGS_NOW=2026-10-02T16:12:07Z "$BEARINGS" --json) \
+    || fail "bearings failed under pinned Singapore local clock"
+  printf '%s' "$json" | jq -e '
+    .generated == "2026-10-02T16:12:07Z"
+      and .generated_local == "2026-10-03T00:12:07+08:00"
+      and .today_local == "2026-10-03"
+  ' >/dev/null || fail "local clock fields wrong at UTC/local day boundary: $(
+    printf '%s' "$json" | jq -c '{generated, generated_local, today_local}')"
+  pass "local clock fields cross the UTC day boundary in Asia/Singapore"
+}
+
 test_default_is_bounded_and_local_only() {
   local home fakebin toon json backlog
   home=$(make_home bounded); write_fixture "$home"
@@ -3397,6 +3417,7 @@ test_parent_evidence_reconciles_by_verb_and_key
 test_nonprogressing_child_states_are_explicit
 test_registry_unavailability_and_bounds_are_explicit
 test_current_landed_baseline_is_repeatable_and_prior_report_independent
+test_local_clock_fields_cross_utc_day_boundary
 test_default_is_bounded_and_local_only
 test_toon_json_parity
 test_landed_includes_secondmate_home_merges
