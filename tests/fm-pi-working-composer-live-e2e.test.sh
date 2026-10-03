@@ -91,7 +91,7 @@ HOME_DIR="$TMP_ROOT/home"
 PI_CONFIG="$TMP_ROOT/piconfig"
 mkdir -p "$PROJECT/.pi/extensions/lib" "$HOME_DIR/config" "$PI_CONFIG"
 cp "$ROOT/.pi/extensions/fm-calm.ts" "$PROJECT/.pi/extensions/fm-calm.ts"
-for f in fm-calm-assistant-layout.ts fm-calm-operational-user-layout.ts \
+for f in fm-calm-assistant-layout.ts fm-calm-operational-user-layout.ts fm-calm-pending-operational-layout.ts \
   fm-calm-preservation.ts fm-calm-visibility.ts fm-calm-working-ship-sprite.ts \
   fm-calm-working-ship.ts fm-operational-input.ts; do
   cp "$ROOT/.pi/extensions/lib/$f" "$PROJECT/.pi/extensions/lib/$f"
