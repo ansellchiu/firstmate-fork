@@ -52,9 +52,10 @@ FM_VARLOCK_OP_ALLOWED="EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_AP
 FM_AV_INJECT_ERROR=""
 # Populated by fm_av_inject_keys; one `+NAME` argument per requested secret.
 FM_AV_INJECT_KEYARGS=()
-# Optional command fm_varlock_op_exec runs `varlock` under (the Automic half of a
-# mixed call); empty for a search-only call.
-FM_VARLOCK_OP_LAUNCHER=()
+# The Automic half of a mixed call: the av path and its `+NAME` arguments, under
+# which fm_varlock_op_exec runs `varlock`; empty for a search-only call.
+FM_VARLOCK_OP_AV=""
+FM_VARLOCK_OP_AVKEYS=()
 
 SCRIPT_DIR_AV_INJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=bin/fm-vault-lib.sh
@@ -259,7 +260,7 @@ fm_av_inject_prepare() {
 # FM_AV_INJECT_KEYARGS. Refuses (return 1, FM_AV_INJECT_ERROR set, nothing run)
 # for a key outside FM_VARLOCK_OP_ALLOWED, a missing varlock or schema, or a
 # missing or malformed keychain token; otherwise execs
-# `[FM_VARLOCK_OP_LAUNCHER...] varlock run --path <schema-dir> --filter <keys> -- <tool>`.
+# `[av inject FM_VARLOCK_OP_AVKEYS... --] varlock run --path <schema-dir> --filter <keys> -- <tool>`.
 # The token is read from the keychain here, held only in a local variable, and
 # handed over as an exec-time environment assignment, so it is never in argv, a
 # file, a log, or this process's own environment. A well-formed token that 1Password rejects is
@@ -270,7 +271,7 @@ fm_av_inject_prepare() {
 # non-empty value; it tests values by indirect expansion and never prints one.
 # Args: <config-dir> <tool> [args...]
 fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
-  local config_dir=$1 arg key varlock sec tok filter="" schema_dir
+  local config_dir=$1 arg key varlock sec tok filter="" schema_dir launcher=()
   shift
   for arg in "${FM_AV_INJECT_KEYARGS[@]}"; do
     key=${arg#+}
@@ -305,12 +306,12 @@ fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
       return 1
       ;;
   esac
-  if [ "${#FM_VARLOCK_OP_LAUNCHER[@]}" -gt 0 ]; then
-    fm_av_inject_prepare "${FM_VARLOCK_OP_LAUNCHER[0]}" \
-      "${FM_VARLOCK_OP_LAUNCHER[@]:2:${#FM_VARLOCK_OP_LAUNCHER[@]}-3}" || return 1
+  if [ -n "$FM_VARLOCK_OP_AV" ]; then
+    fm_av_inject_prepare "$FM_VARLOCK_OP_AV" "${FM_VARLOCK_OP_AVKEYS[@]}" || return 1
+    launcher=("$FM_VARLOCK_OP_AV" inject "${FM_VARLOCK_OP_AVKEYS[@]}" --)
   fi
   # shellcheck disable=SC2016 # Inner bash script; its $-vars expand in the child.
-  OP_SERVICE_ACCOUNT_TOKEN=$tok exec ${FM_VARLOCK_OP_LAUNCHER[@]+"${FM_VARLOCK_OP_LAUNCHER[@]}"} "$varlock" run --path "$schema_dir" --filter "$filter" -- "$BASH" -c '
+  OP_SERVICE_ACCOUNT_TOKEN=$tok exec ${launcher[@]+"${launcher[@]}"} "$varlock" run --path "$schema_dir" --filter "$filter" -- "$BASH" -c '
     count=$1
     shift
     for ((i = 0; i < count; i++)); do
@@ -359,7 +360,7 @@ fm_av_inject_exec() {  # <config-dir> <key-spec> <tool> [args...]
       esac
     done
     if [ "${#other[@]}" -eq 0 ]; then
-      FM_VARLOCK_OP_LAUNCHER=()
+      FM_VARLOCK_OP_AV=""
       fm_varlock_op_exec "$config_dir" "$@"
       return 1
     fi
@@ -375,7 +376,8 @@ fm_av_inject_exec() {  # <config-dir> <key-spec> <tool> [args...]
     fm_av_inject_keys "$spec" || return 1
   fi
   if [ "${#search[@]}" -gt 0 ]; then
-    FM_VARLOCK_OP_LAUNCHER=("$av" inject "${other[@]}" --)
+    FM_VARLOCK_OP_AV=$av
+    FM_VARLOCK_OP_AVKEYS=("${other[@]}")
     FM_AV_INJECT_KEYARGS=("${search[@]}")
     fm_varlock_op_exec "$config_dir" "$@"
     return 1
