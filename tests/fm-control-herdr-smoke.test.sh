@@ -317,7 +317,14 @@ STATE=$(fm_backend_agent_state herdr "$SESSION:$PANE_ID")
   || version_fail "a registration over a shell-only pane recovers as '$STATE' rather than 'dead'; every relaunch would be refused"
 pass "real herdr $HERDR_VERSION: a registration Herdr keeps after its agent exits reads stale-agent and recovers as dead"
 
-OUT=$(run_control hsmoke exit) || fail "exit against a stale-registration pane should be idempotent success: $OUT"
+diag_dump() {
+  echo "DIAG pane_agent_state=$(fm_backend_herdr_pane_agent_state "$SESSION" "$PANE_ID")" >&2
+  echo "DIAG process_state=$(fm_backend_herdr_pane_process_state "$SESSION" "$PANE_ID")" >&2
+  echo "DIAG process-info=$(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>&1 | tr -d '\n')" >&2
+  echo "DIAG agent-get=$(herdr agent get "$PANE_ID" --session "$SESSION" 2>&1 | tr -d '\n')" >&2
+  echo "DIAG ps:" >&2; ps -axo pid,ppid,stat,comm,args 2>&1 | grep -v "ps -axo" | head -60 >&2
+}
+OUT=$(FM_DIAG=1 run_control hsmoke exit) || { diag_dump; fail "exit against a stale-registration pane should be idempotent success: $OUT"; }
 case "$OUT" in
   "already-stopped hsmoke"*) : ;;
   *) fail "a stale-registration pane should report already-stopped, got: $OUT" ;;
