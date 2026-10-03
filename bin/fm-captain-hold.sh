@@ -999,6 +999,7 @@ report_retained_artifact_failure() {  # <task-id> <marker-path>
 apply_pending_retained_artifact() {  # <task-id>
   local id=$1 marker
   local -a args=()
+  RETAINED_CLOSE_ARGS=()
   marker=$(fm_backlog_close_marker_path "$STATE" "$id") || return 1
   [ -e "$marker" ] || [ -L "$marker" ] || return 0
   fm_backlog_close_marker_validate "$marker" "$DATA" "$id" "$STATE" \
@@ -1007,6 +1008,10 @@ apply_pending_retained_artifact() {  # <task-id>
   args=("${FM_BACKLOG_CLOSE_VALIDATED_ARGS[@]+"${FM_BACKLOG_CLOSE_VALIDATED_ARGS[@]}"}")
   case "${args[0]-}" in
     --pr|--report)
+      if [ "${args[0]}" = --pr ] && fm_backlog_pr_is_gerrit_change "${args[1]-}"; then
+        RETAINED_CLOSE_ARGS=(--note "Gerrit change ${args[1]}")
+        return 0
+      fi
       fm_backlog_row_artifact_supported "$id" "${args[@]}" || return 0
       fm_backlog_mutate "$DATA" update "$id" "${args[@]}" \
         || { report_retained_artifact_failure "$id" "$marker"; return 1; }
@@ -1019,7 +1024,7 @@ close_answered() {  # <task-id> <release-0-or-1>
     tasks_axi unhold "$1" >/dev/null
   else
     apply_pending_retained_artifact "$1" || return 1
-    tasks_axi "done" "$1" >/dev/null
+    tasks_axi "done" "$1" "${RETAINED_CLOSE_ARGS[@]+"${RETAINED_CLOSE_ARGS[@]}"}" >/dev/null
   fi
 }
 
@@ -1770,7 +1775,7 @@ reconcile_note() {
 }
 
 command_complete() {
-  local origin=${1:-} meta previous='' supplied='' keys='' entry key status_file open has_meta=0 transfer_rc resolved
+  local origin=${1:-} meta previous='' supplied='' keys='' entry key status_file open has_meta=0 transfer_rc transfers=() resolved
   local resolved_how attested_by_prefix=''
   local claims_checked='' claims_checked_supplied=0 rest='' requirement min_claims claim
   [ "$#" -ge 2 ] || { usage >&2; exit 2; }
@@ -1861,20 +1866,22 @@ EOF
 
     # Transfer every still-open status decision to the durable captain-held
     # inventory so the live status fold does not duplicate the same Captain's
-    # Call item. The transfer line is this home's own bookkeeping close,
-    # written by the turn that just reviewed the inventory, so it uses the
-    # guarded self-announced append (bin/fm-wake-lib.sh) and does not wake this
-    # same session; an append failure still fails this command loudly.
+    # Call item. The transfer lines are this home's own bookkeeping closes,
+    # written by the turn that just reviewed the inventory, so they go through
+    # ONE guarded self-announced append (bin/fm-wake-lib.sh) and do not wake
+    # this same session; an append failure still fails this command loudly.
     if [ -n "$keys" ]; then
       while IFS=$'\t' read -r key _verb _summary; do
         [ -n "$key" ] || continue
-        transfer_rc=0
-        fm_wake_status_append_self_announced "$STATE" "$status_file" \
-          "captain-held [key=$key]: tracked by $keys" || transfer_rc=$?
-        [ "$transfer_rc" -ne 2 ] || fail "cannot append the captain-held transfer for $origin/$key"
+        transfers+=("captain-held [key=$key]: tracked by $keys")
       done <<EOF
 $open
 EOF
+      if [ "${#transfers[@]}" -gt 0 ]; then
+        transfer_rc=0
+        fm_wake_status_append_self_announced "$STATE" "$status_file" "${transfers[@]}" || transfer_rc=$?
+        [ "$transfer_rc" -ne 2 ] || fail "cannot append the captain-held transfer for $origin"
+      fi
     fi
   fi
   printf 'complete: %s captain-call inventory reviewed%s%s\n' "$origin" "${keys:+ ($keys)}" \

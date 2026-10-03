@@ -471,6 +471,14 @@ case "\${1:-}" in
             continue
             ;;
           *)
+            # A spawn types a short line sourcing its staged launch file; read the staged command.
+            case "\$a" in
+              ". '"*"'")
+                staged=\${a#". '"}
+                staged=\${staged%"'"}
+                [ ! -f "\$staged" ] || a=\$(cat "\$staged")
+                ;;
+            esac
             case "\$a" in
               *' --auto'*)
                 printf '%s\n' "\$a" >> "\$FM_FAKE_LAUNCH_LOG"

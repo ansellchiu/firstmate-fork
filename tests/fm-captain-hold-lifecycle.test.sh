@@ -126,6 +126,13 @@ case "${1:-} ${2:-}" in
   "api graphql")
     printf '%s\n' 'state=MERGED' 'merged=true' 'queued=false' 'base=main'
     ;;
+  "api --paginate")
+    case " $* " in
+      *merge_queue*) ;;
+      *) printf '%s\n' '[]' ;;
+    esac
+    ;;
+  "api repos/"*) printf '%s\n' '{"name":"main","protected":false}' ;;
 esac
 SH
   cat > "$home/fakebin/gh-axi" <<'SH'
@@ -345,7 +352,7 @@ write_known_rows_stub() {  # <fakebin> <row-id...>
   cat > "$fb/tasks-axi" <<'SH'
 #!/usr/bin/env bash
 case "${1:-}" in
-  --version) printf '%s\n' '0.2.5' ;;
+  --version) printf '%s\n' '0.2.6' ;;
   update)
     [ "${2:-}" = --help ] || exit 1
     printf '%s\n' '--archive-body'
@@ -541,7 +548,7 @@ EOF
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "@LOG@"
 case "${1:-}" in
-  --version) printf '%s\n' '0.2.5' ;;
+  --version) printf '%s\n' '0.2.6' ;;
   update)
     if [ "${2:-}" = --help ]; then
       printf '%s\n' '--archive-body'
@@ -778,7 +785,7 @@ EOF
   open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
     "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
   [ -z "$open" ] || fail "captain-held transfer did not close the live status decisions: $open"
-  grep -F 'captain-held [key=route]: tracked by sample-route-call' "$home/state/$id.status" >/dev/null \
+  sed -E 's/ \[at=[0-9]+\]//' "$home/state/$id.status" | grep -F 'captain-held [key=route]: tracked by sample-route-call' >/dev/null \
     || fail "the transfer line does not name the tracking inventory"
 
   before=$(shasum -a 256 "$home/data/backlog.md" | awk '{print $1}')
@@ -1366,7 +1373,7 @@ EOF
   run_teardown "$mate" "$origin" >/dev/null 2> "$mate/teardown.err" \
     || fail "secondmate investigation teardown failed: $(cat "$mate/teardown.err")"
   tasks_in "$mate" "done" "$origin" --report "data/$origin/report.md" --keep 0 >/dev/null
-  grep -Eq "^done \\[key=child-outcome-$origin-done-[0-9a-f]{8}\\]: child $origin done: report and visual review complete mode=scout report=data/$origin/report.md$" \
+  grep -Eq "^done \\[key=child-outcome-$origin-done-[0-9a-f]{8}\\] \\[at=[0-9]+\\]: child $origin done: report and visual review complete mode=scout report=data/$origin/report.md$" \
     "$parent/state/sample-mate.status" \
     || fail "the scout's final line did not reach the parent at teardown"
 
@@ -1412,13 +1419,13 @@ EOF
   run_captain "$mate" hold quoted-record-call --reason "quoted record choice pending" \
     --origin quoted-origin >/dev/null || fail "quoted-record hold failed"
   assert_grep 'needs-decision [key=captain-hold-quoted-record-call-1]: captain hold quoted-record-call: quoted record choice pending' \
-    "$channel" "body prose was incorrectly counted as a resolution record"
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel") "body prose was incorrectly counted as a resolution record"
 
   run_captain "$mate" hold mate-call --title "Choose the mate release" \
     --reason "release choice pending" --repo sample >/dev/null \
     || fail "mate hold failed"
   assert_grep 'needs-decision [key=captain-hold-mate-call-1]: captain hold mate-call: release choice pending' \
-    "$channel" "the mate's hold did not reach the parent channel"
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel") "the mate's hold did not reach the parent channel"
   run_captain "$mate" hold mate-call --reason "release choice pending" >/dev/null \
     || fail "repeated mate hold failed"
   [ "$(grep -c 'captain-hold-mate-call-1' "$channel")" = 1 ] \
@@ -1428,17 +1435,17 @@ EOF
   run_captain "$mate" answer mate-call --decision-file "$decision" --release >/dev/null \
     || fail "mate release answer failed"
   assert_grep 'resolved [key=captain-hold-mate-call-1]: captain hold mate-call: released' \
-    "$channel" "the released answer did not close the parent decision"
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel") "the released answer did not close the parent decision"
 
   run_captain "$mate" hold mate-call --reason "second release choice" >/dev/null \
     || fail "re-hold after release failed"
   assert_grep 'needs-decision [key=captain-hold-mate-call-2]: captain hold mate-call: second release choice' \
-    "$channel" "a re-held task did not open a distinct parent decision"
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel") "a re-held task did not open a distinct parent decision"
   printf 'ship it\n' > "$decision"
   run_captain "$mate" answer mate-call --decision-file "$decision" >/dev/null \
     || fail "mate close answer failed"
   assert_grep 'resolved [key=captain-hold-mate-call-2]: captain hold mate-call: answered' \
-    "$channel" "the closing answer did not close the second parent decision"
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel") "the closing answer did not close the second parent decision"
   run_captain "$mate" answer mate-call --decision-file "$decision" >/dev/null \
     || fail "idempotent answer retry failed"
   [ "$(grep -c 'captain-hold-mate-call-2' "$channel")" = 2 ] \
@@ -1505,13 +1512,15 @@ test_secondmate_reconcile_publishes_before_request_retirement() {
   assert_contains "$show" "Resolution mode: reconciled" \
     "request retirement failure lost the reconciled resolution mode"
   [ -f "$request" ] || fail "the request retired despite its forced retirement failure"
-  [ "$(grep -c 'resolved \[key=captain-hold-reconcile-channel-call-1\]: captain hold reconcile-channel-call: reconciled' "$channel")" -eq 1 ] \
+  [ "$(grep -c 'resolved \[key=captain-hold-reconcile-channel-call-1\]: captain hold reconcile-channel-call: reconciled' \
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel"))" -eq 1 ] \
     || fail "the parent resolution was not published before retirement failed: $(cat "$channel")"
 
   run_captain "$mate" reconcile close reconcile-channel-call --evidence-file "$evidence" >/dev/null \
     || fail "the closed reconciliation could not finish publication and retirement"
   [ ! -e "$request" ] || fail "the retry did not retire the published reconcile request"
-  [ "$(grep -c 'resolved \[key=captain-hold-reconcile-channel-call-1\]: captain hold reconcile-channel-call: reconciled' "$channel")" -eq 1 ] \
+  [ "$(grep -c 'resolved \[key=captain-hold-reconcile-channel-call-1\]: captain hold reconcile-channel-call: reconciled' \
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel"))" -eq 1 ] \
     || fail "the reconciliation retry duplicated or changed its parent resolution: $(cat "$channel")"
   tasks_in "$mate" add answer-channel-call "Answer the mate call" --kind ship --repo sample >/dev/null \
     || fail "could not create the normal-answer channel call"
@@ -1531,12 +1540,14 @@ test_secondmate_reconcile_publishes_before_request_retirement() {
   show=$(tasks_in "$mate" show answer-channel-call --full)
   assert_contains "$show" "state: done" "request retirement failure reversed the captain answer"
   [ -f "$request" ] || fail "the normal-answer retry trigger retired after its forced failure"
-  [ "$(grep -c 'resolved \[key=captain-hold-answer-channel-call-1\]: captain hold answer-channel-call: answered' "$channel")" -eq 1 ] \
+  [ "$(grep -c 'resolved \[key=captain-hold-answer-channel-call-1\]: captain hold answer-channel-call: answered' \
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel"))" -eq 1 ] \
     || fail "the normal answer did not publish before retirement failed: $(cat "$channel")"
   run_captain "$mate" answer answer-channel-call --decision-file "$mate/answer.txt" >/dev/null \
     || fail "the normal-answer retry could not finish request retirement"
   [ ! -e "$request" ] || fail "the normal-answer retry left its request pending"
-  [ "$(grep -c 'resolved \[key=captain-hold-answer-channel-call-1\]: captain hold answer-channel-call: answered' "$channel")" -eq 1 ] \
+  [ "$(grep -c 'resolved \[key=captain-hold-answer-channel-call-1\]: captain hold answer-channel-call: answered' \
+    <(sed -E 's/ \[at=[0-9]+\]//' "$channel"))" -eq 1 ] \
     || fail "the normal-answer retry duplicated its parent resolution: $(cat "$channel")"
   pass "secondmate resolutions publish before retiring durable retry triggers"
 }
@@ -3271,6 +3282,63 @@ SH
   pass "an answer before cleanup replay preserves the retained report"
 }
 
+test_answer_before_cleanup_replay_notes_a_retained_gerrit_change() {
+  local home id repo wt rc show real_tasks_axi gerrit_url=https://gerrit.example.com/c/project/+/12345
+  home=$(make_home answer-before-replay-gerrit)
+  id=sample-answer-before-replay-gerrit
+  repo="$home/projects/sample"
+  wt="$home/projects/$id"
+  fm_git_worktree "$repo" "$wt" fm/answer-before-replay-gerrit
+  tasks_in "$home" add "$id" "Ship the held Gerrit change" --kind ship \
+    --repo sample --start >/dev/null || fail "could not create the held Gerrit answer fixture"
+  fm_write_meta "$home/state/$id.meta" \
+    "window=firstmate:fm-$id" "endpoint_task_id=$id" "worktree=$wt" \
+    "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
+    "pr=$gerrit_url" "spawn_gen=fixture-$id"
+  printf 'done: change landed\n' > "$home/state/$id.status"
+  run_captain "$home" hold "$id" --reason "captain must choose the follow-up" >/dev/null \
+    || fail "could not hold the landed Gerrit task for the captain"
+  real_tasks_axi=$(command -v tasks-axi)
+  cat > "$home/fakebin/tasks-axi" <<SH
+#!/usr/bin/env bash
+previous=
+for arg in "\$@"; do
+  if [ "\$previous" = --pr ] && ! [[ "\$arg" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+\$ ]]; then
+    echo "error: \"Task pr link must be a canonical pull request URL\""
+    exit 1
+  fi
+  previous=\$arg
+done
+exec "$real_tasks_axi" "\$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+  cat > "$home/fakebin/treehouse" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$home/fakebin/treehouse"
+
+  set +e
+  PATH="$home/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
+    FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_CONFIG_OVERRIDE="$home/config" "$TEARDOWN" "$id" --force \
+    > "$home/teardown.out" 2> "$home/teardown.err"
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "cleanup succeeded despite the failed worktree return"
+  assert_present "$home/state/$id.backlog-close" \
+    "the interrupted cleanup lost its retained-artifact record"
+
+  printf 'Proceed with the landed change.\n' > "$home/answer.txt"
+  run_captain "$home" answer "$id" --decision-file "$home/answer.txt" >/dev/null \
+    || fail "the captain could not answer a Gerrit task before cleanup replay"
+  show=$(tasks_in "$home" show "$id" --full) || fail "the answered Gerrit row is gone"
+  assert_contains "$show" "state: done" "the answer did not close the Gerrit row"
+  assert_contains "$show" "Gerrit change $gerrit_url" \
+    "the answer dropped the retained Gerrit change URL"
+  pass "an answer before cleanup replay notes the retained Gerrit change"
+}
+
 test_unusable_pending_close_record_names_its_reason() {
   local home id wt rc err marker
   home=$(make_home unusable-pending-close-reason)
@@ -3447,6 +3515,53 @@ EOF
   assert_absent "$home/state/$id.backlog-close" "cleanup left its pending record behind"
   assert_no_grep "$id" "$home/data/backlog.md" "cleanup wrote to the empty default-location backlog"
   pass "cleanup retains captain calls in the configured backlog"
+}
+
+test_teardown_retains_a_gerrit_captain_call_with_its_change_url() {
+  local home id repo wt show real_tasks_axi gerrit_url=https://gerrit.example.com/c/project/+/12345
+  home=$(make_home teardown-held-gerrit)
+  id=sample-held-gerrit
+  repo="$home/projects/sample"
+  wt="$home/projects/$id"
+  fm_git_worktree "$repo" "$wt" fm/held-gerrit
+  tasks_in "$home" add "$id" "Ship the held Gerrit change" --kind ship \
+    --repo sample --start >/dev/null || fail "could not create the held Gerrit fixture"
+  fm_write_meta "$home/state/$id.meta" \
+    "window=firstmate:fm-$id" "endpoint_task_id=$id" "worktree=$wt" \
+    "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
+    "pr=$gerrit_url" "spawn_gen=fixture-$id"
+  printf 'done: change landed\n' > "$home/state/$id.status"
+  run_captain "$home" hold "$id" --reason "captain must choose the follow-up" >/dev/null \
+    || fail "could not hold the landed Gerrit task for the captain"
+  seed_landing_receipt "$home" "$id" "$gerrit_url"
+  # Pin the refusal tasks-axi applies to a --pr link that is not a canonical
+  # GitHub pull request, so this case keeps reproducing whatever the installed
+  # release accepts.
+  real_tasks_axi=$(command -v tasks-axi)
+  cat > "$home/fakebin/tasks-axi" <<SH
+#!/usr/bin/env bash
+previous=
+for arg in "\$@"; do
+  if [ "\$previous" = --pr ] && ! [[ "\$arg" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+\$ ]]; then
+    echo "error: \"Task pr link must be a canonical pull request URL\""
+    exit 1
+  fi
+  previous=\$arg
+done
+exec "$real_tasks_axi" "\$@"
+SH
+  chmod +x "$home/fakebin/tasks-axi"
+
+  run_teardown "$home" "$id" > "$home/teardown.out" 2> "$home/teardown.err" \
+    || fail "cleanup of a captain-held Gerrit task failed: $(cat "$home/teardown.err")"
+  show=$(tasks_in "$home" show "$id" --full) || fail "the captain-held Gerrit row is gone after cleanup"
+  assert_contains "$show" "state: queued" "the held Gerrit row still reads as worked on"
+  assert_contains "$show" "hold_kind: captain" "cleanup dropped the captain hold"
+  assert_contains "$show" "Deliverable of the finished work: Gerrit change $gerrit_url" \
+    "the Gerrit change URL was not recorded on the still-open row"
+  assert_absent "$home/state/$id.backlog-close" \
+    "successful cleanup left its pending transition record behind"
+  pass "cleanup keeps a captain-held Gerrit task open and records its change URL"
 }
 
 test_merge_approval_releases_before_zero_done_retention() {
@@ -4330,9 +4445,11 @@ test_teardown_never_closes_a_captain_held_task
 test_retained_row_artifacts_survive_captain_answers
 test_interrupted_cleanup_keeps_the_captain_call_recoverable
 test_answer_before_cleanup_replay_preserves_the_retained_report
+test_answer_before_cleanup_replay_notes_a_retained_gerrit_change
 test_unusable_pending_close_record_names_its_reason
 test_relocated_report_does_not_wedge_an_answer_before_replay
 test_teardown_retains_captain_calls_in_a_relocated_backlog
+test_teardown_retains_a_gerrit_captain_call_with_its_change_url
 test_merge_approval_releases_before_zero_done_retention
 test_pr_merge_entrypoint_refuses_a_captain_held_task
 test_local_merge_entrypoint_refuses_a_captain_held_task

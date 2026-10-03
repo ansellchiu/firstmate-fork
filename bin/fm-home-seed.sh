@@ -477,7 +477,7 @@ EOF
     return 0
   fi
   {
-    echo "error: home seeding cannot read the registered delivery posture for $project; refusing the seed until the registry line is fixed:"
+    echo "error: home seeding cannot read the registered delivery posture for $project: project $project does not resolve to a delivery posture; refusing the seed until the registry line is fixed:"
     sed 's/^/  /' "$err"
   } >&2
   rm -f "$err"
