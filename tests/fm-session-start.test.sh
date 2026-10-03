@@ -1241,6 +1241,32 @@ EOF
   assert_contains "$block" '(no # Identity section in data/captain.md)' "missing identity was not disclosed"
   assert_contains "$block" 'Preferences without identity.' "missing identity suppressed preferences"
   assert_not_contains "$block" 'captain-shared.md' "absent shared preferences were emitted"
+  {
+    printf '# Identity\n'
+    i=0
+    while [ "$i" -lt 30 ]; do
+      printf -- '- Identity line %02d keeps the captain context.\n' "$i"
+      i=$((i + 1))
+    done
+    printf -- '- The captain calls kunchenguid "the Admiral".\n\n# Communication preferences\n'
+    i=0
+    while [ "$i" -lt 100 ]; do
+      printf -- '- Preference line %02d must yield to identity.\n' "$i"
+      i=$((i + 1))
+    done
+  } > "$home/data/captain.md"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  preview=$(printf '%s' "$out" | head -c 2000)
+  i=0
+  while [ "$i" -lt 30 ]; do
+    assert_contains "$preview" "$(printf -- '- Identity line %02d keeps the captain context.' "$i")" \
+      "a long identity lost a line to communication preferences"
+    i=$((i + 1))
+  done
+  assert_contains "$preview" 'The captain calls kunchenguid "the Admiral".' \
+    "a long identity lost its last line to communication preferences"
+  assert_not_contains "$preview" '[truncated - full # Identity section in data/captain.md]' \
+    "an identity that fits was truncated"
   pass "FIRST CONTEXT prioritizes both identities and truncates only selected sections at whole lines"
 }
 

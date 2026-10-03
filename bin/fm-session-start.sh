@@ -484,6 +484,7 @@ print_first_context() {
     part=$(printf '\n%s\n%s\n%s' "${labels[i]}" "$SUBRULE" "${bodies[i]}")
     reserve=1
     for ((j = i + 1; j < ${#bodies[@]}; j++)); do
+      [[ ${labels[j]} == *'# Identity' ]] || continue
       pointer=$(printf '\n%s\n%s\n%s' "${labels[j]}" "$SUBRULE" "${pointers[j]}")
       bytes=$(printf '\n%s\n%s\n%s' "${labels[j]}" "$SUBRULE" "${bodies[j]}" | wc -c)
       [ "$bytes" -le "$(printf '%s' "$pointer" | wc -c)" ] || bytes=$(printf '%s' "$pointer" | wc -c)
@@ -493,6 +494,7 @@ print_first_context() {
     if [ "$(printf '%s' "$part" | wc -c)" -gt "$room" ]; then
       pointer=$(printf '\n%s\n%s\n' "${labels[i]}" "$SUBRULE")
       room=$((room - $(printf '%s' "$pointer" | wc -c) - ${#pointers[i]} - 1))
+      [ "$room" -ge 0 ] || continue
       prefix=$(printf '%s\n' "${bodies[i]}" | LC_ALL=C awk -v budget="$room" '
         length($0) + 1 > budget { exit }
         { print; budget -= length($0) + 1 }
