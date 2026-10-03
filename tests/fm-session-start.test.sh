@@ -1322,7 +1322,7 @@ EOF
 }
 
 test_digest_section_budgets_and_complete_stdout_accounting() {
-  local rec root home fakebin out expected prefix measured reported
+  local rec root home fakebin out expected prefix measured reported recover recovered
   rec=$(new_world digest-budget-accounting)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1338,7 +1338,7 @@ EOF
   out=$(FM_FAKE_HARNESS=pi LC_ALL=en_US.UTF-8 \
     FM_SESSION_START_BUDGET_REGISTRY=14 FM_SESSION_START_BUDGET_MEMORY=1 \
     FM_SESSION_START_BUDGET_BACKLOG=1 FM_SESSION_START_BUDGET_READ_ONCE=1 \
-    FM_SESSION_START_BUDGET_WAKE=1 FM_SESSION_START_BUDGET_SUPERVISION=1 \
+    FM_SESSION_START_BUDGET_SUPERVISION=1 \
     FM_SESSION_START_DIGEST_CEILING=100 \
     run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   [ "$(printf '%s\n' "$out" | grep -c '^界界$')" -eq 2 ] \
@@ -1346,8 +1346,14 @@ EOF
   assert_contains "$out" "1 more omitted - cat $home/data/projects.md" "project overflow missing"
   assert_contains "$out" "1 more omitted - cat $home/data/secondmates.md" "registry spend was lost between files"
   assert_not_contains "$out" "secondmate-row" "secondmate registry exceeded shared budget"
-  assert_contains "$out" "more omitted - bin/fm-wake-drain.sh" "wake overflow missing"
-  assert_contains "$out" "more omitted - sed -n" "read-once overflow missing"
+  assert_contains "$out" "check: budget overflow fixture" "wake queue was truncated after the drain presented it"
+  assert_not_contains "$out" "more omitted - bin/fm-wake-drain.sh" "wake queue was post-hoc truncated"
+  recover=$(printf '%s\n' "$out" | sed -n 's/^[0-9]* more omitted - \(awk .*READ_ONCE_BODY.*\)$/\1/p')
+  [ -n "$recover" ] || fail "read-once overflow missing"
+  recovered=$(cd "$ROOT" && eval "$recover")
+  assert_contains "$recovered" "Do NOT re-read any of them after reading this digest" \
+    "read-once recovery command did not print the omitted body"
+  assert_not_contains "$recovered" "READ_ONCE_BODY" "read-once recovery command printed implementation"
   assert_contains "$out" "more omitted - bin/fm-tasks-axi.sh list" "backlog overflow missing"
   assert_contains "$out" "more omitted - cat $home/data/captain.md" "memory overflow missing"
   assert_not_contains "$out" "memory-row" "oversized first memory line leaked"
@@ -1418,6 +1424,25 @@ EOF
   [ "$header_count" -eq 1 ] || fail "expected one shared status-tail header, got $header_count"
 
   pass "work under way prints identity keys, endpoint verdict, and a shared two-line status tail"
+}
+
+test_work_under_way_budget_bounds_first_record() {
+  local rec root home fakebin out
+  rec=$(new_world work-first-record-budget)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_tmux "$fakebin" "fm-sess:live"
+  printf 'window=fm-sess:live\nkind=ship\n' > "$home/state/task-a.meta"
+  printf 'working: first-record-tail\n' > "$home/state/task-a.status"
+
+  out=$(FM_SESSION_START_BUDGET_WORK=100 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "id=task-a" "first work record bypassed the work-under-way budget"
+  assert_contains "$out" "1 more omitted - ls state/*.meta" "first-record overflow was not disclosed"
+
+  pass "work-under-way budget bounds the first record, header included"
 }
 
 test_many_orphans_keep_digest_under_ceiling() {
@@ -3331,6 +3356,7 @@ test_orphan_status_logs_are_summarized
 test_hold_reason_capped_on_tasks_axi_and_manual_paths
 test_registry_rows_capped_at_line_cap
 test_work_under_way_prints_compact_identity
+test_work_under_way_budget_bounds_first_record
 test_many_orphans_keep_digest_under_ceiling
 test_digest_section_budgets_and_complete_stdout_accounting
 test_pending_findings_surface_and_stay_silent

@@ -437,22 +437,19 @@ BACKLOG_FIELDS=blocked_by,hold_kind,hold_reason
 
 # Whole-digest byte budget (J4 ceiling column). Per-section overflow discloses
 # with "N more omitted - <command>"; DIGEST_CEILING_BYTES banners the total.
-DIGEST_BUDGET_WAKE=${FM_SESSION_START_BUDGET_WAKE:-6144}
 DIGEST_BUDGET_READ_ONCE=${FM_SESSION_START_BUDGET_READ_ONCE:-1536}
 DIGEST_BUDGET_BACKLOG=${FM_SESSION_START_BUDGET_BACKLOG:-6144}
 DIGEST_BUDGET_WORK=${FM_SESSION_START_BUDGET_WORK:-10240}
 DIGEST_BUDGET_ORPHANS=${FM_SESSION_START_BUDGET_ORPHANS:-1024}
 DIGEST_BUDGET_REGISTRY=${FM_SESSION_START_BUDGET_REGISTRY:-4096}
 DIGEST_BUDGET_MEMORY=${FM_SESSION_START_BUDGET_MEMORY:-23040}
-for _digest_budget in DIGEST_BUDGET_WAKE DIGEST_BUDGET_READ_ONCE \
+for _digest_budget in DIGEST_BUDGET_READ_ONCE \
   DIGEST_BUDGET_BACKLOG DIGEST_BUDGET_WORK DIGEST_BUDGET_ORPHANS DIGEST_BUDGET_REGISTRY \
   DIGEST_BUDGET_MEMORY; do
   case "${!_digest_budget}" in ''|*[!0-9]*|0) eval "$_digest_budget=1024" ;; esac
 done
 unset _digest_budget
 DIGEST_TOTAL_BYTES=0
-ORPHAN_RECENT_SECS=${FM_SESSION_START_ORPHAN_RECENT_SECS:-172800}
-case "$ORPHAN_RECENT_SECS" in ''|*[!0-9]*) ORPHAN_RECENT_SECS=172800 ;; esac
 
 RULE='================================================================================'
 SUBRULE='--------------------------------------------------------------------------------'
@@ -847,7 +844,7 @@ print_work_under_way() {
     block=$(print_compact_meta_block "$meta")
     block=$block$'\n'
     bytes=$(digest_count_bytes "$block")
-    if [ "$shown" -gt 0 ] && [ $((used + bytes)) -gt "$DIGEST_BUDGET_WORK" ]; then
+    if [ $((used + bytes)) -gt "$DIGEST_BUDGET_WORK" ]; then
       omitted=1
       continue
     fi
@@ -867,10 +864,10 @@ print_work_under_way() {
 }
 
 print_orphan_status_summary() {
-  local status id mtime now cutoff total=0 recent='' recent_n=0 body bytes recent_hours
+  local status id mtime now cutoff total=0 recent='' recent_n=0 body bytes
   subsection "Orphan status logs (state/*.status without matching .meta)"
   now=$(date +%s)
-  cutoff=$((now - ORPHAN_RECENT_SECS))
+  cutoff=$((now - 172800))
   for status in "$STATE"/*.status; do
     [ -f "$status" ] || continue
     id=$(basename "$status" .status)
@@ -895,9 +892,8 @@ print_orphan_status_summary() {
     printf '(none)\n'
     return 0
   fi
-  recent_hours=$((ORPHAN_RECENT_SECS / 3600))
-  body=$(printf '%d orphan status log(s) (no matching .meta). Recent (written in last %sh): ' \
-    "$total" "$recent_hours")
+  body=$(printf '%d orphan status log(s) (no matching .meta). Recent (written in last 48h): ' \
+    "$total")
   if [ "$recent_n" -eq 0 ]; then
     body="${body}(none)"
   else
@@ -1135,8 +1131,7 @@ else
   fi
   DRAIN_OUT=$("$SCRIPT_DIR/fm-wake-drain.sh" 2>&1)
   if [ -n "$DRAIN_OUT" ]; then
-    digest_print_lines_budgeted "$DIGEST_BUDGET_WAKE" \
-      "bin/fm-wake-drain.sh" <<< "$DRAIN_OUT"
+    printf '%s\n' "$DRAIN_OUT"
   else
     printf '(no queued wakes)\n'
   fi
@@ -1227,7 +1222,7 @@ Go to a source directly only when:
 EOF
 )
 digest_print_lines_budgeted "$DIGEST_BUDGET_READ_ONCE" \
-  "sed -n '/READ-ONCE CONTRACT/,/^====/p' from bin/fm-session-start.sh" <<< "$READ_ONCE_BODY"
+  'awk '\''/^EOF$/{f=0} f; /^READ_ONCE_BODY=/{f=1}'\'' bin/fm-session-start.sh' <<< "$READ_ONCE_BODY"
 
 # --- 6. fleet-state digest ---------------------------------------------
 # Before CONTEXT: see this file's ORDERING note. Live fleet identity is what a
