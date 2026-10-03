@@ -1258,7 +1258,7 @@ EOF
   assert_contains "$out" "1 orphan status log(s)" "digest did not print the orphan count"
   assert_contains "$out" "task-orphan" "digest did not name the recent orphan id"
   assert_not_contains "$out" "working: orphan step 6" "orphan status tails must not be inlined"
-  assert_contains "$out" "ls state/*.status" "orphan summary did not name the follow-up listing command"
+  assert_contains "$out" "ls $(printf '%q' "$home/state")/*.status" "orphan summary did not name the follow-up listing command"
 
   matched_count=$(printf '%s\n' "$out" | grep -F -c 'working: surfaced once')
   [ "$matched_count" -eq 1 ] || fail "matched status log was printed $matched_count times: $out"
@@ -2493,9 +2493,9 @@ EOF
     "manual compact rendering did not bound its plain queued listing"
   assert_contains "$out" "(shown 1 in-flight, 2 held or blocked queued, 4 of 25 other queued title line(s); 1 done row(s) omitted)" \
     "manual compact rendering did not report its bound accounting"
-  assert_contains "$out" "(21 more queued - raise FM_SESSION_START_QUEUED_LIMIT or read data/backlog.md for the rest)" \
+  assert_contains "$out" "(21 more queued - raise FM_SESSION_START_QUEUED_LIMIT or read the full file named below for the rest)" \
     "manual compact rendering did not disclose an exact queued remainder"
-  assert_contains "$out" "or data/backlog.md" "manual compact digest omitted the data/backlog.md full-body pointer"
+  assert_contains "$out" "or $(printf '%q' "$home/data")/backlog.md" "manual compact digest omitted the data/backlog.md full-body pointer"
 
   pass "manual backlog rendering drops done rows, keeps every held or blocked title line, and bounds the rest"
 }
