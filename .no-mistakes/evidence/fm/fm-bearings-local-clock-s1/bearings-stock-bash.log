@@ -1,0 +1,183 @@
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - task teardown during metadata capture is omitted without aborting the snapshot
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - current state and decision hints share one captured status observation
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - reused live state is discarded when task generation changes
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - large local snapshot overlaps local reads with byte-identical serial and concurrent projections
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - remote ledgers collect concurrently under one budget, reuse aged cache, and cancel wedged collectors
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a missing remote ledger stays explicitly unreadable without remote summary computation
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - Domain Alpha structured state overrides a stale parent Phase 7 event
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - GNU stat file reads select -c without BSD filesystem-report pollution
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - parent activity evidence is bounded and disclosed
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - Bearings excludes a status-only child decision
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a structured child captain hold reaches Captain's Call
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - missing, invalid, unreadable, malformed, and unavailable-child homes stay explicit unknowns
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - oversized ledgers stay strict unknown
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - secondmate and per-home child counts are bounded, disclosed, and explicitly expandable
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - parent decisions remain untrusted contradiction evidence
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - parent evidence reconciliation distinguishes matching holds, blocks, and decisions
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - nonprogressing child states are explicit and inconsistent terminal rows invalidate
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - registry unavailability and bounded truncation remain explicit
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - repeated snapshots keep the same current landed baseline and ignore prior reports
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - local clock fields cross the UTC day boundary in Asia/Singapore
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - default output is bounded, local-only, and marks omitted surfaces
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - TOON and JSON are parity representations of the same model
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed includes secondmate-managed merges alongside main-home merges
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed accepts only kind-owned delivery artifacts while answered questions stay out
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - kind fallback matches tasks-axi word boundaries and preserves scout deliveries
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - kindless v1 summaries retain report artifacts from fresh and cached ledgers
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - default landed selection balances one dominant home with sparse homes
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed selection refills capacity after sparse homes exhaust
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed selection uses deterministic home order when homes exceed the cap
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed selection preserves deterministic home and internal tie ordering
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed selection handles no landed items
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - --all-landed keeps the complete global landed output
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - landed stays bounded with per-home + overall caps and omitted[] disclosure
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - Bearings keeps a live blocker in structured live state and never converts it to Charted Next queue work
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - action-free items (working/done/queued/landed) do not leak into Captain's Call
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - main orphan in-flight stays out of Underway and is disclosed in omitted/gates
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - main unstructured current is disclosed while structured siblings still project
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - counterfactual meta clears main inventory warning and projects the live task
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - working captain holds retain main and secondmate bucket surfaces
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - active children reach Underway independently of a home captain hold
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - blank legacy summary names use their durable identifier
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - newest filed gates are selected before snapshot bounds
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - Underway rows carry the durable task name and gates carry their filed date
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - mixed secondmate roles, partial state, and captain readiness project independently
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - main and secondmate captain actionability use the same blocker readiness
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a completed scout with decision-like report prose is a pointer, not pending
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - an authoritative captain hold surfaces end-to-end
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - current report pointers surface
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - queued body prose never hides an item from the board
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - --include-prs is the only path that fetches, and it enriches correctly
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - --include-prs maps a custom branch-prefix PR back to its recorded task
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a partial GitHub failure degrades gracefully
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - Perl fallback bounds stalled GitHub calls without coreutils timeout
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - all fleet-sized sections are capped with counted opt-in expansion
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - captain-held tasks of any kind reach Captain's Call, deferral is honored, and landed excludes answered calls
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - structured hold buckets decide Captain's Call, Charted Next, and the reveal
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a blocked deferred hold stays gated when its date arrives and is revealed by --all-decisions
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - revealed deferred holds display their deferral reason while live calls stay unannotated
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - live PR enrichment caps repositories with counted expansion
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - per-repository open-PR caps are disclosed with an expansion knob
+ok - projection and TOON rendering failures exit nonzero with diagnostics
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - non-ISO since degrades to unknown and non-ISO hold_until keeps the captain call live

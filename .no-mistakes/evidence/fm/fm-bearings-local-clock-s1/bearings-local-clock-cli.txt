@@ -1,0 +1,26 @@
+$ TZ=Asia/Singapore FM_BEARINGS_NOW=2026-10-02T16:12:07Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-10-02T16:12:07Z","generated_local":"2026-10-03T00:12:07+08:00","today_local":"2026-10-03"}
+exit=
+$ TZ=America/Los_Angeles FM_BEARINGS_NOW=2026-10-02T16:12:07Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-10-02T16:12:07Z","generated_local":"2026-10-02T09:12:07-07:00","today_local":"2026-10-02"}
+exit=
+$ TZ=UTC FM_BEARINGS_NOW=2026-10-02T16:12:07Z bin/fm-bearings-snapshot.sh --json | jq '{generated,generated_local,today_local}'
+{"generated":"2026-10-02T16:12:07Z","generated_local":"2026-10-02T16:12:07+00:00","today_local":"2026-10-02"}
+exit=
+$ TZ=America/Los_Angeles FM_BEARINGS_NOW=2026-10-03T03:30:00Z  (UTC already next day, LA still previous)
+{"generated":"2026-10-03T03:30:00Z","generated_local":"2026-10-02T20:30:00-07:00","today_local":"2026-10-02"}
+$ TZ=Asia/Kolkata (half-hour offset) FM_BEARINGS_NOW=2026-10-02T20:00:00Z
+{"generated":"2026-10-02T20:00:00Z","generated_local":"2026-10-03T01:30:00+05:30","today_local":"2026-10-03"}
+$ unpinned (real clock), default TOON output head
+schema: fm-bearings.v1
+home: /fm-lab.Br67sz
+generated: "2026-10-03T23:25:46Z"
+generated_local: "2026-10-04T07:25:46+08:00"
+today_local: 2026-10-04
+prs: "not_requested (run: /bearings include PRs)"
+$ adversarial: FM_BEARINGS_NOW=not-a-time
+fm-bearings-snapshot: cannot render local clock from generated=not-a-time
+exit=1
+$ adversarial: FM_BEARINGS_NOW=2026-10-02 (date only)
+fm-bearings-snapshot: cannot render local clock from generated=2026-10-02
+exit=1
