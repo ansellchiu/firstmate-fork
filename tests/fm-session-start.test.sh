@@ -9,7 +9,7 @@
 #     skipped (including bootstrap's seven mutating sweeps, verified by their
 #     ABSENCE), the digest still completes
 #   - output section ordering: FIRST CONTEXT leads, the safety preamble follows,
-#     curated memory precedes the bulk fleet dump, and the read-once contract
+#     live fleet state precedes curated memory, and the read-once contract
 #     precedes both bulk digests
 #   - FIRST CONTEXT: appears before LOCK, stays under 2000 bytes with a large
 #     captain.md, and degrades cleanly when captain.md is absent
@@ -1019,11 +1019,11 @@ SH
 # --- output ordering ----------------------------------------------------------
 
 # Section order decides what a head-preview or truncated startup still carries.
-# FIRST CONTEXT leads, the safety preamble follows, curated memory precedes the
-# bulk fleet dump, and the read-once contract arrives before both bulk digests.
+# FIRST CONTEXT leads, the safety preamble follows, live fleet state precedes
+# curated memory, and the read-once contract arrives before both bulk digests.
 test_output_ordering_diagnostics_lead() {
   local rec root home fakebin out first_line lock_line boot_line wake_line
-  local read_once_line context_line fleet_line next_line inventory_line missing_line
+  local read_once_line context_line fleet_line network_line next_line inventory_line missing_line
   rec=$(new_world ordering)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1045,6 +1045,7 @@ EOF
   read_once_line=$(printf '%s\n' "$out" | grep -n '^READ-ONCE CONTRACT$' | head -1 | cut -d: -f1)
   context_line=$(printf '%s\n' "$out" | grep -n '^CONTEXT$' | head -1 | cut -d: -f1)
   fleet_line=$(printf '%s\n' "$out" | grep -n '^FLEET STATE$' | head -1 | cut -d: -f1)
+  network_line=$(printf '%s\n' "$out" | grep -n '^NETWORK CHECKS$' | head -1 | cut -d: -f1)
   next_line=$(printf '%s\n' "$out" | grep -n '^NEXT STEP$' | head -1 | cut -d: -f1)
   inventory_line=$(printf '%s\n' "$out" | grep -n '^--- task-a ---$' | head -1 | cut -d: -f1)
 
@@ -1062,13 +1063,14 @@ EOF
   [ "$wake_line" -lt "$read_once_line" ] || fail "WAKE QUEUE did not precede the read-once contract"
 
   [ "$read_once_line" -lt "$context_line" ] || fail "the read-once contract did not precede CONTEXT"
-  [ "$context_line" -lt "$fleet_line" ] || fail "CONTEXT did not precede FLEET STATE"
+  [ "$read_once_line" -lt "$fleet_line" ] || fail "the read-once contract did not precede FLEET STATE"
+  [ "$fleet_line" -lt "$network_line" ] || fail "FLEET STATE did not precede NETWORK CHECKS"
+  [ "$network_line" -lt "$context_line" ] || fail "NETWORK CHECKS did not precede CONTEXT"
+  [ "$context_line" -lt "$next_line" ] || fail "CONTEXT did not precede NEXT STEP"
   [ "$fleet_line" -lt "$next_line" ] || fail "FLEET STATE did not precede NEXT STEP"
 
-  # Curated memory must precede the live-task inventory so a head preview or
-  # truncated tail does not bury captain identity behind the fleet dump.
-  [ "$context_line" -lt "$inventory_line" ] \
-    || fail "the curated memory files were buried behind the live-task inventory"
+  [ "$inventory_line" -lt "$context_line" ] \
+    || fail "the live-task inventory was buried behind curated memory"
   assert_contains "$out" "Captain memory that must precede the fleet dump." \
     "the ordering fixture did not actually print a memory file"
 
@@ -1076,7 +1078,7 @@ EOF
   [ -n "$missing_line" ] || fail "MISSING diagnostic did not appear at all"
   [ "$missing_line" -lt "$fleet_line" ] || fail "actionable MISSING diagnostic was buried after the bulk fleet-state digest"
 
-  pass "digest sections are ordered FIRST CONTEXT, safety preamble, then memory before fleet state"
+  pass "digest sections are ordered FIRST CONTEXT, safety preamble, then fleet state before memory"
 }
 
 # FIRST CONTEXT must lead, stay under the 2 KB preview budget even with a large
@@ -1098,7 +1100,8 @@ EOF
       i=$((i + 1))
     done
     printf '\n# Communication preferences\n\n'
-    printf '%s\n' '- Later section must not appear in FIRST CONTEXT.'
+    printf '%s\n' '- Preference must wait for identity.'
+    printf '\n# Other section\n- Later section must not appear in FIRST CONTEXT.\n'
   } > "$home/data/captain.md"
 
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
@@ -1153,6 +1156,75 @@ EOF
   ' || fail "absent captain.md did not print ABSENT inside FIRST CONTEXT"
 
   pass "FIRST CONTEXT leads, stays under 2000 bytes, and degrades cleanly when captain.md is absent"
+}
+
+test_first_context_preferences_follow_all_identities() {
+  local rec root home fakebin out block mode file i bytes
+  rec=$(new_world first-context-preferences)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  for file in captain.md captain-shared.md; do
+    printf '# Communication preferences\n- Preference from %s.\n\n# Identity\n- Identity from %s.\n\n# Other\n- Excluded from %s.\n' \
+      "$file" "$file" "$file" > "$home/data/$file"
+  done
+  for mode in normal reemit; do
+    if [ "$mode" = normal ]; then
+      out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+    else
+      out=$(run_named_harness_session_start claude "$home" "$root" "$fakebin:$BASE_PATH" --reemit)
+    fi
+    block=$(printf '%s\n' "$out" | awk '/^FIRST CONTEXT$/ { printing = 1 } /^LOCK$/ { exit } printing { print }')
+    for file in captain.md captain-shared.md; do
+      assert_contains "$block" "Identity from $file." "missing complete identity ($mode)"
+      assert_contains "$block" "Preference from $file." "missing communication preferences ($mode)"
+      assert_not_contains "$block" "Excluded from $file." "unselected captain section leaked ($mode)"
+    done
+    printf '%s\n' "$block" | awk '
+      /Identity from captain-shared.md/ { identity = NR }
+      /Preference from captain.md/ { preference = NR }
+      END { exit identity && preference && identity < preference ? 0 : 1 }
+    ' || fail "communication preferences displaced shared identity ($mode)"
+  done
+  for file in captain.md captain-shared.md; do
+    {
+      printf '# Identity\n- Identity from %s.\n\n# Communication preferences\n' "$file"
+      printf '%s\n' "- First preference from $file."
+      i=0
+      while [ "$i" -lt 300 ]; do
+        printf 'LONG-LINE-%s-%s-' "$file" "$i"
+        i=$((i + 1))
+      done
+      printf '\n- After oversized line from %s.\n\n# Other\n- Excluded from %s.\n' "$file" "$file"
+    } > "$home/data/$file"
+  done
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  block=$(printf '%s\n' "$out" | awk '
+    { lines[NR] = $0 }
+    /^FIRST CONTEXT$/ { start = NR - 1 }
+    /^LOCK$/ { for (i = start; i < NR; i++) print lines[i]; exit }
+  ')
+  for file in captain.md captain-shared.md; do
+    assert_contains "$block" "Identity from $file." "overflow displaced complete identity"
+    assert_contains "$block" "First preference from $file." "fitting preference was dropped"
+    assert_contains "$block" "[truncated - full # Communication preferences section in data/$file]" \
+      "overflow lost its source pointer"
+    assert_not_contains "$block" "LONG-LINE-$file" "overflow cut a preference line"
+    assert_not_contains "$block" "After oversized line from $file." "overflow skipped past a line"
+    assert_not_contains "$block" "Excluded from $file." "overflow leaked an unselected section"
+  done
+  bytes=$(printf '%s' "$block" | wc -c | tr -d ' ')
+  [ "$bytes" -le 2000 ] || fail "preferences block exceeded 2000 bytes: $bytes"
+  printf '# Communication preferences\n- Preferences without identity.\n' > "$home/data/captain.md"
+  rm -f "$home/data/captain-shared.md"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  block=$(printf '%s\n' "$out" | awk '/^FIRST CONTEXT$/ { printing = 1 } /^LOCK$/ { exit } printing { print }')
+  assert_contains "$block" '(no # Identity section in data/captain.md)' "missing identity was not disclosed"
+  assert_contains "$block" 'Preferences without identity.' "missing identity suppressed preferences"
+  assert_not_contains "$block" 'captain-shared.md' "absent shared preferences were emitted"
+  pass "FIRST CONTEXT prioritizes both identities and truncates only selected sections at whole lines"
 }
 
 # The contract has to survive tail truncation and stay honest once it precedes
@@ -1740,7 +1812,7 @@ SH
   assert_contains "$out" 'stopped during the "lock" stage' \
     "the abnormal-death banner did not name the stage that never finished"
   assert_contains "$out" \
-    "wake-queue supervision-instructions read-once context fleet-state network-checks next-step" \
+    "wake-queue supervision-instructions read-once fleet-state network-checks context next-step" \
     "the abnormal-death banner did not list every stage that never ran"
   assert_not_contains "$out" "RUNTIME BOUND" \
     "an abnormal death was misreported as the runtime bound firing"
@@ -2374,7 +2446,7 @@ EOF
   assert_contains "$out" "RUNTIME BOUND" "the truncation banner did not name the bound it hit"
   assert_contains "$out" 'stopped during the "bootstrap" stage' "the truncation banner did not name the incomplete stage"
   assert_contains "$out" "RECONCILE these stages" "the truncation banner did not tell the agent what to reconcile"
-  assert_contains "$out" "wake-queue supervision-instructions read-once context fleet-state network-checks next-step" \
+  assert_contains "$out" "wake-queue supervision-instructions read-once fleet-state network-checks context next-step" \
     "the truncation banner did not list every stage that never ran"
   assert_not_contains "$out" "NEXT STEP" "a truncated digest claimed to have reached its closing reminder"
   assert_absent "$home/state/.session-start-complete" \
@@ -3154,6 +3226,7 @@ test_trace_context_effective_state_is_frozen_after_lock
 test_session_lock_concurrent_single_winner
 test_output_ordering_diagnostics_lead
 test_first_context_leads_and_respects_byte_budget
+test_first_context_preferences_follow_all_identities
 test_read_once_contract_is_stated_once_before_its_subject
 test_herdr_backend_diagnostics_follow_real_session_start
 test_session_start_relaunches_missing_pi_secondmate
