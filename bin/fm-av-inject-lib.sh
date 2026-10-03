@@ -105,7 +105,7 @@ fm_secret_backend_mode() {  # <config-dir>
   FM_SECRET_BACKEND_MODE=""
   case "$raw" in
     ""|automic) FM_SECRET_BACKEND_MODE=automic ;;
-    varlock-op) FM_SECRET_BACKEND_MODE=varlock-op ;;
+    varlock-op) FM_SECRET_BACKEND_MODE='varlock-op' ;;
     *)
       FM_AV_INJECT_ERROR="unknown secret backend '$raw'; config/$FM_SECRET_BACKEND_FILE must be automic or varlock-op"
       return 1
@@ -294,6 +294,7 @@ fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
       return 1
       ;;
   esac
+  # shellcheck disable=SC2016 # Inner bash script; its $-vars expand in the child.
   OP_SERVICE_ACCOUNT_TOKEN=$tok exec ${FM_VARLOCK_OP_LAUNCHER[@]+"${FM_VARLOCK_OP_LAUNCHER[@]}"} "$varlock" run --path "$schema_dir" --filter "$filter" -- "$BASH" -c '
     count=$1
     shift
