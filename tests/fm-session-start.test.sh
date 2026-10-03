@@ -1536,7 +1536,10 @@ EOF
     printf '\n'
   } > "$home/data/secondmates.md"
 
-  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  # The wake drain's fleet-wide scan over 150 status logs alone can take about
+  # a minute on a loaded host; widen the 120s startup bound so a slow drain
+  # cannot truncate the digest before the fleet-state sections this test checks.
+  out=$(FM_SESSION_START_TIMEOUT=600 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   bytes=$(printf '%s' "$out" | wc -c | tr -d ' ')
   [ "$bytes" -le 65536 ] || fail "digest with 150 orphans was $bytes bytes, over the 64 KB ceiling"
   assert_contains "$out" "150 orphan status log(s)" "many-orphan fixture lost the orphan count"
