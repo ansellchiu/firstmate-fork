@@ -1,0 +1,4 @@
+3350,3352d3349
+< previous=$(cat "$FM_ARM_COUNT.pid" 2>/dev/null || true)
+< printf '%s\n' "$$" > "$FM_ARM_COUNT.pid"
+< [ -z "$previous" ] || kill -TERM "$previous" 2>/dev/null || true

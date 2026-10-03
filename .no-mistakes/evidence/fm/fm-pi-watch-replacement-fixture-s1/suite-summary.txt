@@ -1,0 +1,6 @@
+run 1 rc=0 ok=62 secs=89
+run 2 rc=0 ok=62 secs=77
+run 3 rc=0 ok=62 secs=77
+run 4 rc=0 ok=62 secs=78
+run 5 rc=0 ok=62 secs=87
+run 6 rc=0 ok=62 secs=82

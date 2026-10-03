@@ -1,0 +1,9 @@
+run 1 rc=0 ok=62 secs=89
+run 2 rc=0 ok=62 secs=77
+run 3 rc=0 ok=62 secs=77
+run 4 rc=0 ok=62 secs=78
+run 5 rc=0 ok=62 secs=87
+run 6 rc=0 ok=62 secs=82
+focused HEAD (target+token tests): 5/5 rc=0
+focused without three fixture lines: 3/3 rc=1 'not ok - Pi must deliver a late actionable close to a replacement that already registered'
+post-run ps: no fm-watch-arm child under a suite temp root; one wedged-count probe orphan (pi-count-wedged-root) self-exited within ~2min
