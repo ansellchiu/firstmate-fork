@@ -3911,6 +3911,10 @@ for (let moduleIndex = 1; moduleIndex <= 2; moduleIndex += 1) {
 // their late actionable closes under distinct process-wide tokens.
 const collectorMod = await import(`${pathToFileURL(process.env.PLUGIN).href}?token-module=collector`);
 const collector = makePi();
+// Hold the collector's first delivery open. Otherwise it finishes that record,
+// and a second outcome arriving behind it folds into the outstanding wake and
+// is finished too, both clearing the handoff this test observes.
+collector.pi.sendUserMessage = () => new Promise(() => {});
 collectorMod.default(collector.pi);
 const collectorArm = await collector.getTool().execute("arm-collector", {}, undefined, undefined, {});
 if (!collectorArm.details?.ok) throw new Error(`collector arm failed: ${JSON.stringify(collectorArm.details)}`);
