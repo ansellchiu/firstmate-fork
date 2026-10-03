@@ -152,7 +152,7 @@ stop_home_processes() {  # <home>
   local home=$1 pid arms='' i=0
   if [ -f "$home/state/.supervision-host" ]; then
     arms=$(awk -F '\t' '$1 == "arm" { print $2 }' "$home/state/.supervision-host")
-    pid=$(awk -F '\t' '$1 == "host" { print $2; exit }' "$home/state/.supervision-host")
+    pid=$(host_pid "$home")
     [ -z "$pid" ] || kill -TERM "$pid" 2>/dev/null || true
     while [ "$i" -lt 50 ] && [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; do
       sleep 0.1
@@ -166,7 +166,10 @@ stop_home_processes() {  # <home>
   [ -z "$pid" ] || kill -TERM "$pid" 2>/dev/null || true
   while IFS= read -r pid; do
     if [ -e "$home/session.stop" ]; then
+      # Bounded: a session whose Stop hook never returns is stopped, not awaited forever.
+      ( sleep 30; kill -TERM "$pid" ) >/dev/null 2>&1 &
       wait "$pid" 2>/dev/null || true
+      kill "$!" 2>/dev/null || true
     else
       kill -TERM "$pid" 2>/dev/null || true
     fi
@@ -267,6 +270,12 @@ watcher_live() {  # <home>
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 host_exited() { [ -s "$1/host.rc" ]; }
+host_pid() { awk -F '\t' '$1 == "host" { print $2; exit }' "$1/state/.supervision-host" 2>/dev/null; }
+retry_host_parked() {  # <home> <killed host pid>
+  local pid
+  pid=$(host_pid "$1")
+  [ -n "$pid" ] && [ "$pid" != "$2" ] && kill -0 "$pid" 2>/dev/null && watcher_live "$1"
+}
 # The recovery marker's episode kind (downtime or handling), read through its
 # owner's parser; the Claude re-arm owner delivers a close only on downtime.
 marker_kind() {  # <home>
@@ -1258,6 +1267,16 @@ test_claude_stop_hook_runs_the_host_without_the_file_and_off_opts_out() {
   [ ! -s "$home/hook.rc" ] || fail "a routine attended wake on a Claude home without the file reached main: $(cat "$home/hook.err")"
   watcher_live "$home" || fail "default-on: the host is not parked on a live successor"
   : > "$home/session.stop"
+  # A host killed without a close is retried by the Stop hook. The fork acks the
+  # killed watcher's downtime silently while the wake queue is empty (fork PR 1),
+  # so the retry's host parks on a live watcher instead of rewaking main.
+  first=$(host_pid "$home")
+  kill -TERM "$first"
+  wait_until 150 retry_host_parked "$home" "$first" \
+    || fail "default-on: the Stop hook did not retry its killed host: $(cat "$home/state/.supervision-host.log" 2>/dev/null)"
+  wait_until 150 grep -q '^acked:downtime:' "$home/state/.watcher-down" \
+    || fail "default-on: the retry must ack the killed host's downtime silently: $(cat "$home/state/.watcher-down" 2>/dev/null)"
+  [ ! -s "$home/hook.rc" ] || fail "default-on: a silently acked downtime reached main: $(cat "$home/hook.err")"
   stop_home_processes "$home"
 
   home=$(make_primary_home hook-opted-out)
@@ -1482,44 +1501,14 @@ SH
   pass "host: the dialog mirror, its feed, and the wake file are owner-only"
 }
 
-# Park again after a host was stopped mid-park: the new cycle's first close is
-# the watcher's downtime resurface, which main drains before the next park.
-# That close can end the park before its cycle is ever seen live, so this
-# waits for the exit itself.
-# The resurface pass-through leaves its successor running. Stop that watcher
-# and acknowledge the downtime its exit records, so the next park starts a
-# watcher it owns. Attaching instead would not observe the exit until the
-# beacon went stale, and this fixture's turn budget would already be gone.
-quiet_pass_through_successor() {  # <home>
-  local home=$1 pid i gen
-  pid=$(cat "$home/state/.watch.lock/pid" 2>/dev/null || true)
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    kill -TERM "$pid" 2>/dev/null || true
-    i=0
-    while [ "$i" -lt 50 ] && kill -0 "$pid" 2>/dev/null; do
-      sleep 0.1
-      i=$((i + 1))
-    done
-    kill -0 "$pid" 2>/dev/null && fail "fixture: the pass-through successor did not stop"
-  fi
-  gen=$(cat "$home/state/.watcher-down" 2>/dev/null || true)
-  gen=${gen##*:}
-  [ -n "$gen" ] || return 0
-  FM_HOME="$home" bash -c '
-    . "$1"
-    fm_recovery_marker_ack "$2" "$3"
-  ' _ "$ROOT/bin/fm-wake-lib.sh" "$home/state/.watcher-down" "$gen" \
-    || fail "fixture: could not acknowledge the successor downtime"
-}
-
+# Park again after a host was stopped mid-park. The fork acks the stopped
+# watcher's downtime silently while the wake queue is empty (fork PR 1), so the
+# new cycle parks on a live watcher instead of resurfacing that downtime to main.
 park_after_stop() {  # <home>
-  rm -f "$1/host.rc"
-  : > "$1/park.go"
-  wait_until 150 host_exited "$1" || fail "the watcher's downtime resurface did not reach main: $(cat "$1/host.out")"
-  assert_re '^check: rearm-resurface' "$1/host.out" "fixture: the first close after the watcher stopped was not its resurface"
-  main_drain_and_ack "$1"
-  quiet_pass_through_successor "$1"
   park_again "$1"
+  wait_until 150 grep -q '^acked:downtime:' "$1/state/.watcher-down" \
+    || fail "the stopped watcher's downtime was not acked silently: $(cat "$1/state/.watcher-down" 2>/dev/null)"
+  ! host_exited "$1" || fail "the stopped watcher's downtime reached main: $(cat "$1/host.out")"
 }
 
 # Dialog counts as delivered only once the turn that carried it is accepted
