@@ -127,7 +127,9 @@ pass "an injected call requests exactly the named keys and nothing else"
 CFG_VL="$TMP_ROOT/cfg-vl"; mkdir -p "$CFG_VL/varlock"
 printf 'on\n' > "$CFG_VL/av-inject"
 printf 'varlock-op\n' > "$CFG_VL/secret-backend"
-: > "$CFG_VL/varlock/.env.schema"
+for key in $FM_VARLOCK_OP_ALLOWED; do
+  printf '%s=resolved-%s\n' "$key" "$key"
+done > "$CFG_VL/varlock/.env.schema"
 [ "$(fm_secret_backend_mode "$TMP_ROOT/nope")" = automic ] || fail "absent secret-backend must be automic"
 [ "$(fm_secret_backend_mode "$CFG_VL")" = varlock-op ] || fail "varlock-op must select varlock-op"
 [ "$(FM_SECRET_BACKEND=automic fm_secret_backend_mode "$CFG_VL")" = automic ] || fail "FM_SECRET_BACKEND must override the file"
@@ -155,8 +157,22 @@ cat > "$VL_BIN/varlock" <<SH
 printf '%s\n' "\$*" >> "$TMP_ROOT/vl-argv.log"
 printf '%s\n' "\${OP_SERVICE_ACCOUNT_TOKEN:+token-present}" >> "$TMP_ROOT/vl-env.log"
 [ "\${OP_SERVICE_ACCOUNT_TOKEN:-}" != ops_REJECTED_TEST_TOKEN ] || exit 1
-while [ "\${1:-}" != "--" ] && [ "\$#" -gt 0 ]; do shift; done
+shift
+schema= filter=
+while [ "\${1:-}" != "--" ] && [ "\$#" -gt 0 ]; do
+  case "\$1" in
+    --path) schema=\$2; shift 2 ;;
+    --filter) filter=\$2; shift 2 ;;
+    *) exit 2 ;;
+  esac
+done
 shift || true
+unset EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_API_KEY PARALLEL_API_KEY
+while IFS='=' read -r name value; do
+  case ",\$filter," in
+    *",\$name,"*) export "\$name=\$value" ;;
+  esac
+done < "\$schema/.env.schema"
 exec "\$@"
 SH
 cat > "$VL_BIN/security" <<'SH'
@@ -231,7 +247,8 @@ assert_contains "$aargv" "inject +DEEPSEEK_API_KEY -- true" "the Automic approva
 assert_contains "$aargv" "inject +DEEPSEEK_API_KEY -- $VL_BIN/varlock run" "av must wrap varlock for the non-search key"
 assert_not_contains "$aargv" "+EXA_API_KEY" "a search key must never reach av"
 vargv=$(cat "$TMP_ROOT/vl-argv.log")
-assert_contains "$vargv" "--filter EXA_API_KEY -- /bin/echo ran-mixed" "varlock must filter only the search key"
+assert_contains "$vargv" "--filter EXA_API_KEY --" "varlock must filter only the search key"
+assert_contains "$vargv" "/bin/echo ran-mixed" "varlock must receive the target command"
 assert_not_contains "$vargv" "DEEPSEEK_API_KEY" "a non-search key must never reach varlock"
 assert_not_contains "$aargv$vargv" "ops_" "the token must never reach argv"
 assert_contains "$(cat "$TMP_ROOT/vl-env.log")" "token-present" "varlock must receive the token in its environment"
@@ -244,6 +261,32 @@ pass "a mixed varlock-op call resolves each key through its own backend"
 assert_contains "$(cat "$TMP_ROOT/vl-guard.err")" "DEEPSEEK_API_KEY" "the direct guard must name the disallowed key"
 [ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "a disallowed key must not exec varlock"
 pass "fm_varlock_op_exec itself serves only the allowlisted search keys"
+
+cp "$CFG_VL/varlock/.env.schema" "$TMP_ROOT/full-schema"
+for key in $FM_VARLOCK_OP_ALLOWED; do
+  for state in missing empty; do
+    for candidate in $FM_VARLOCK_OP_ALLOWED; do
+      if [ "$candidate" = "$key" ]; then
+        [ "$state" != empty ] || printf '%s=\n' "$candidate"
+      else
+        printf '%s=resolved-%s\n' "$candidate" "$candidate"
+      fi
+    done > "$CFG_VL/varlock/.env.schema"
+    for keys in "$key" "EXA_API_KEY,$key" "$key,DEEPSEEK_API_KEY"; do
+      out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl "$keys" /bin/echo ran-keyless); rc=$?
+      expect_code 1 "$rc" "a $state requested search key must refuse"
+      assert_contains "$out" "non-empty value for $key" "the refusal must identify the unresolved key"
+      assert_not_contains "$out" "ran-keyless" "the tool must not run with a $state key"
+      assert_not_contains "$out" "resolved-" "resolved values must never be printed"
+    done
+  done
+done
+cp "$TMP_ROOT/full-schema" "$CFG_VL/varlock/.env.schema"
+out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl "$FM_VARLOCK_OP_ALLOWED" /bin/echo ran-all-search); rc=$?
+expect_code 0 "$rc" "all five resolved search keys must run the tool"
+assert_contains "$out" "ran-all-search" "the tool must run after successful validation"
+pass "every requested search key must resolve non-empty before search-only or mixed execution"
+: > "$TMP_ROOT/vl-argv.log"
 
 # Missing / malformed token refuses without exec; the tool never runs.
 out=$(run_vl EXA_API_KEY /bin/echo ran-keyless); rc=$?
@@ -261,7 +304,7 @@ assert_not_contains "$out" "ops_REJECTED_TEST_TOKEN" "a rejected token must not 
 rm -f "$CFG_VL/varlock/.env.schema"
 out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl EXA_API_KEY /bin/echo no); rc=$?
 expect_code 1 "$rc" "a missing schema must refuse"
-: > "$CFG_VL/varlock/.env.schema"
+cp "$TMP_ROOT/full-schema" "$CFG_VL/varlock/.env.schema"
 out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_SECRET_BACKEND=garbage PATH="$VL_BIN:$FAKE_BIN:$PATH" "$AV_RUN" EXA_API_KEY -- /bin/echo no 2>&1); rc=$?
 expect_code 1 "$rc" "a garbage backend must refuse the whole call"
 assert_contains "$out" "unknown secret backend 'garbage'" "the executable must retain the backend diagnostic"

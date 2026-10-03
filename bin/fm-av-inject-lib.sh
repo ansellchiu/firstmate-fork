@@ -290,7 +290,19 @@ fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
       return 1
       ;;
   esac
-  OP_SERVICE_ACCOUNT_TOKEN=$tok exec ${FM_VARLOCK_OP_LAUNCHER[@]+"${FM_VARLOCK_OP_LAUNCHER[@]}"} "$varlock" run --path "$schema_dir" --filter "$filter" -- "$@"
+  OP_SERVICE_ACCOUNT_TOKEN=$tok exec ${FM_VARLOCK_OP_LAUNCHER[@]+"${FM_VARLOCK_OP_LAUNCHER[@]}"} "$varlock" run --path "$schema_dir" --filter "$filter" -- "$BASH" -c '
+    count=$1
+    shift
+    for ((i = 0; i < count; i++)); do
+      key=$1
+      shift
+      if [ -z "${!key:-}" ]; then
+        printf "error: varlock-op did not resolve a non-empty value for %s\n" "$key" >&2
+        exit 1
+      fi
+    done
+    exec "$@"
+  ' fm-varlock-op "${#FM_AV_INJECT_KEYARGS[@]}" "${FM_AV_INJECT_KEYARGS[@]#+}" "$@"
 }
 
 # Run ONE tool call with the named secrets applied to it, and nothing else.
