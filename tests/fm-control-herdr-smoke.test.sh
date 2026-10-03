@@ -317,6 +317,23 @@ STATE=$(fm_backend_agent_state herdr "$SESSION:$PANE_ID")
   || version_fail "a registration over a shell-only pane recovers as '$STATE' rather than 'dead'; every relaunch would be refused"
 pass "real herdr $HERDR_VERSION: a registration Herdr keeps after its agent exits reads stale-agent and recovers as dead"
 
+# Herdr's process view can flicker for an instant right after the agent process
+# is reaped (seen once in CI on 0.7.4: exit read the pane live although this
+# script had just read it dead). Exit's single read is the product contract
+# under test, so settle the fixture first: require a run of consecutive dead
+# reads, and keep the exit assertion below exactly as strict.
+settled=0
+for _ in $(seq 1 100); do
+  if [ "$(fm_backend_agent_state herdr "$SESSION:$PANE_ID")" = dead ]; then
+    settled=$((settled + 1))
+    [ "$settled" -lt 5 ] || break
+  else
+    settled=0
+  fi
+  sleep 0.1
+done
+[ "$settled" -ge 5 ] || version_fail "the stale-registration pane never settled to a stable 'dead' read before exit"
+
 OUT=$(run_control hsmoke exit) || fail "exit against a stale-registration pane should be idempotent success: $OUT"
 case "$OUT" in
   "already-stopped hsmoke"*) : ;;
