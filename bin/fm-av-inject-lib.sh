@@ -33,7 +33,10 @@
 # Automic path. A mixed call nests the two as
 # `av inject +OTHER... -- varlock run ... --filter SEARCH... -- <tool>`: av stays
 # outermost so the calling agent is still the launcher a Direct Access rule
-# matches, and the Automic preflight and approval probe run before that exec.
+# matches. The varlock-half prerequisites (varlock, schema, keychain token) are
+# checked before the Automic preflight and approval probe, so a missing one
+# never costs an approval tap; the shim unsets OP_SERVICE_ACCOUNT_TOKEN before
+# exec'ing the tool whatever the schema marks.
 # The varlock half has no human approval to wait for, so the three Automic
 # timeouts (FM_VAULT_PROBE_TIMEOUT, FM_AV_INJECT_PREFLIGHT_DEADLINE,
 # FM_AV_APPROVAL_TIMEOUT) do not apply to it. docs/configuration.md owns the

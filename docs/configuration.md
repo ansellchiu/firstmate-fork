@@ -635,7 +635,7 @@ The flag is a home-local preference and is not inherited by secondmate homes.
 The optional local, gitignored `config/secret-backend` selects which backend serves a `bin/fm-av-run.sh` call once `config/av-inject` is on.
 `automic` (absent, empty, or `automic`) is the Automic Vault behavior above for every key.
 `varlock-op` routes per key: `EXA_API_KEY`, `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, `LINKUP_API_KEY`, and `PARALLEL_API_KEY`, the low-value rapid-recon search keys, come from `varlock`, so an unattended worker needs no per-run approval tap for them; every other key stays on the unchanged Automic path.
-A call naming only search keys needs no `av`; a call naming only other keys is exactly the `automic` behavior; a mixed call runs the Automic preflight and approval probe for the other keys and then execs `av inject +OTHER... -- varlock run ... -- <tool>`, so `av` stays outermost and the calling agent remains the launcher its Direct Access rule matches.
+A call naming only search keys needs no `av`; a call naming only other keys is exactly the `automic` behavior; a mixed call checks the `varlock-op` prerequisites below first, so a missing one never costs an approval tap, then runs the Automic preflight and approval probe for the other keys and execs `av inject +OTHER... -- varlock run ... -- <tool>`, so `av` stays outermost and the calling agent remains the launcher its Direct Access rule matches.
 Any other value refuses the call rather than defaulting, because a typo must not route a key through the wrong backend.
 `FM_SECRET_BACKEND` overrides the file with the same values and exists for tests.
 `config/secret-backend` and `config/varlock/.env.schema` are primary-authoritative and inherited into secondmate homes, local and remote, like `config/av-inject`.
@@ -646,7 +646,7 @@ The operator supplies:
 
 - A dedicated 1Password vault holding only those five keys, and a read-only service account scoped to it.
 - The service-account `ops_` token stored in the macOS keychain with `security add-generic-password -s firstmate-rapid-recon -a OP_SERVICE_ACCOUNT_TOKEN -w`; the token is read at the moment of the call and handed to `varlock` as an exec-time environment assignment, so it is never in Firstmate's environment, argv, a file, or a log.
-- A schema at `config/varlock/.env.schema` that reads the five keys from that vault with the 1Password plugin and marks the token variable `@internal` so it is not passed on to the tool.
+- A schema at `config/varlock/.env.schema` that reads the five keys from that vault with the 1Password plugin and marks the token variable `@internal`; Firstmate also unsets the token before the tool runs.
 
 A well-formed token that 1Password rejects is refused by `varlock` itself, which does not run the tool when resolution fails.
 This backend has no human approval to wait for, so `FM_VAULT_PROBE_TIMEOUT`, `FM_AV_INJECT_PREFLIGHT_DEADLINE`, and `FM_AV_APPROVAL_TIMEOUT` apply to the `automic` backend only.
