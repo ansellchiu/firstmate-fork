@@ -1,0 +1,20 @@
+
+================================================================================
+FIRST CONTEXT
+================================================================================
+
+If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.
+data/captain.md # Identity
+--------------------------------------------------------------------------------
+ABSENT
+data/captain-shared.md # Identity
+--------------------------------------------------------------------------------
+# Identity
+- shared identity fact
+data/captain-shared.md # Communication preferences
+--------------------------------------------------------------------------------
+# Communication preferences
+- shared pref
+
+================================================================================
+SESSION START - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.anOGAJ

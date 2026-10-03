@@ -1,0 +1,42 @@
+
+================================================================================
+FIRST CONTEXT
+================================================================================
+
+If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.
+data/captain.md # Identity
+--------------------------------------------------------------------------------
+# Identity
+- identity filler line 1 abcdefghijklmnopqrstu
+- identity filler line 2 abcdefghijklmnopqrstu
+- identity filler line 3 abcdefghijklmnopqrstu
+- identity filler line 4 abcdefghijklmnopqrstu
+- identity filler line 5 abcdefghijklmnopqrstu
+- identity filler line 6 abcdefghijklmnopqrstu
+- identity filler line 7 abcdefghijklmnopqrstu
+- identity filler line 8 abcdefghijklmnopqrstu
+- identity filler line 9 abcdefghijklmnopqrstu
+- identity filler line 10 abcdefghijklmnopqrstu
+- identity filler line 11 abcdefghijklmnopqrstu
+- identity filler line 12 abcdefghijklmnopqrstu
+- identity filler line 13 abcdefghijklmnopqrstu
+- identity filler line 14 abcdefghijklmnopqrstu
+- identity filler line 15 abcdefghijklmnopqrstu
+- identity filler line 16 abcdefghijklmnopqrstu
+- identity filler line 17 abcdefghijklmnopqrstu
+- identity filler line 18 abcdefghijklmnopqrstu
+- identity filler line 19 abcdefghijklmnopqrstu
+- identity filler line 20 abcdefghijklmnopqrstu
+- identity filler line 21 abcdefghijklmnopqrstu
+- identity filler line 22 abcdefghijklmnopqrstu
+- identity filler line 23 abcdefghijklmnopqrstu
+- identity filler line 24 abcdefghijklmnopqrstu
+- identity filler line 25 abcdefghijklmnopqrstu
+- identity filler line 26 abcdefghijklmnopqrstu
+- identity filler line 27 abcdefghijklmnopqrstu
+- identity filler line 28 abcdefghijklmnopqrstu
+- identity filler line 29 abcdefghijklmnopqrstu
+- identity filler line 30 abcdefghijklmnopqrstu
+- The captain calls kunchenguid "the Admiral".
+
+=============================================================================

@@ -1,0 +1,42 @@
+
+================================================================================
+FIRST CONTEXT
+================================================================================
+
+If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.
+data/captain.md # Identity
+--------------------------------------------------------------------------------
+# Identity
+- big identity line 1 abcdefghijklmnopqrstuvwxyz
+- big identity line 2 abcdefghijklmnopqrstuvwxyz
+- big identity line 3 abcdefghijklmnopqrstuvwxyz
+- big identity line 4 abcdefghijklmnopqrstuvwxyz
+- big identity line 5 abcdefghijklmnopqrstuvwxyz
+- big identity line 6 abcdefghijklmnopqrstuvwxyz
+- big identity line 7 abcdefghijklmnopqrstuvwxyz
+- big identity line 8 abcdefghijklmnopqrstuvwxyz
+- big identity line 9 abcdefghijklmnopqrstuvwxyz
+- big identity line 10 abcdefghijklmnopqrstuvwxyz
+- big identity line 11 abcdefghijklmnopqrstuvwxyz
+- big identity line 12 abcdefghijklmnopqrstuvwxyz
+- big identity line 13 abcdefghijklmnopqrstuvwxyz
+- big identity line 14 abcdefghijklmnopqrstuvwxyz
+- big identity line 15 abcdefghijklmnopqrstuvwxyz
+- big identity line 16 abcdefghijklmnopqrstuvwxyz
+- big identity line 17 abcdefghijklmnopqrstuvwxyz
+- big identity line 18 abcdefghijklmnopqrstuvwxyz
+- big identity line 19 abcdefghijklmnopqrstuvwxyz
+- big identity line 20 abcdefghijklmnopqrstuvwxyz
+- big identity line 21 abcdefghijklmnopqrstuvwxyz
+- big identity line 22 abcdefghijklmnopqrstuvwxyz
+- big identity line 23 abcdefghijklmnopqrstuvwxyz
+- big identity line 24 abcdefghijklmnopqrstuvwxyz
+- big identity line 25 abcdefghijklmnopqrstuvwxyz
+- big identity line 26 abcdefghijklmnopqrstuvwxyz
+- big identity line 27 abcdefghijklmnopqrstuvwxyz
+- big identity line 28 abcdefghijklmnopqrstuvwxyz
+- big identity line 29 abcdefghijklmnopqrstuvwxyz
+- big identity line 30 abcdefghijklmnopqrstuvwxyz
+[truncated - full # Identity section in data/captain.md]
+
+=======

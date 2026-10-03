@@ -1,0 +1,44 @@
+<persisted-output>
+Output too large (14KB). Full output saved to: /Users/achiu/.claude/projects/-private-var-folders-52-xcqf00nn5kd1k-zk6377bs340000gn-T-fm-clone-M1vPba-repo/aba2fa70-904b-47b9-8281-80aa8948c708/tool-results/hook-51057b6c-2098-4a51-b2e8-8717f0257761-stdout.txt
+
+Preview (first 2KB):
+================================================================================
+FIRST CONTEXT
+================================================================================
+
+If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.
+data/captain.md # Identity
+--------------------------------------------------------------------------------
+# Identity
+- The captain's codename is Bluefin-7.
+- The captain calls kunchenguid "the Admiral".
+data/captain.md # Communication preferences
+--------------------------------------------------------------------------------
+# Communication preferences
+- Terse answers; lead with the outcome.
+
+================================================================================
+SESSION START - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.anOGAJ
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 427
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+(no queued wakes)
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: claude
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Supervision host: on; it takes away-posture wakes and, where the dialog mirror is verified, eligible attended wakes itself, and hands the rest to you (protocol at the end of this block).
+...
+</persisted-output>
