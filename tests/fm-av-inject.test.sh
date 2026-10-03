@@ -131,7 +131,21 @@ printf 'varlock-op\n' > "$CFG_VL/secret-backend"
 [ "$(fm_secret_backend_mode "$TMP_ROOT/nope")" = automic ] || fail "absent secret-backend must be automic"
 [ "$(fm_secret_backend_mode "$CFG_VL")" = varlock-op ] || fail "varlock-op must select varlock-op"
 [ "$(FM_SECRET_BACKEND=automic fm_secret_backend_mode "$CFG_VL")" = automic ] || fail "FM_SECRET_BACKEND must override the file"
-[ "$(FM_SECRET_BACKEND=VARLOCK-OP fm_secret_backend_mode "$CFG_ON")" = varlock-op ] || fail "selection must be case-insensitive"
+for backend in VARLOCK-OP Automic varlok-op; do
+  printf '%s\n' "$backend" > "$CFG_ON/secret-backend"
+  for keys in EXA_API_KEY DEEPSEEK_API_KEY EXA_API_KEY,DEEPSEEK_API_KEY; do
+    out=$(run_av "$CFG_ON" "$keys" -- /bin/echo ran-invalid-backend); rc=$?
+    expect_code 1 "$rc" "an unrecognised file backend must refuse"
+    assert_contains "$out" "unknown secret backend '$backend'" "the file refusal must retain its diagnostic"
+    assert_not_contains "$out" "ran-invalid-backend" "an invalid backend must not run the tool"
+    out=$(FM_SECRET_BACKEND=$backend run_av "$CFG_VL" "$keys" -- /bin/echo ran-invalid-backend); rc=$?
+    expect_code 1 "$rc" "an unrecognised override must refuse"
+    assert_contains "$out" "unknown secret backend '$backend'" "the override refusal must retain its diagnostic"
+    assert_not_contains "$out" "ran-invalid-backend" "an invalid override must not run the tool"
+  done
+done
+: > "$CFG_ON/secret-backend"
+[ "$(fm_secret_backend_mode "$CFG_ON")" = automic ] || fail "an empty backend must default to automic"
 FM_SECRET_BACKEND=maybe fm_secret_backend_mode "$CFG_ON" >/dev/null 2>&1 && fail "a garbage backend must refuse, not default"
 pass "fm_secret_backend_mode defaults to automic, honors the override, and refuses garbage"
 
@@ -140,12 +154,14 @@ cat > "$VL_BIN/varlock" <<SH
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$TMP_ROOT/vl-argv.log"
 printf '%s\n' "\${OP_SERVICE_ACCOUNT_TOKEN:+token-present}" >> "$TMP_ROOT/vl-env.log"
+[ "\${OP_SERVICE_ACCOUNT_TOKEN:-}" != ops_REJECTED_TEST_TOKEN ] || exit 1
 while [ "\${1:-}" != "--" ] && [ "\$#" -gt 0 ]; do shift; done
 shift || true
 exec "\$@"
 SH
 cat > "$VL_BIN/security" <<'SH'
 #!/usr/bin/env bash
+[ "$*" = 'find-generic-password -s firstmate-rapid-recon -a OP_SERVICE_ACCOUNT_TOKEN -w' ] || exit 44
 [ -n "${FM_FAKE_TOKEN+x}" ] || exit 44
 printf '%s\n' "$FM_FAKE_TOKEN"
 SH
@@ -170,6 +186,11 @@ assert_contains "$(cat "$TMP_ROOT/vl-env.log")" "token-present" "varlock must re
 [ ! -s "$TMP_ROOT/av-argv.log" ] || fail "varlock-op must never touch av"
 [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] || fail "the token must not leak into this shell's environment"
 pass "varlock-op translates the spec to --filter, passes the token only by environment, and never calls av"
+
+out=$(FM_VARLOCK_OP_KEYCHAIN_SERVICE=other-store FM_VARLOCK_OP_KEYCHAIN_ACCOUNT=other-account \
+  FM_FAKE_TOKEN=$FAKE_TOKEN run_vl EXA_API_KEY /bin/echo ran-fixed-item); rc=$?
+expect_code 0 "$rc" "token lookup must always use the fixed keychain item"
+assert_contains "$out" "ran-fixed-item" "the fixed keychain item must supply the token"
 
 # Validation is shared and not bypassed by the fork.
 : > "$TMP_ROOT/vl-argv.log"
@@ -233,12 +254,17 @@ expect_code 1 "$rc" "a malformed token must refuse"
 assert_not_contains "$out" "ran-keyless" "the tool must not run on a bad token"
 assert_not_contains "$out" "not-a-token" "a bad token value must not be echoed"
 [ ! -s "$TMP_ROOT/vl-argv.log" ] || fail "a bad token must not exec varlock"
+out=$(FM_FAKE_TOKEN=ops_REJECTED_TEST_TOKEN run_vl EXA_API_KEY /bin/echo ran-keyless); rc=$?
+expect_code 1 "$rc" "a well-formed token rejected by the backend must refuse"
+assert_not_contains "$out" "ran-keyless" "the tool must not run on a rejected token"
+assert_not_contains "$out" "ops_REJECTED_TEST_TOKEN" "a rejected token must not be printed"
 rm -f "$CFG_VL/varlock/.env.schema"
 out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl EXA_API_KEY /bin/echo no); rc=$?
 expect_code 1 "$rc" "a missing schema must refuse"
 : > "$CFG_VL/varlock/.env.schema"
 out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_SECRET_BACKEND=garbage PATH="$VL_BIN:$FAKE_BIN:$PATH" "$AV_RUN" EXA_API_KEY -- /bin/echo no 2>&1); rc=$?
 expect_code 1 "$rc" "a garbage backend must refuse the whole call"
+assert_contains "$out" "unknown secret backend 'garbage'" "the executable must retain the backend diagnostic"
 pass "varlock-op refuses without running the tool on a missing or bad token, missing schema, or garbage backend"
 
 # --- secondmate homes inherit the varlock schema ------------------------------
@@ -264,6 +290,23 @@ mkdir -p "$TMP_ROOT/rm2/config"; ln -s "$TMP_ROOT/elsewhere" "$TMP_ROOT/rm2/conf
 FM_HOME="$TMP_ROOT/rm2" "$ROOT/bin/fm-remote-inherit.sh" put config/varlock/.env.schema "$sbytes" "$shash" 1 \
   < "$TMP_ROOT/schema-src" >/dev/null 2>&1 && fail "the remote receiver must refuse a symlinked schema directory"
 [ ! -e "$TMP_ROOT/elsewhere/.env.schema" ] || fail "a symlinked schema directory must not be written through"
+empty_hash=$(shasum -a 256 /dev/null | awk '{print $1}')
+for command in put absent; do
+  unsafe_home="$TMP_ROOT/unsafe-$command"
+  external="$TMP_ROOT/external-$command"
+  mkdir -p "$unsafe_home" "$external"
+  ln -s "$external" "$unsafe_home/config"
+  bytes=$sbytes; hash=$shash
+  if [ "$command" = absent ]; then bytes=0; hash=$empty_hash; fi
+  out=$(FM_HOME="$unsafe_home" "$ROOT/bin/fm-remote-inherit.sh" "$command" config/varlock/.env.schema "$bytes" "$hash" 1 \
+    < "$TMP_ROOT/schema-src" 2>&1); rc=$?
+  expect_code 1 "$rc" "a symlinked config ancestor must refuse $command"
+  assert_contains "$out" "parent is a symlink" "the unsafe ancestor must be identified"
+  [ ! -e "$external/varlock" ] || fail "$command created a directory outside the selected home"
+done
+FM_HOME="$RM_HOME" "$ROOT/bin/fm-remote-inherit.sh" absent config/varlock/.env.schema 0 "$empty_hash" 2 \
+  >/dev/null 2>&1 || fail "remote absence must accept a safe nested path"
+[ ! -e "$RM_HOME/config/varlock/.env.schema" ] || fail "remote absence must remove the inherited schema"
 pass "local and remote secondmate homes inherit config/varlock/.env.schema and resolve it"
 
 # --- preflight: a service that stays down refuses on a bounded poll -----------

@@ -49,9 +49,6 @@ FM_SECRET_BACKEND_FILE="secret-backend"
 # The only keys the varlock-op backend will serve: the low-value, individually
 # rate-limited search keys held in the dedicated read-only vault.
 FM_VARLOCK_OP_ALLOWED="EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_API_KEY PARALLEL_API_KEY"
-# Keychain item holding the vault's service-account token (never in an env file).
-FM_VARLOCK_OP_KEYCHAIN_SERVICE=${FM_VARLOCK_OP_KEYCHAIN_SERVICE:-firstmate-rapid-recon}
-FM_VARLOCK_OP_KEYCHAIN_ACCOUNT=${FM_VARLOCK_OP_KEYCHAIN_ACCOUNT:-OP_SERVICE_ACCOUNT_TOKEN}
 FM_AV_INJECT_ERROR=""
 # Populated by fm_av_inject_keys; one `+NAME` argument per requested secret.
 FM_AV_INJECT_KEYARGS=()
@@ -105,14 +102,16 @@ fm_secret_backend_mode() {  # <config-dir>
     raw=${raw#"${raw%%[![:space:]]*}"}
     raw=${raw%"${raw##*[![:space:]]}"}
   fi
+  FM_SECRET_BACKEND_MODE=""
   case "$raw" in
-    ""|[Aa][Uu][Tt][Oo][Mm][Ii][Cc]) printf 'automic\n' ;;
-    [Vv][Aa][Rr][Ll][Oo][Cc][Kk]-[Oo][Pp]) printf 'varlock-op\n' ;;
+    ""|automic) FM_SECRET_BACKEND_MODE=automic ;;
+    varlock-op) FM_SECRET_BACKEND_MODE=varlock-op ;;
     *)
       FM_AV_INJECT_ERROR="unknown secret backend '$raw'; config/$FM_SECRET_BACKEND_FILE must be automic or varlock-op"
       return 1
       ;;
   esac
+  printf '%s\n' "$FM_SECRET_BACKEND_MODE"
 }
 
 # Resolve the `av` executable to an absolute path so the call runs the same
@@ -282,12 +281,12 @@ fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
     FM_AV_INJECT_ERROR="the macOS 'security' CLI was not found, so the varlock-op service-account token cannot be read"
     return 1
   }
-  tok=$("$sec" find-generic-password -s "$FM_VARLOCK_OP_KEYCHAIN_SERVICE" -a "$FM_VARLOCK_OP_KEYCHAIN_ACCOUNT" -w 2>/dev/null </dev/null) || tok=""
+  tok=$("$sec" find-generic-password -s firstmate-rapid-recon -a OP_SERVICE_ACCOUNT_TOKEN -w 2>/dev/null </dev/null) || tok=""
   case "$tok" in
     ops_?*) : ;;
     *)
       tok=""
-      FM_AV_INJECT_ERROR="no usable service-account token in the keychain item '$FM_VARLOCK_OP_KEYCHAIN_SERVICE' (account $FM_VARLOCK_OP_KEYCHAIN_ACCOUNT); store the ops_ token there or set config/$FM_SECRET_BACKEND_FILE to automic"
+      FM_AV_INJECT_ERROR="no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/$FM_SECRET_BACKEND_FILE to automic"
       return 1
       ;;
   esac
@@ -316,7 +315,8 @@ fm_av_inject_exec() {  # <config-dir> <key-spec> <tool> [args...]
     FM_AV_INJECT_ERROR="vault key injection is off for this home; add the per-secret Direct Access rules for this agent launcher in the Automic Vault app, then set config/$FM_AV_INJECT_FILE to on"
     return 1
   fi
-  backend=$(fm_secret_backend_mode "$config_dir") || return 1
+  fm_secret_backend_mode "$config_dir" >/dev/null || return 1
+  backend=$FM_SECRET_BACKEND_MODE
   if [ "$backend" = varlock-op ]; then
     fm_av_inject_keys "$spec" || return 1
     for arg in "${FM_AV_INJECT_KEYARGS[@]}"; do
