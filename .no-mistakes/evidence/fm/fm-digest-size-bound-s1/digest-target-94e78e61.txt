@@ -1,0 +1,509 @@
+
+================================================================================
+SESSION START - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 14262
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+retired-1 done: retired orphan 001 finished after many lines of wake-event history and long notes
+retired-10 done: retired orphan 010 finished after many lines of wake-event history and long notes
+retired-100 done: retired orphan 100 finished after many lines of wake-event history and long notes
+retired-101 done: retired orphan 101 finished after many lines of wake-event history and long notes
+retired-102 done: retired orphan 102 finished after many lines of wake-event history and long notes
+retired-103 done: retired orphan 103 finished after many lines of wake-event history and long notes
+retired-104 done: retired orphan 104 finished after many lines of wake-event history and long notes
+retired-105 done: retired orphan 105 finished after many lines of wake-event history and long notes
+retired-106 done: retired orphan 106 finished after many lines of wake-event history and long notes
+retired-107 done: retired orphan 107 finished after many lines of wake-event history and long notes
+retired-108 done: retired orphan 108 finished after many lines of wake-event history and long notes
+retired-109 done: retired orphan 109 finished after many lines of wake-event history and long notes
+retired-11 done: retired orphan 011 finished after many lines of wake-event history and long notes
+retired-110 done: retired orphan 110 finished after many lines of wake-event history and long notes
+retired-111 done: retired orphan 111 finished after many lines of wake-event history and long notes
+retired-112 done: retired orphan 112 finished after many lines of wake-event history and long notes
+retired-113 done: retired orphan 113 finished after many lines of wake-event history and long notes
+retired-114 done: retired orphan 114 finished after many lines of wake-event history and long notes
+retired-115 done: retired orphan 115 finished after many lines of wake-event history and long notes
+retired-116 done: retired orphan 116 finished after many lines of wake-event history and long notes
+retired-117 done: retired orphan 117 finished after many lines of wake-event history and long notes
+retired-118 done: retired orphan 118 finished after many lines of wake-event history and long notes
+retired-119 done: retired orphan 119 finished after many lines of wake-event history and long notes
+retired-12 done: retired orphan 012 finished after many lines of wake-event history and long notes
+retired-120 done: retired orphan 120 finished after many lines of wake-event history and long notes
+retired-121 done: retired orphan 121 finished after many lines of wake-event history and long notes
+retired-122 done: retired orphan 122 finished after many lines of wake-event history and long notes
+retired-123 done: retired orphan 123 finished after many lines of wake-event history and long notes
+retired-124 done: retired orphan 124 finished after many lines of wake-event history and long notes
+retired-125 done: retired orphan 125 finished after many lines of wake-event history and long notes
+retired-126 done: retired orphan 126 finished after many lines of wake-event history and long notes
+retired-127 done: retired orphan 127 finished after many lines of wake-event history and long notes
+retired-128 done: retired orphan 128 finished after many lines of wake-event history and long notes
+retired-129 done: retired orphan 129 finished after many lines of wake-event history and long notes
+retired-13 done: retired orphan 013 finished after many lines of wake-event history and long notes
+retired-130 done: retired orphan 130 finished after many lines of wake-event history and long notes
+retired-131 done: retired orphan 131 finished after many lines of wake-event history and long notes
+retired-132 done: retired orphan 132 finished after many lines of wake-event history and long notes
+retired-133 done: retired orphan 133 finished after many lines of wake-event history and long notes
+retired-134 done: retired orphan 134 finished after many lines of wake-event history and long notes
+STATUS OUTCOME BACKSTOP: 106 more omitted (byte cap)
+OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):
+task-1 [key=k01] needs-decision: decide option set 01 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-10 [key=k10] needs-decision: decide option set 10 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-11 [key=k11] needs-decision: decide option set 11 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-12 [key=k12] needs-decision: decide option set 12 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-13 [key=k13] needs-decision: decide option set 13 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-14 [key=k14] needs-decision: decide option set 14 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-15 [key=k15] needs-decision: decide option set 15 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-16 [key=k16] needs-decision: decide option set 16 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-17 [key=k17] needs-decision: decide option set 17 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-18 [key=k18] needs-decision: decide option set 18 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-19 [key=k19] needs-decision: decide option set 19 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-2 [key=k02] needs-decision: decide option set 02 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-20 [key=k20] needs-decision: decide option set 20 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-21 [key=k21] needs-decision: decide option set 21 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-22 [key=k22] needs-decision: decide option set 22 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-23 [key=k23] needs-decision: decide option set 23 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-24 [key=k24] needs-decision: decide option set 24 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-25 [key=k25] needs-decision: decide option set 25 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-26 [key=k26] needs-decision: decide option set 26 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-27 [key=k27] needs-decision: decide option set 27 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-28 [key=k28] needs-decision: decide option set 28 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-29 [key=k29] needs-decision: decide option set 29 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-3 [key=k03] needs-decision: decide option set 03 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-30 [key=k30] needs-decision: decide option set 30 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-31 [key=k31] needs-decision: decide option set 31 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-32 [key=k32] needs-decision: decide option set 32 with enough padding words to fill the per-item budget toward the section ceiling quickly
+task-33 [key=k33] needs-decision: decide option set 33 with enough padding words to fill the per-item budget toward the section ceiling quickly
+OPEN DECISIONS: 13 more omitted (byte cap):
+OPEN DECISIONS: omitted task-34 [key=k34]
+OPEN DECISIONS: omitted task-35 [key=k35]
+OPEN DECISIONS: omitted task-36 [key=k36]
+OPEN DECISIONS: omitted task-37 [key=k37]
+OPEN DECISIONS: omitted task-38 [key=k38]
+OPEN DECISIONS: omitted task-39 [key=k39]
+OPEN DECISIONS: omitted task-4 [key=k04]
+OPEN DECISIONS: omitted task-40 [key=k40]
+OPEN DECISIONS: omitted task-5 [key=k05]
+OPEN DECISIONS: omitted task-6 [key=k06]
+OPEN DECISIONS: omitted task-7 [key=k07]
+OPEN DECISIONS: omitted task-8 [key=k08]
+OPEN DECISIONS: omitted task-9 [key=k09]
+OPEN DECISIONS: close one by answering it: bin/fm-send.sh <task> --resolve-key <key> '<answer>'
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: claude
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Supervision host: on; it takes away-posture wakes and, where the dialog mirror is verified, eligible attended wakes itself, and hands the rest to you (protocol at the end of this block).
+- Ordinary wake: the Stop-owned auto-arm (bin/fm-claude-stop-autoarm.sh) already owns watcher continuity; drain and handle the wake, and do not arm another cycle yourself.
+
+Mode: Claude Stop-hook-owned supervision.
+
+When this session owns supervision and away mode is not active:
+1. Drain first with `bin/fm-wake-drain.sh`.
+   After handling all emitted wakes and reconciling open decisions and unread status lines, run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`; until then the work remains durable for idempotent re-handling after interruption.
+2. Routine watcher arm and re-arm are owned by the Stop `asyncRewake` hook (`bin/fm-claude-stop-autoarm.sh`), never by you.
+   Every turn end while supervision is needed launches or attaches one home-scoped watcher cycle with no model command and no model tokens.
+   An actionable close wakes you through the hook's exit-2 rewake, delivered as a `Stop hook feedback` message.
+3. On a `Stop hook feedback` wake (`signal:`, `stale:`, `check:`, or `heartbeat`), run `bin/fm-wake-drain.sh` first and handle the wake.
+   Do not run `bin/fm-watch-arm.sh` after an ordinary wake; the next turn end re-arms automatically when supervision is still needed.
+   Do not invent a wake from an attach-status line alone; drain and act only on real wake records, the drain's `OPEN DECISIONS` and `UNREAD STATUS` entries, or a real watcher reason line.
+4. On the one `Stop hook feedback` automatic-mechanism failure notice (`firstmate watcher auto-arm FAILED ...`), drain, inspect the automatic mechanism failure, and do not turn the notice into a repeating manual-arm loop.
+5. If the Stop hook does not claim the home or reports an exhausted failure, inspect its registration and watcher startup path before ending blind.
+   Keep the Stop-owned automatic mechanism as the only Claude arm owner.
+6. Treat `watcher: started ...` and `watcher: attached ...` inside automatic arm output as proof that one live cycle exists.
+   On attach, the arm follows verified identity-matched successors instead of exiting when the first cycle ends.
+7. The durable wake queue preserves actionable events between a rewake and the next Stop-launched arm, while the bounded turn-end guard prevents a blind Stop when recovery did not start.
+   No PreToolUse hook denies fleet commands based on watcher status.
+   [`watcher-continuity.md`](../watcher-continuity.md) owns the exact session-lock recovery boundary.
+8. The turn-end guard (`bin/fm-turnend-guard.sh --claude`) remains the final backstop.
+   It requires the PID-strict live-watcher and fresh-beacon predicate at the Stop boundary, except for the Claude-specific foreign-live-owner safe exit owned by [`turnend-guard.md`](../turnend-guard.md#guard-predicates); that document also owns the distinct model-aware mid-turn pull-guard rules.
+   Otherwise, it allows the stop when a watcher is healthy or an open auto-arm generation claim owns recovery, while fresh failure epochs advance the bounded one-time attended fail-open progression described there.
+9. Waiting on the hook-owned cycle is silent: do not send idle progress while the watcher is parked.
+
+The watcher itself remains `bin/fm-watch.sh`, and `bin/fm-watch-arm.sh` remains the verified arm wrapper that the Stop hook foregrounds on a home that opted out of the [supervision host](../supervision-host.md) (`config/supervision-host-off`).
+Re-arm attaches to an existing healthy cycle when one is already present and follows its verified successor chain.
+See [`watcher-continuity.md`](../watcher-continuity.md) for the arm-layer successor and clean-close failure contract and the Claude ownership model.
+
+Supervision host: on for this home (`config/supervision-host-off` turns it off; [`supervision-host.md`](../supervision-host.md) owns the design).
+The Stop hook runs the supervision host in the arm's place, and everything above still holds with these additions:
+1. Attended (no away record, including a quiet-mode record; see [Postures](../supervision-host.md#postures)): a headless supervision session takes the wakes the supervision branch may take and never wakes you for a routine outcome, so fewer wakes reach you; check wakes, decision wakes, and whatever it cannot take still reach you exactly as above.
+   `supervision-host: branch-outcome: ...` means it handled a wake and recorded captain outcomes for you: run `bin/fm-wake-drain.sh`, process each entry of its `BRANCH OUTCOMES` section as firstmate from the task's current state, because each entry says how long ago it was recorded (tell the captain, land or merge what is ready, answer or escalate a decision, or act on a blocker; your reply covers only entries still open, as if a settled one, such as a PR since merged, had never been listed), then run the `mark-processed` acknowledgement it prints; every drain presents them again until you do.
+   `supervision-host: the supervision session could not take this wake ...` means the wake is yours: handle it as above.
+   A failing turn may include a `supervision-host:` health note about repeated engine errors: tell the captain when it matters and handle the handed-back wake as usual; during cooldown later attended closes reach you unchanged.
+   Routine outcomes never wake you; your next drain lists only visible routine outcomes under `BRANCH OUTCOMES, ROUTINE` for awareness, with nothing to acknowledge. Silent rows do not appear there, but remain available through `bin/fm-branch-outcome.sh list`.
+2. Away (an away record exists and no daemon runs): the host hands each wake to a headless away session that runs the supervision branch's contract under the record, and you are parked.
+   Only a wake the host hands back reaches you, as `Stop hook feedback` carrying the close plus one `supervision-host: <why>` line.
+   That wake is automatic supervision, not the captain's return: drain and handle it under the away posture, and never run the return from it.
+   After the return, a `supervision-host:` line naming the captain's return during a turn means that turn has visible outcomes missing from the return brief, whether the wake was handled or handed back: relay every following `supervision-host: outcome ...` line to the captain (the rows also remain in `bin/fm-branch-outcome.sh list`), then drain and handle any queued wake before acknowledging.
+   Each such visible outcome is also a queued `check: supervision-host outcome <n> ... was recorded after the captain returned` wake, which the drain presents until acknowledged: relay each outcome once, whichever arrives first, and acknowledge its `BRANCH OUTCOMES` entry too when it has one. Silent outcomes remain in the store but do not generate a handoff line or check wake.
+3. `supervision-host: cycle boundary ...` means the host ended its park at its bound: run `bin/fm-wake-drain.sh`, handle whatever it presents, run its printed acknowledgement (an empty queue prints `--ack-through 0`), and end the turn; the next park starts at that turn end.
+4. A guarded command that exits 6 naming the branch actor's lease means the supervision session is handling that task right now: leave the lease alone and retry after it releases, which it does when its turn ends.
+5. Captain outcomes the away session records stay in the outcome store until the return drain presents them; the return brief (`bin/fm-afk-return.sh`) counts them and points you to the `BRANCH OUTCOMES` section for processing and acknowledgement ([Captain outcomes](../supervision-host.md#captain-outcomes)).
+6. `/afk` writes only the record here (`bin/fm-afk-launch.sh start-native` refuses the away daemon on this home); for `/quiet`, follow the [quiet skill](../../.agents/skills/quiet/SKILL.md).
+
+================================================================================
+READ-ONCE CONTRACT
+================================================================================
+Everything below is printed for this session start under the digest byte budget:
+compact identity for every state/*.meta, a compact data/backlog.md listing,
+an orphan status-log count (plus ids written in the last 48 hours), each
+installed extension's session-start contribution, data/projects.md and
+data/secondmates.md (each row capped), data/captain.md, data/captain-shared.md,
+and data/learnings.md.
+Do NOT re-read any of them after reading this digest, and do NOT bulk-read
+data/backlog.md or state/*.status: re-reading everything defeats the entire
+point of this command.
+
+Go to a source directly only when:
+  - this digest flagged it ABSENT (then rebuild or create it per AGENTS.md),
+  - its contents looked unparseable or corrupt,
+  - an individual full status log is needed for older wake-event history, or a
+    status line was capped and its tail matters (live tasks name state/<id>.status),
+  - a full task body is needed (bin/fm-tasks-axi.sh show <id> --full, or data/backlog.md),
+  - the backlog listing disclosed omitted queued items and this turn needs them,
+  - an orphan or section overflow line named a follow-up command this turn needs,
+  - the NETWORK CHECKS section reported its checks still IN PROGRESS and this
+    turn needs their verdict (bin/fm-startup-network.sh report),
+  - or a STARTUP TRUNCATED banner named the stage that would have printed it, in
+    which case that stage's sources were never emitted and must be reconciled.
+
+================================================================================
+FLEET STATE
+================================================================================
+
+data/backlog.md
+--------------------------------------------------------------------------------
+compact backlog listing (manual backend; done rows omitted; every in-flight, held, and blocked title line kept; other queued bounded to 20; indented task bodies omitted; hold_reason capped at 220 characters)
+## Queued
+- [ ] held-01 - Held task 01 (repo: firstmate) (kind: ship) (hold: waiting on PR (#1) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-02 - Held task 02 (repo: firstmate) (kind: ship) (hold: waiting on PR (#2) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-03 - Held task 03 (repo: firstmate) (kind: ship) (hold: waiting on PR (#3) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-04 - Held task 04 (repo: firstmate) (kind: ship) (hold: waiting on PR (#4) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-05 - Held task 05 (repo: firstmate) (kind: ship) (hold: waiting on PR (#5) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-06 - Held task 06 (repo: firstmate) (kind: ship) (hold: waiting on PR (#6) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-07 - Held task 07 (repo: firstmate) (kind: ship) (hold: waiting on PR (#7) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-08 - Held task 08 (repo: firstmate) (kind: ship) (hold: waiting on PR (#8) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-09 - Held task 09 (repo: firstmate) (kind: ship) (hold: waiting on PR (#9) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word p [truncated]) (hold-kind: captain)
+- [ ] held-10 - Held task 10 (repo: firstmate) (kind: ship) (hold: waiting on PR (#10) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-11 - Held task 11 (repo: firstmate) (kind: ship) (hold: waiting on PR (#11) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-12 - Held task 12 (repo: firstmate) (kind: ship) (hold: waiting on PR (#12) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-13 - Held task 13 (repo: firstmate) (kind: ship) (hold: waiting on PR (#13) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-14 - Held task 14 (repo: firstmate) (kind: ship) (hold: waiting on PR (#14) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-15 - Held task 15 (repo: firstmate) (kind: ship) (hold: waiting on PR (#15) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-16 - Held task 16 (repo: firstmate) (kind: ship) (hold: waiting on PR (#16) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-17 - Held task 17 (repo: firstmate) (kind: ship) (hold: waiting on PR (#17) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-18 - Held task 18 (repo: firstmate) (kind: ship) (hold: waiting on PR (#18) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+- [ ] held-19 - Held task 19 (repo: firstmate) (kind: ship) (hold: waiting on PR (#19) essay padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word padding-word  [truncated]) (hold-kind: captain)
+54 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/backlog.md
+
+Work under way (state/*.meta)
+--------------------------------------------------------------------------------
+status tails (last 2 line(s) each, each capped at 220 characters, wake-EVENT history, not current state; full log: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/state/<id>.status
+--- task-1 ---
+id=task-1 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t01 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t01 pr=https://example.com/pull/1
+endpoint: dead (backend=tmux window=fm-lab:t01)
+working: task 01 step 5 with padding to look like a real status line
+needs-decision [key=k01]: decide option set 01 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-10 ---
+id=task-10 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t10 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t10 pr=https://example.com/pull/10
+endpoint: dead (backend=tmux window=fm-lab:t10)
+working: task 10 step 5 with padding to look like a real status line
+needs-decision [key=k10]: decide option set 10 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-11 ---
+id=task-11 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t11 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t11 pr=https://example.com/pull/11
+endpoint: dead (backend=tmux window=fm-lab:t11)
+working: task 11 step 5 with padding to look like a real status line
+needs-decision [key=k11]: decide option set 11 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-12 ---
+id=task-12 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t12 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t12 pr=https://example.com/pull/12
+endpoint: dead (backend=tmux window=fm-lab:t12)
+working: task 12 step 5 with padding to look like a real status line
+needs-decision [key=k12]: decide option set 12 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-13 ---
+id=task-13 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t13 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t13 pr=https://example.com/pull/13
+endpoint: dead (backend=tmux window=fm-lab:t13)
+working: task 13 step 5 with padding to look like a real status line
+needs-decision [key=k13]: decide option set 13 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-14 ---
+id=task-14 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t14 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t14 pr=https://example.com/pull/14
+endpoint: dead (backend=tmux window=fm-lab:t14)
+working: task 14 step 5 with padding to look like a real status line
+needs-decision [key=k14]: decide option set 14 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-15 ---
+id=task-15 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t15 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t15 pr=https://example.com/pull/15
+endpoint: dead (backend=tmux window=fm-lab:t15)
+working: task 15 step 5 with padding to look like a real status line
+needs-decision [key=k15]: decide option set 15 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-16 ---
+id=task-16 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t16 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t16 pr=https://example.com/pull/16
+endpoint: dead (backend=tmux window=fm-lab:t16)
+working: task 16 step 5 with padding to look like a real status line
+needs-decision [key=k16]: decide option set 16 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-17 ---
+id=task-17 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t17 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t17 pr=https://example.com/pull/17
+endpoint: dead (backend=tmux window=fm-lab:t17)
+working: task 17 step 5 with padding to look like a real status line
+needs-decision [key=k17]: decide option set 17 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-18 ---
+id=task-18 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t18 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t18 pr=https://example.com/pull/18
+endpoint: dead (backend=tmux window=fm-lab:t18)
+working: task 18 step 5 with padding to look like a real status line
+needs-decision [key=k18]: decide option set 18 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-19 ---
+id=task-19 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t19 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t19 pr=https://example.com/pull/19
+endpoint: dead (backend=tmux window=fm-lab:t19)
+working: task 19 step 5 with padding to look like a real status line
+needs-decision [key=k19]: decide option set 19 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-2 ---
+id=task-2 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t02 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t02 pr=https://example.com/pull/2
+endpoint: dead (backend=tmux window=fm-lab:t02)
+working: task 02 step 5 with padding to look like a real status line
+needs-decision [key=k02]: decide option set 02 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-20 ---
+id=task-20 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t20 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t20 pr=https://example.com/pull/20
+endpoint: dead (backend=tmux window=fm-lab:t20)
+working: task 20 step 5 with padding to look like a real status line
+needs-decision [key=k20]: decide option set 20 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-21 ---
+id=task-21 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t21 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t21 pr=https://example.com/pull/21
+endpoint: dead (backend=tmux window=fm-lab:t21)
+working: task 21 step 5 with padding to look like a real status line
+needs-decision [key=k21]: decide option set 21 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-22 ---
+id=task-22 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t22 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t22 pr=https://example.com/pull/22
+endpoint: dead (backend=tmux window=fm-lab:t22)
+working: task 22 step 5 with padding to look like a real status line
+needs-decision [key=k22]: decide option set 22 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-23 ---
+id=task-23 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t23 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t23 pr=https://example.com/pull/23
+endpoint: dead (backend=tmux window=fm-lab:t23)
+working: task 23 step 5 with padding to look like a real status line
+needs-decision [key=k23]: decide option set 23 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-24 ---
+id=task-24 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t24 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t24 pr=https://example.com/pull/24
+endpoint: dead (backend=tmux window=fm-lab:t24)
+working: task 24 step 5 with padding to look like a real status line
+needs-decision [key=k24]: decide option set 24 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-25 ---
+id=task-25 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t25 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t25 pr=https://example.com/pull/25
+endpoint: dead (backend=tmux window=fm-lab:t25)
+working: task 25 step 5 with padding to look like a real status line
+needs-decision [key=k25]: decide option set 25 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-26 ---
+id=task-26 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t26 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t26 pr=https://example.com/pull/26
+endpoint: dead (backend=tmux window=fm-lab:t26)
+working: task 26 step 5 with padding to look like a real status line
+needs-decision [key=k26]: decide option set 26 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-27 ---
+id=task-27 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t27 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t27 pr=https://example.com/pull/27
+endpoint: dead (backend=tmux window=fm-lab:t27)
+working: task 27 step 5 with padding to look like a real status line
+needs-decision [key=k27]: decide option set 27 with enough padding words to fill the per-item budget toward the section ceiling quickly
+--- task-28 ---
+id=task-28 kind=ship harness=claude model=opus backend=tmux window=fm-lab:t28 worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/projects/firstmate-t28 pr=https://example.com/pull/28
+endpoint: dead (backend=tmux window=fm-lab:t28)
+working: task 28 step 5 with padding to look like a real status line
+needs-decision [key=k28]: decide option set 28 with enough padding words to fill the per-item budget toward the section ceiling quickly
+19 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/state/*.meta
+
+Orphan status logs (state/*.status without matching .meta)
+--------------------------------------------------------------------------------
+146 orphan status log(s) (no matching .meta). Recent (written in last 48h): retired-1 retired-2 retired-3 retired-4
+Full logs: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/state/<id>.status. List: ls /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/state/*.status
+AFK
+--------------------------------------------------------------------------------
+absent
+
+================================================================================
+NETWORK CHECKS
+================================================================================
+completed off the startup path in 15s: GitHub authentication, dead-secondmate relaunch, secondmate convergence, pending handoff delivery, project clone refresh with its drift reporting, and inactive terminal-outcome reconciliation.
+(silent - no problems found)
+
+================================================================================
+CONTEXT
+================================================================================
+
+data/projects.md (full file: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/projects.md)
+--------------------------------------------------------------------------------
+- proj-01 [no-mistakes] - project 01 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-02 [no-mistakes] - project 02 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-03 [no-mistakes] - project 03 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-04 [no-mistakes] - project 04 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-05 [no-mistakes] - project 05 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-06 [no-mistakes] - project 06 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-07 [no-mistakes] - project 07 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-08 [no-mistakes] - project 08 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-09 [no-mistakes] - project 09 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-10 [no-mistakes] - project 10 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-11 [no-mistakes] - project 11 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-12 [no-mistakes] - project 12 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-13 [no-mistakes] - project 13 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-14 [no-mistakes] - project 14 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-15 [no-mistakes] - project 15 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-16 [no-mistakes] - project 16 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-17 [no-mistakes] - project 17 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-18 [no-mistakes] - project 18 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-19 [no-mistakes] - project 19 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-20 [no-mistakes] - project 20 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+- proj-21 [no-mistakes] - project 21 desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc desc 
+39 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/projects.md
+
+data/secondmates.md (full file: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/secondmates.md)
+--------------------------------------------------------------------------------
+31 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/secondmates.md
+
+data/captain.md
+--------------------------------------------------------------------------------
+# Captain
+
+Captain identity: LAB-CAPTAIN-ZEPHYR (call them Zephyr). Prefers terse updates.
+
+data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)
+--------------------------------------------------------------------------------
+ABSENT
+
+data/learnings.md
+--------------------------------------------------------------------------------
+- learning 001: keep digests small and bounded so tokens are not wasted
+- learning 002: keep digests small and bounded so tokens are not wasted
+- learning 003: keep digests small and bounded so tokens are not wasted
+- learning 004: keep digests small and bounded so tokens are not wasted
+- learning 005: keep digests small and bounded so tokens are not wasted
+- learning 006: keep digests small and bounded so tokens are not wasted
+- learning 007: keep digests small and bounded so tokens are not wasted
+- learning 008: keep digests small and bounded so tokens are not wasted
+- learning 009: keep digests small and bounded so tokens are not wasted
+- learning 010: keep digests small and bounded so tokens are not wasted
+- learning 011: keep digests small and bounded so tokens are not wasted
+- learning 012: keep digests small and bounded so tokens are not wasted
+- learning 013: keep digests small and bounded so tokens are not wasted
+- learning 014: keep digests small and bounded so tokens are not wasted
+- learning 015: keep digests small and bounded so tokens are not wasted
+- learning 016: keep digests small and bounded so tokens are not wasted
+- learning 017: keep digests small and bounded so tokens are not wasted
+- learning 018: keep digests small and bounded so tokens are not wasted
+- learning 019: keep digests small and bounded so tokens are not wasted
+- learning 020: keep digests small and bounded so tokens are not wasted
+- learning 021: keep digests small and bounded so tokens are not wasted
+- learning 022: keep digests small and bounded so tokens are not wasted
+- learning 023: keep digests small and bounded so tokens are not wasted
+- learning 024: keep digests small and bounded so tokens are not wasted
+- learning 025: keep digests small and bounded so tokens are not wasted
+- learning 026: keep digests small and bounded so tokens are not wasted
+- learning 027: keep digests small and bounded so tokens are not wasted
+- learning 028: keep digests small and bounded so tokens are not wasted
+- learning 029: keep digests small and bounded so tokens are not wasted
+- learning 030: keep digests small and bounded so tokens are not wasted
+- learning 031: keep digests small and bounded so tokens are not wasted
+- learning 032: keep digests small and bounded so tokens are not wasted
+- learning 033: keep digests small and bounded so tokens are not wasted
+- learning 034: keep digests small and bounded so tokens are not wasted
+- learning 035: keep digests small and bounded so tokens are not wasted
+- learning 036: keep digests small and bounded so tokens are not wasted
+- learning 037: keep digests small and bounded so tokens are not wasted
+- learning 038: keep digests small and bounded so tokens are not wasted
+- learning 039: keep digests small and bounded so tokens are not wasted
+- learning 040: keep digests small and bounded so tokens are not wasted
+- learning 041: keep digests small and bounded so tokens are not wasted
+- learning 042: keep digests small and bounded so tokens are not wasted
+- learning 043: keep digests small and bounded so tokens are not wasted
+- learning 044: keep digests small and bounded so tokens are not wasted
+- learning 045: keep digests small and bounded so tokens are not wasted
+- learning 046: keep digests small and bounded so tokens are not wasted
+- learning 047: keep digests small and bounded so tokens are not wasted
+- learning 048: keep digests small and bounded so tokens are not wasted
+- learning 049: keep digests small and bounded so tokens are not wasted
+- learning 050: keep digests small and bounded so tokens are not wasted
+- learning 051: keep digests small and bounded so tokens are not wasted
+- learning 052: keep digests small and bounded so tokens are not wasted
+- learning 053: keep digests small and bounded so tokens are not wasted
+- learning 054: keep digests small and bounded so tokens are not wasted
+- learning 055: keep digests small and bounded so tokens are not wasted
+- learning 056: keep digests small and bounded so tokens are not wasted
+- learning 057: keep digests small and bounded so tokens are not wasted
+- learning 058: keep digests small and bounded so tokens are not wasted
+- learning 059: keep digests small and bounded so tokens are not wasted
+- learning 060: keep digests small and bounded so tokens are not wasted
+- learning 061: keep digests small and bounded so tokens are not wasted
+- learning 062: keep digests small and bounded so tokens are not wasted
+- learning 063: keep digests small and bounded so tokens are not wasted
+- learning 064: keep digests small and bounded so tokens are not wasted
+- learning 065: keep digests small and bounded so tokens are not wasted
+- learning 066: keep digests small and bounded so tokens are not wasted
+- learning 067: keep digests small and bounded so tokens are not wasted
+- learning 068: keep digests small and bounded so tokens are not wasted
+- learning 069: keep digests small and bounded so tokens are not wasted
+- learning 070: keep digests small and bounded so tokens are not wasted
+- learning 071: keep digests small and bounded so tokens are not wasted
+- learning 072: keep digests small and bounded so tokens are not wasted
+- learning 073: keep digests small and bounded so tokens are not wasted
+- learning 074: keep digests small and bounded so tokens are not wasted
+- learning 075: keep digests small and bounded so tokens are not wasted
+- learning 076: keep digests small and bounded so tokens are not wasted
+- learning 077: keep digests small and bounded so tokens are not wasted
+- learning 078: keep digests small and bounded so tokens are not wasted
+- learning 079: keep digests small and bounded so tokens are not wasted
+- learning 080: keep digests small and bounded so tokens are not wasted
+- learning 081: keep digests small and bounded so tokens are not wasted
+- learning 082: keep digests small and bounded so tokens are not wasted
+- learning 083: keep digests small and bounded so tokens are not wasted
+- learning 084: keep digests small and bounded so tokens are not wasted
+- learning 085: keep digests small and bounded so tokens are not wasted
+- learning 086: keep digests small and bounded so tokens are not wasted
+- learning 087: keep digests small and bounded so tokens are not wasted
+- learning 088: keep digests small and bounded so tokens are not wasted
+- learning 089: keep digests small and bounded so tokens are not wasted
+- learning 090: keep digests small and bounded so tokens are not wasted
+- learning 091: keep digests small and bounded so tokens are not wasted
+- learning 092: keep digests small and bounded so tokens are not wasted
+- learning 093: keep digests small and bounded so tokens are not wasted
+- learning 094: keep digests small and bounded so tokens are not wasted
+- learning 095: keep digests small and bounded so tokens are not wasted
+- learning 096: keep digests small and bounded so tokens are not wasted
+- learning 097: keep digests small and bounded so tokens are not wasted
+- learning 098: keep digests small and bounded so tokens are not wasted
+- learning 099: keep digests small and bounded so tokens are not wasted
+- learning 100: keep digests small and bounded so tokens are not wasted
+- learning 101: keep digests small and bounded so tokens are not wasted
+- learning 102: keep digests small and bounded so tokens are not wasted
+- learning 103: keep digests small and bounded so tokens are not wasted
+- learning 104: keep digests small and bounded so tokens are not wasted
+- learning 105: keep digests small and bounded so tokens are not wasted
+- learning 106: keep digests small and bounded so tokens are not wasted
+- learning 107: keep digests small and bounded so tokens are not wasted
+- learning 108: keep digests small and bounded so tokens are not wasted
+- learning 109: keep digests small and bounded so tokens are not wasted
+- learning 110: keep digests small and bounded so tokens are not wasted
+- learning 111: keep digests small and bounded so tokens are not wasted
+- learning 112: keep digests small and bounded so tokens are not wasted
+- learning 113: keep digests small and bounded so tokens are not wasted
+- learning 114: keep digests small and bounded so tokens are not wasted
+- learning 115: keep digests small and bounded so tokens are not wasted
+- learning 116: keep digests small and bounded so tokens are not wasted
+- learning 117: keep digests small and bounded so tokens are not wasted
+- learning 118: keep digests small and bounded so tokens are not wasted
+- learning 119: keep digests small and bounded so tokens are not wasted
+- learning 120: keep digests small and bounded so tokens are not wasted
+
+================================================================================
+NEXT STEP
+================================================================================
+Follow the supervision operating instructions block above for harness 'claude'.
+This script never starts supervision itself.
+
+The digest above is complete for this session start. The READ-ONCE CONTRACT
+section near the top of it governs what may still be read from disk.

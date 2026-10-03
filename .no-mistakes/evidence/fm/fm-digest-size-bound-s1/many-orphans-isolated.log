@@ -1,0 +1,2 @@
+ok - a fixture with many orphan status logs keeps the digest under the 64 KB ceiling
+ok - orphan status logs are summarized as a count plus recent ids

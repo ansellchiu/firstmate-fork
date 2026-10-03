@@ -1,0 +1,23 @@
+== recovery commands from target digest, executed ==
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/backlog.md  -> rc=0 lines=75
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/state/*.meta  -> rc=0 lines=1280
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/projects.md  -> rc=0 lines=60
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.Iolwy9/data/secondmates.md  -> rc=0 lines=31
+== decision keys ==
+shown=27 omitted-named=13
+== base vs target ==
+digest-base-f8671f5e.txt: bytes=  376735 orphan-tail-lines=770 captain-line=3182 banner=0 truncated=1
+digest-target-94e78e61.txt: bytes=   51593 orphan-tail-lines=40 captain-line=373 banner=0 truncated=1
+86:OPEN DECISIONS: 13 more omitted (byte cap)
+1894:Orphan status logs (state/*.status without matching .meta)
+1895---------------------------------------------------------------------------------
+1896-
+1897---- retired-1 ---
+1
+READ-ONCE CONTRACT
+================================================================================
+Everything below is printed in full for this session start: every state/*.meta,
+a compact data/backlog.md listing, a bounded tail of every state/*.status, each
+installed extension's session-start contribution, data/projects.md,
+data/secondmates.md, data/captain.md, data/captain-shared.md, and data/learnings.md.
+Do NOT re-read any of them after reading this digest, and do NOT bulk-read

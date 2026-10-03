@@ -1,0 +1,487 @@
+
+================================================================================
+SESSION START - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 22186
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: unknown
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Ordinary wake: follow the continuation in the harness protocol below; do not use shell &.
+
+Mode: Unknown harness fallback.
+
+This primary harness does not have a verified watcher wake adapter.
+Follow the generic supervision contract in `AGENTS.md`.
+First cycle: drain queued wakes, then choose a supervision wait that the harness can actually wake from.
+Ordinary wake: drain, handle all emitted wakes, reconcile open decisions and unread status lines, and run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`, then repeat that verified wait while supervision is still required.
+Before that acknowledgement, interruption leaves the work durable for idempotent re-handling.
+Use `bin/fm-watch-arm.sh` only when the harness has a tracked background mechanism that survives the tool call and notifies the model on process exit.
+Use a bounded foreground wait over `bin/fm-watch.sh` when that wake mechanism is not verified.
+Never use shell `&` for watcher supervision.
+Failure or missing cycle only: inspect the failure and restore the same verified wait shape.
+
+Record new verification evidence before promoting an unknown harness to a named snippet.
+
+================================================================================
+READ-ONCE CONTRACT
+================================================================================
+Everything below is printed for this session start under the digest byte budget:
+compact identity for every state/*.meta, a compact data/backlog.md listing,
+an orphan status-log count (plus ids written in the last 48 hours), each
+installed extension's session-start contribution, data/projects.md and
+data/secondmates.md (each row capped), data/captain.md, data/captain-shared.md,
+and data/learnings.md.
+Do NOT re-read any of them after reading this digest, and do NOT bulk-read
+data/backlog.md or state/*.status: re-reading everything defeats the entire
+point of this command.
+
+Go to a source directly only when:
+  - this digest flagged it ABSENT (then rebuild or create it per AGENTS.md),
+  - its contents looked unparseable or corrupt,
+  - an individual full status log is needed for older wake-event history, or a
+    status line was capped and its tail matters (live tasks name state/<id>.status),
+  - a full task body is needed (bin/fm-tasks-axi.sh show <id> --full, or data/backlog.md),
+  - the backlog listing disclosed omitted queued items and this turn needs them,
+  - an orphan or section overflow line named a follow-up command this turn needs,
+  - the NETWORK CHECKS section reported its checks still IN PROGRESS and this
+    turn needs their verdict (bin/fm-startup-network.sh report),
+  - or a STARTUP TRUNCATED banner named the stage that would have printed it, in
+    which case that stage's sources were never emitted and must be reconciled.
+
+================================================================================
+FLEET STATE
+================================================================================
+
+data/backlog.md
+--------------------------------------------------------------------------------
+compact backlog listing (manual backend; done rows omitted; every in-flight, held, and blocked title line kept; other queued bounded to 20; indented task bodies omitted; hold_reason capped at 220 characters)
+## In flight
+- [ ] flight-1 - In flight 1 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-2 - In flight 2 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-3 - In flight 3 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-4 - In flight 4 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-5 - In flight 5 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-6 - In flight 6 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-7 - In flight 7 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] flight-8 - In flight 8 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+## Queued
+- [ ] held-1 - Held 1 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-2 - Held 2 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-3 - Held 3 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-4 - Held 4 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-5 - Held 5 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-6 - Held 6 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-7 - Held 7 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-8 - Held 8 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-9 - Held 9 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] held-10 - Held 10 (repo: firstmate) (kind: ship) (hold: waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detail waiting-detai [truncated]) (hold-kind: captain)
+- [ ] plain-1 - Plain 1 (repo: firstmate) (kind: ship)
+- [ ] plain-2 - Plain 2 (repo: firstmate) (kind: ship)
+- [ ] plain-3 - Plain 3 (repo: firstmate) (kind: ship)
+- [ ] plain-4 - Plain 4 (repo: firstmate) (kind: ship)
+- [ ] plain-5 - Plain 5 (repo: firstmate) (kind: ship)
+- [ ] plain-6 - Plain 6 (repo: firstmate) (kind: ship)
+- [ ] plain-7 - Plain 7 (repo: firstmate) (kind: ship)
+16 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/data/backlog.md
+
+Work under way (state/*.meta)
+--------------------------------------------------------------------------------
+status tails (last 2 line(s) each, each capped at 220 characters, wake-EVENT history, not current state; full log: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/state/<id>.status
+--- live-1 ---
+id=live-1 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-1 worktree=/tmp/wt/live-1 pr=https://github.com/x/y/pull/1
+endpoint: dead (backend=tmux window=fm-nonexistent:live-1)
+working: live-1 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-1 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-10 ---
+id=live-10 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-10 worktree=/tmp/wt/live-10 pr=https://github.com/x/y/pull/10
+endpoint: dead (backend=tmux window=fm-nonexistent:live-10)
+working: live-10 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for [truncated]
+working: live-10 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for [truncated]
+--- live-11 ---
+id=live-11 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-11 worktree=/tmp/wt/live-11 pr=https://github.com/x/y/pull/11
+endpoint: dead (backend=tmux window=fm-nonexistent:live-11)
+working: live-11 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for [truncated]
+working: live-11 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for [truncated]
+--- live-12 ---
+id=live-12 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-12 worktree=/tmp/wt/live-12 pr=https://github.com/x/y/pull/12
+endpoint: dead (backend=tmux window=fm-nonexistent:live-12)
+working: live-12 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for [truncated]
+working: live-12 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for [truncated]
+--- live-2 ---
+id=live-2 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-2 worktree=/tmp/wt/live-2 pr=https://github.com/x/y/pull/2
+endpoint: dead (backend=tmux window=fm-nonexistent:live-2)
+working: live-2 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-2 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-3 ---
+id=live-3 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-3 worktree=/tmp/wt/live-3 pr=https://github.com/x/y/pull/3
+endpoint: dead (backend=tmux window=fm-nonexistent:live-3)
+working: live-3 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-3 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-4 ---
+id=live-4 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-4 worktree=/tmp/wt/live-4 pr=https://github.com/x/y/pull/4
+endpoint: dead (backend=tmux window=fm-nonexistent:live-4)
+working: live-4 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-4 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-5 ---
+id=live-5 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-5 worktree=/tmp/wt/live-5 pr=https://github.com/x/y/pull/5
+endpoint: dead (backend=tmux window=fm-nonexistent:live-5)
+working: live-5 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-5 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-6 ---
+id=live-6 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-6 worktree=/tmp/wt/live-6 pr=https://github.com/x/y/pull/6
+endpoint: dead (backend=tmux window=fm-nonexistent:live-6)
+working: live-6 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-6 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-7 ---
+id=live-7 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-7 worktree=/tmp/wt/live-7 pr=https://github.com/x/y/pull/7
+endpoint: dead (backend=tmux window=fm-nonexistent:live-7)
+working: live-7 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-7 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-8 ---
+id=live-8 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-8 worktree=/tmp/wt/live-8 pr=https://github.com/x/y/pull/8
+endpoint: dead (backend=tmux window=fm-nonexistent:live-8)
+working: live-8 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-8 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+--- live-9 ---
+id=live-9 kind=ship harness=claude model=opus backend=tmux window=fm-nonexistent:live-9 worktree=/tmp/wt/live-9 pr=https://github.com/x/y/pull/9
+endpoint: dead (backend=tmux window=fm-nonexistent:live-9)
+working: live-9 progress 5 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+working: live-9 progress 6 padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for a realistic status line padding text for  [truncated]
+
+Orphan status logs (state/*.status without matching .meta)
+--------------------------------------------------------------------------------
+146 orphan status log(s) (no matching .meta). Recent (written in last 48h): retired-1 retired-2 retired-3 retired-4
+Full logs: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/state/<id>.status. List: ls /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/state/*.status
+AFK
+--------------------------------------------------------------------------------
+absent
+
+================================================================================
+NETWORK CHECKS
+================================================================================
+completed off the startup path in 25s: GitHub authentication, dead-secondmate relaunch, secondmate convergence, pending handoff delivery, project clone refresh with its drift reporting, and inactive terminal-outcome reconciliation.
+(silent - no problems found)
+
+================================================================================
+CONTEXT
+================================================================================
+
+data/projects.md (full file: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/data/projects.md)
+--------------------------------------------------------------------------------
+# Projects
+
+- proj-1 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-2 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-3 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-4 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-5 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-6 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-7 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-8 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-9 — description description description description description description description description description description description description description description description description descr [truncated]
+- proj-10 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-11 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-12 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-13 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-14 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-15 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-16 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-17 — description description description description description description description description description description description description description description description description desc [truncated]
+- proj-18 — description description description description description description description description description description description description description description description description desc [truncated]
+2 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/data/projects.md
+
+data/secondmates.md (full file: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/data/secondmates.md)
+--------------------------------------------------------------------------------
+18 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/data/secondmates.md
+
+data/captain.md
+--------------------------------------------------------------------------------
+# Captain
+
+CAPTAIN-IDENTITY-MARKER: the captain is Ansell.
+- preference 1: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 2: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 3: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 4: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 5: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 6: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 7: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 8: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 9: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 10: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 11: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 12: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 13: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 14: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 15: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 16: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 17: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 18: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 19: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 20: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 21: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 22: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 23: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 24: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 25: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 26: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 27: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 28: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 29: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 30: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 31: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 32: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 33: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 34: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 35: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 36: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 37: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 38: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 39: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 40: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 41: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 42: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 43: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 44: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 45: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 46: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 47: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 48: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 49: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 50: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 51: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 52: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 53: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 54: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 55: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 56: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 57: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 58: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 59: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 60: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 61: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 62: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 63: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 64: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 65: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 66: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 67: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 68: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 69: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 70: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 71: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 72: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 73: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 74: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 75: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 76: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 77: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 78: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 79: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 80: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 81: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 82: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 83: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 84: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 85: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 86: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 87: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 88: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 89: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 90: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 91: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 92: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 93: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 94: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 95: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 96: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 97: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 98: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 99: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 100: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 101: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 102: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 103: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 104: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 105: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 106: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 107: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 108: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 109: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 110: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 111: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 112: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 113: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 114: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 115: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 116: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 117: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 118: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 119: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 120: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 121: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 122: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 123: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 124: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 125: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 126: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 127: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 128: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 129: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 130: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 131: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 132: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 133: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 134: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 135: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 136: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 137: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 138: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 139: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 140: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 141: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 142: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 143: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 144: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 145: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 146: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 147: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 148: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 149: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 150: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 151: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 152: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 153: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 154: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 155: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 156: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 157: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 158: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 159: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 160: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 161: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 162: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 163: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 164: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 165: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 166: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 167: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 168: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 169: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 170: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 171: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 172: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 173: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 174: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 175: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 176: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 177: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 178: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 179: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 180: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 181: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 182: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 183: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 184: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 185: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 186: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 187: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 188: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 189: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 190: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 191: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 192: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 193: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 194: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 195: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 196: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 197: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 198: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 199: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 200: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 201: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 202: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 203: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 204: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 205: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 206: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 207: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 208: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 209: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 210: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 211: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 212: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 213: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 214: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 215: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 216: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 217: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 218: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 219: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 220: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 221: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 222: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 223: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 224: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 225: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 226: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 227: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 228: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 229: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 230: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 231: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 232: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 233: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 234: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 235: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 236: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 237: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 238: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 239: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 240: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 241: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 242: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 243: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 244: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 245: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 246: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 247: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 248: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 249: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 250: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 251: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 252: memory-line memory-line memory-line memory-line memory-line memory-line 
+- preference 253: memory-line memory-line memory-line memory-line memory-line memory-line 
+347 more omitted - cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.3SWqoR/data/captain.md
+
+data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)
+--------------------------------------------------------------------------------
+ABSENT
+
+data/learnings.md
+--------------------------------------------------------------------------------
+ABSENT
+
+================================================================================
+NEXT STEP
+================================================================================
+Follow the supervision operating instructions block above for harness 'unknown'.
+This script never starts supervision itself.
+
+The digest above is complete for this session start. The READ-ONCE CONTRACT
+section near the top of it governs what may still be read from disk.

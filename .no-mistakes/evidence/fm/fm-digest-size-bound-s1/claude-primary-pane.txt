@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/d9c8a3404af5/01M41N3N24Q0SVKHENHJKVNT73
+
+
+❯ You are the firstmate primary for this home. Run exactly: bin/fm-session-start.sh > "$FM_HOME/digest.txt"; wc -c "$FM_HOME/digest.txt" then read that digest file in full and reply with: (1) the
+  captain identity line, (2) its byte count, (3) how many orphan status logs and which recent ids, (4) which OPEN DECISIONS keys were omitted. Do nothing else.
+
+  Read 2 files, ran 2 shell commands
+
+⏺ Captain, here are the results from the digest. This session could not get the fleet lock because another live session holds it, so it is staying read-only.
+
+  1. Captain identity line: Captain identity: LAB-CAPTAIN-ZEBRA (test fixture). Prefers terse updates. It appears near the end of the digest, in the data/captain.md part of CONTEXT, not first.
+  2. Byte count: 34767 bytes.
+  3. Orphan status logs: there are 146. The ones written in the last 48 hours are retired-1, retired-2 and retired-3.
+  4. Omitted OPEN DECISIONS keys: none can be named, because the digest has no OPEN DECISIONS section at all. Being read-only, the session skipped draining the notification queue, which is the step
+     that prints that section, so no omitted keys or overflow line were reported. The only decision keys that appear anywhere are decision-39 and decision-40, in live-1's last two status lines.
+
+✻ Churned for 20s · done 5:34 AM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+
+  Auto mode works better when it knows your environment. Takes about a minute.
+
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again
+
+  Enter to confirm · Esc to cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus-5-5:medium:thinking  5h: 64%  7d: 25%  ███░░░░░  (82.5k/1.0M)
+  ~/.no-mistakes/worktrees/d9c8a3404af5/01M41N3N24Q0SVKHENHJKVNT73  ↑82.5k  ↓448
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

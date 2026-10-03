@@ -1,0 +1,10 @@
+548:DIGEST OVERSIZE: composed digest is 65959 bytes, over the 65536-byte ceiling; prefer targeted reads named above rather than re-reading the whole digest.
+wake 120 present: 1 wake lines: 40
+0
+== recovery commands (spaced FM_HOME), executed ==
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm\ lab\ spaced.Wky0Oj/data/backlog.md -> rc=0 lines=75
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm\ lab\ spaced.Wky0Oj/state/*.meta -> rc=0 lines=1280
+ls /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm\ lab\ spaced.Wky0Oj/state/*.status -> rc=0 lines=186
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm\ lab\ spaced.Wky0Oj/data/projects.md -> rc=0 lines=60
+cat /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm\ lab\ spaced.Wky0Oj/data/secondmates.md -> rc=0 lines=31
+bytes before banner:    65960

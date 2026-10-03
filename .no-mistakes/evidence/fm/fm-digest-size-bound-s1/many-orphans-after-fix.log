@@ -1,0 +1,1 @@
+ok - a fixture with many orphan status logs keeps the digest under the 64 KB ceiling

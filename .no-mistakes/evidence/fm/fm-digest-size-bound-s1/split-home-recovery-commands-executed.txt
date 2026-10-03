@@ -1,0 +1,12 @@
+$ cat /tmp/fm\ split\ 4207/da\ ta/backlog.md
+  -> rc=0, 53 lines
+$ cat /tmp/fm\ split\ 4207/st\ ate/*.meta
+  -> rc=0, 156 lines
+$ ls /tmp/fm\ split\ 4207/st\ ate/*.status
+  -> rc=0, 158 lines
+$ cat /tmp/fm\ split\ 4207/da\ ta/projects.md
+  -> rc=0, 22 lines
+$ cat /tmp/fm\ split\ 4207/da\ ta/secondmates.md
+  -> rc=0, 18 lines
+$ cat /tmp/fm\ split\ 4207/da\ ta/captain.md
+  -> rc=0, 603 lines

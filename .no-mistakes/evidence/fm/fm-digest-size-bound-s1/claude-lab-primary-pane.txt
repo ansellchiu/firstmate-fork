@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/d9c8a3404af5/01M41N3N24Q0SVKHENHJKVNT73
+
+
+❯ This is a disposable lab test. Do not start watchers or act on fleet state. Run exactly: bin/fm-session-start.sh > "$FM_HOME/digest.out" 2>&1; wc -c "$FM_HOME/digest.out". Then read that file in
+  full (all of it, in chunks) and answer in one short reply: (1) the exact CAPTAIN-IDENTITY-MARKER line, (2) how many OPEN DECISIONS keys are shown vs named as omitted, (3) the orphan status log
+  count line, (4) whether a DIGEST OVERSIZE or STARTUP TRUNCATED banner appears. Then stop.
+
+  Read 1 file, ran 3 shell commands
+
+⏺ Captain, the startup summary came out at 56,818 bytes across 533 lines, and I read all of it:
+
+  1. Captain identity line: CAPTAIN-IDENTITY-MARKER: the captain is Ansell.
+  2. Open decisions: none are shown and none are named as omitted, because the summary has no open-decisions section at all. This run couldn't get the fleet lock: another live session (pid 22186)
+     holds it. So the session stayed read-only and skipped draining the wake queue, which reported 0 records still queued.
+  3. Orphan status log count: 186 orphan status log(s) (no matching .meta). Recent (written in last 48h): dec1 … dec40 retired-1 … retired-4 (40 dec entries plus 4 retired ones).
+  4. Oversize or truncation banner: neither a DIGEST OVERSIZE nor a STARTUP TRUNCATED banner appears. Sections were trimmed one by one instead:
+     - The backlog shows "16 more omitted".
+     - The projects list shows "2 more omitted".
+     - The second-mates file shows "18 more omitted" with no rows printed above that line, which looks odd.
+     - The captain preferences show "347 more omitted".
+
+  Stopping here.
+
+✻ Cogitated for 21s · done 6:05 AM
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Teach auto mode about your environment?
+
+  Auto mode works better when it knows your environment. Takes about a minute.
+
+  ❯ 1. Yes
+    2. Not now
+    3. Don't show again
+
+  Enter to confirm · Esc to cancel
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus-5-5:medium:thinking  5h: 6%  7d: 26%  ███░░░░░  (88.8k/1.0M)
+  ~/.no-mistakes/worktrees/d9c8a3404af5/01M41N3N24Q0SVKHENHJKVNT73  ↑88.8k  ↓508
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
