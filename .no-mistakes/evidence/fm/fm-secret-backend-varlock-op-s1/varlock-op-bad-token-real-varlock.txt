@@ -1,0 +1,17 @@
+Real varlock 1.21.1 + @varlock/1password-plugin, documented schema shape (op:// refs, @internal token var); keychain stubbed with a bogus ops_ token. Expect: refusal, tool never runs, token never printed.
+--- bogus token variant (len 27) exit=1
+SYNCHRONOUS TERMINATION NOTICE: When explicitly exiting the process via process.exit or via a parent process, asynchronous tasks in your exitHooks will not run. Either remove these tasks, use gracefulExit() instead of process.exit(), or ensure your parent process sends a SIGINT to the process running this code.
+<anonymous_script>:971
+			default: throw new Error(err.message);
+			               ^
+Error: invalid service account token, please make sure you provide a valid service account token as parameter:  service account token base64 decoding failed, please create another token
+Node.js v26.3.0
+tool ran: 0   raw token printed: 0
+--- bogus token variant (len 158) exit=1
+SYNCHRONOUS TERMINATION NOTICE: When explicitly exiting the process via process.exit or via a parent process, asynchronous tasks in your exitHooks will not run. Either remove these tasks, use gracefulExit() instead of process.exit(), or ensure your parent process sends a SIGINT to the process running this code.
+<anonymous_script>:971
+			default: throw new Error(err.message);
+			               ^
+Error: invalid service account token, please make sure you provide a valid service account token as parameter:  service account deserialization failed, please create another token
+Node.js v26.3.0
+tool ran: 0   raw token printed: 0

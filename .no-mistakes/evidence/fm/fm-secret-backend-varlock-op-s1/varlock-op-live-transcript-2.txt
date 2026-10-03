@@ -1,0 +1,70 @@
+== S1b search-only call with documented @internal token var: token stripped from tool ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY,LINKUP_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY LINKUP_API_KEY DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
+" $k "${!k:-<unset>}"; done
+EXA_API_KEY=lab-exa
+TAVILY_API_KEY=<unset>
+LINKUP_API_KEY=lab-linkup
+DEEPSEEK_API_KEY=<unset>
+OP_SERVICE_ACCOUNT_TOKEN=<unset>
+[exit 0]
+
+== S3b mixed call with @internal token var ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh TAVILY_API_KEY,DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY LINKUP_API_KEY DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
+" $k "${!k:-<unset>}"; done
+EXA_API_KEY=<unset>
+TAVILY_API_KEY=lab-tavily
+LINKUP_API_KEY=<unset>
+DEEPSEEK_API_KEY=automic-value
+OP_SERVICE_ACCOUNT_TOKEN=<unset>
+[exit 0]
+
+token in av argv? 0
+== S6 schema omits a requested key (PARALLEL removed): real varlock --filter only warns; wrapper must refuse ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY,PARALLEL_API_KEY -- echo TOOL-RAN
+error: varlock-op did not resolve a non-empty value for PARALLEL_API_KEY
+Command failed with exit code 1
+command [/bin/bash -c 
+    count=$1
+    shift
+    for ((i = 0; i < count; i++)); do
+      key=$1
+      shift
+      if [ -z "${!key:-}" ]; then
+        printf "error: varlock-op did not resolve a non-empty value for %s\n" "$key" >&2
+        exit 1
+      fi
+    done
+    exec "$@"
+   fm-varlock-op 2 EXA_API_KEY PARALLEL_API_KEY echo TOOL-RAN] failed
+try running the same command without varlock
+if you get a different result, varlock may be the problem...
+[exit 1]
+
+== S7 unknown backend value keeps its diagnostic ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
+error: unknown secret backend 'varlok-op'; config/secret-backend must be automic or varlock-op
+[exit 1]
+
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
+error: unknown secret backend 'VARLOCK-OP'; config/secret-backend must be automic or varlock-op
+[exit 1]
+
+== S8 varlock missing from PATH refuses ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
+error: the 'varlock' CLI was not found on PATH; install varlock or set config/secret-backend to automic
+[exit 1]
+
+== S9 default (no secret-backend file) is unchanged Automic for search keys too ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY LINKUP_API_KEY DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
+" $k "${!k:-<unset>}"; done
+EXA_API_KEY=automic-value
+TAVILY_API_KEY=<unset>
+LINKUP_API_KEY=<unset>
+DEEPSEEK_API_KEY=<unset>
+OP_SERVICE_ACCOUNT_TOKEN=<unset>
+[exit 0]
+
+av log:
+av list
+av inject +EXA_API_KEY -- true
+av inject +EXA_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY LINKUP_API_KEY DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s\n" $k "${!k:-<unset>}"; done

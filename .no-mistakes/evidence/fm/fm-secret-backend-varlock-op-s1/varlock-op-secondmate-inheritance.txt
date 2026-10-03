@@ -1,0 +1,16 @@
+== S11 secondmate inheritance: primary config -> local secondmate home via propagate_inheritable_config, then real varlock call from the secondmate home ==
+./av-inject
+./secret-backend
+./varlock/.env.schema
+tool sees BRAVE_SEARCH_API_KEY=lab-brave token=<unset>
+[exit 0]
+== S12 remote-inherit receiver accepts nested config/varlock/.env.schema ==
+pushed: config/varlock/.env.schema
+[put exit 0]
+remote copy identical
+== S13 adversarial: remote home whose config is a symlink to an external dir must refuse and create nothing outside ==
+error: inherited destination parent is a symlink
+[put exit 1]
+error: inherited destination parent is a symlink
+[absent exit 1]
+external dir contents after refusal: []

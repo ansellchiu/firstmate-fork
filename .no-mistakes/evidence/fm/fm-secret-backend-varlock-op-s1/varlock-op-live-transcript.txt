@@ -1,0 +1,65 @@
+== S1 search-only call via real varlock, no approval tap, no real av ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY,TAVILY_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
+" $k "${!k:-<unset>}"; done
+EXA_API_KEY=lab-exa
+TAVILY_API_KEY=lab-tavily
+BRAVE_SEARCH_API_KEY=<unset>
+UNRELATED_VAR=<unset>
+DEEPSEEK_API_KEY=<unset>
+OP_SERVICE_ACCOUNT_TOKEN=ops_FAKE_STUB_TOKEN
+[exit 0]
+
+av log:
+(av never called)
+== S2 non-search key under varlock-op routes to Automic (av stub) ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
+" $k "${!k:-<unset>}"; done
+EXA_API_KEY=<unset>
+TAVILY_API_KEY=<unset>
+BRAVE_SEARCH_API_KEY=<unset>
+UNRELATED_VAR=<unset>
+DEEPSEEK_API_KEY=automic-value
+OP_SERVICE_ACCOUNT_TOKEN=<unset>
+[exit 0]
+
+av log:
+av list
+av inject +DEEPSEEK_API_KEY -- true
+av inject +DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s\n" $k "${!k:-<unset>}"; done
+== S3 mixed call: av outermost wraps real varlock ==
+$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY,DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
+" $k "${!k:-<unset>}"; done
+EXA_API_KEY=lab-exa
+TAVILY_API_KEY=<unset>
+BRAVE_SEARCH_API_KEY=<unset>
+UNRELATED_VAR=<unset>
+DEEPSEEK_API_KEY=automic-value
+OP_SERVICE_ACCOUNT_TOKEN=ops_FAKE_STUB_TOKEN
+[exit 0]
+
+av log:
+av list
+av inject +DEEPSEEK_API_KEY -- true
+av inject +DEEPSEEK_API_KEY -- /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.NNU7O2/lab/bin/varlock run --path /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.NNU7O2/lab/home/config/varlock --filter EXA_API_KEY -- /bin/bash -c 
+    count=$1
+    shift
+    for ((i = 0; i < count; i++)); do
+      key=$1
+      shift
+      if [ -z "${!key:-}" ]; then
+        printf "error: varlock-op did not resolve a non-empty value for %s\n" "$key" >&2
+        exit 1
+      fi
+    done
+    exec "$@"
+   fm-varlock-op 1 EXA_API_KEY bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s\n" $k "${!k:-<unset>}"; done
+== S4 missing keychain token refuses, tool not run ==
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
+error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/secret-backend to automic
+[exit 1]
+
+== S5 malformed token refuses, value not echoed ==
+$ LAB_TOKEN=not-a-real-token /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
+error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/secret-backend to automic
+[exit 1]
+
