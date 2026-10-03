@@ -62,7 +62,7 @@ cat > "$FAKE_BIN/av" <<SH
 #!/usr/bin/env bash
 set -u
 case "\${1:-}" in
-  list) exit "\${FM_FAKE_AV_LIST_RC:-0}" ;;
+  list) printf 'list\n' >> "$TMP_ROOT/av-preflight.log"; exit "\${FM_FAKE_AV_LIST_RC:-0}" ;;
   open) exit 0 ;;
   inject)
     printf '%s\n' "\$*" >> "$TMP_ROOT/av-argv.log"
@@ -167,7 +167,7 @@ while [ "\${1:-}" != "--" ] && [ "\$#" -gt 0 ]; do
   esac
 done
 shift || true
-unset EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_API_KEY PARALLEL_API_KEY
+unset FM_FAKE_TOKEN EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_API_KEY PARALLEL_API_KEY
 while IFS='=' read -r name value; do
   case ",\$filter," in
     *",\$name,"*) export "\$name=\$value" ;;
@@ -253,6 +253,41 @@ assert_not_contains "$vargv" "DEEPSEEK_API_KEY" "a non-search key must never rea
 assert_not_contains "$aargv$vargv" "ops_" "the token must never reach argv"
 assert_contains "$(cat "$TMP_ROOT/vl-env.log")" "token-present" "varlock must receive the token in its environment"
 pass "a mixed varlock-op call resolves each key through its own backend"
+
+for keys in EXA_API_KEY EXA_API_KEY,DEEPSEEK_API_KEY; do
+  out=$(FM_FAKE_TOKEN=$FAKE_TOKEN run_vl "$keys" /usr/bin/env); rc=$?
+  expect_code 0 "$rc" "the environment tool must run with resolved search keys"
+  assert_contains "$out" "EXA_API_KEY=resolved-EXA_API_KEY" "the requested search key must reach the tool"
+  assert_not_contains "$out" "OP_SERVICE_ACCOUNT_TOKEN" "the bearer token variable must not reach the tool"
+  assert_not_contains "$out" "ops_" "the bearer token value must not reach the tool"
+done
+pass "search-only and mixed tools receive search keys without the bearer token"
+
+for prerequisite in varlock schema security token malformed-token; do
+  prereq_bin=$(fm_fakebin "$TMP_ROOT/prereq-$prerequisite")
+  [ "$prerequisite" = varlock ] || ln -s "$VL_BIN/varlock" "$prereq_bin/varlock"
+  [ "$prerequisite" = security ] || ln -s "$VL_BIN/security" "$prereq_bin/security"
+  ln -s "$FAKE_BIN/av" "$prereq_bin/av"
+  for tool in bash dirname; do
+    ln -s "$(type -P "$tool")" "$prereq_bin/$tool"
+  done
+  token=$FAKE_TOKEN
+  case "$prerequisite" in
+    schema) mv "$CFG_VL/varlock/.env.schema" "$TMP_ROOT/prereq-schema-backup" ;;
+    token) token='' ;;
+    malformed-token) token=invalid ;;
+  esac
+  : > "$TMP_ROOT/av-argv.log"
+  : > "$TMP_ROOT/av-preflight.log"
+  out=$(env FM_CONFIG_OVERRIDE="$CFG_VL" FM_FAKE_TOKEN="$token" PATH="$prereq_bin" \
+    "$AV_RUN" EXA_API_KEY,DEEPSEEK_API_KEY -- /bin/echo ran-without-prerequisite 2>&1); rc=$?
+  [ "$prerequisite" != schema ] || mv "$TMP_ROOT/prereq-schema-backup" "$CFG_VL/varlock/.env.schema"
+  expect_code 1 "$rc" "an unusable $prerequisite prerequisite must refuse a mixed call"
+  assert_not_contains "$out" "ran-without-prerequisite" "the tool must not run without prerequisites"
+  [ ! -s "$TMP_ROOT/av-preflight.log" ] || fail "a missing $prerequisite must refuse before Automic preflight"
+  [ ! -s "$TMP_ROOT/av-argv.log" ] || fail "a missing $prerequisite must refuse before Automic approval"
+done
+pass "mixed calls refuse unusable varlock prerequisites before Automic preflight or approval"
 
 # The five-key guard still holds for a direct varlock-op request.
 : > "$TMP_ROOT/vl-argv.log"

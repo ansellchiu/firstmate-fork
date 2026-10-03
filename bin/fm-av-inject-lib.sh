@@ -237,11 +237,22 @@ fm_av_inject_preflight() {  # <av-path>
 # configuration route A exists to fix - with a matching rule, this probe is
 # silent and fast - so the trade buys a bounded failure for the common case at
 # the price of one extra prompt in the case that is misconfigured anyway.
-# Args: <av-path>
-fm_av_inject_approved() {  # <av-path>
+# Args: <av-path> <key-args...>
+fm_av_inject_approved() {  # <av-path> <key-args...>
   local av=$1
+  shift
   fm_run_timed "$FM_AV_APPROVAL_TIMEOUT" \
-    "$av" inject "${FM_AV_INJECT_KEYARGS[@]}" -- true >/dev/null 2>&1 </dev/null
+    "$av" inject "$@" -- true >/dev/null 2>&1 </dev/null
+}
+
+fm_av_inject_prepare() {
+  local av=$1
+  shift
+  fm_av_inject_preflight "$av" || return 1
+  if ! fm_av_inject_approved "$av" "$@"; then
+    FM_AV_INJECT_ERROR="the Automic Vault approval for these keys was not granted within ${FM_AV_APPROVAL_TIMEOUT}s, so this call would run without them; approve the request, add a Direct Access rule for this agent launcher, or run the tool without vault keys"
+    return 1
+  fi
 }
 
 # The varlock-op backend. Called only after fm_av_inject_keys populated
@@ -294,6 +305,10 @@ fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
       return 1
       ;;
   esac
+  if [ "${#FM_VARLOCK_OP_LAUNCHER[@]}" -gt 0 ]; then
+    fm_av_inject_prepare "${FM_VARLOCK_OP_LAUNCHER[0]}" \
+      "${FM_VARLOCK_OP_LAUNCHER[@]:2:${#FM_VARLOCK_OP_LAUNCHER[@]}-3}" || return 1
+  fi
   # shellcheck disable=SC2016 # Inner bash script; its $-vars expand in the child.
   OP_SERVICE_ACCOUNT_TOKEN=$tok exec ${FM_VARLOCK_OP_LAUNCHER[@]+"${FM_VARLOCK_OP_LAUNCHER[@]}"} "$varlock" run --path "$schema_dir" --filter "$filter" -- "$BASH" -c '
     count=$1
@@ -306,6 +321,7 @@ fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
         exit 1
       fi
     done
+    unset OP_SERVICE_ACCOUNT_TOKEN
     exec "$@"
   ' fm-varlock-op "${#FM_AV_INJECT_KEYARGS[@]}" "${FM_AV_INJECT_KEYARGS[@]#+}" "$@"
 }
@@ -358,17 +374,12 @@ fm_av_inject_exec() {  # <config-dir> <key-spec> <tool> [args...]
   else
     fm_av_inject_keys "$spec" || return 1
   fi
-  fm_av_inject_preflight "$av" || return 1
-  if ! fm_av_inject_approved "$av"; then
-    # shellcheck disable=SC2034 # Caller reads the shared error after this function returns.
-    FM_AV_INJECT_ERROR="the Automic Vault approval for these keys was not granted within ${FM_AV_APPROVAL_TIMEOUT}s, so this call would run without them; approve the request, add a Direct Access rule for this agent launcher, or run the tool without vault keys"
-    return 1
-  fi
   if [ "${#search[@]}" -gt 0 ]; then
     FM_VARLOCK_OP_LAUNCHER=("$av" inject "${other[@]}" --)
     FM_AV_INJECT_KEYARGS=("${search[@]}")
     fm_varlock_op_exec "$config_dir" "$@"
     return 1
   fi
+  fm_av_inject_prepare "$av" "${FM_AV_INJECT_KEYARGS[@]}" || return 1
   exec "$av" inject "${FM_AV_INJECT_KEYARGS[@]}" -- "$@"
 }
