@@ -3200,9 +3200,6 @@ count=0
 [ ! -f "$FM_ARM_COUNT" ] || count=$(cat "$FM_ARM_COUNT")
 count=$((count + 1))
 printf '%s\n' "$count" > "$FM_ARM_COUNT"
-previous=$(cat "$FM_ARM_COUNT.pid" 2>/dev/null || true)
-printf '%s\n' "$$" > "$FM_ARM_COUNT.pid"
-[ -z "$previous" ] || kill -TERM "$previous" 2>/dev/null || true
 late_close() {
   sleep 0.4
   printf 'signal: late registered actionable outcome\n'
