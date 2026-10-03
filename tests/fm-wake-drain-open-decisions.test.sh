@@ -215,8 +215,50 @@ test_over_long_decision_note_is_capped_with_a_marker() {
   pass "an over-long open decision is cut to its per-item budget with the shared truncation marker"
 }
 
+test_byte_cap_names_every_omitted_decision_key() {
+  local dir state out i key
+  dir=$(make_case omitted-keys)
+  state="$dir/state"
+  out="$dir/drain.out"
+  # Enough open decisions that the 4000-byte section budget must omit some.
+  # Each note is sized so a handful fit and the rest are omitted by the cap.
+  i=1
+  while [ "$i" -le 40 ]; do
+    printf 'needs-decision [key=k%02d]: decide option set %02d with enough padding words to fill the per-item budget toward the section ceiling quickly enough that later keys are omitted\n' \
+      "$i" "$i" > "$state/task$i.status"
+    i=$((i + 1))
+  done
+
+  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$out" || fail "drain failed while forcing the OPEN DECISIONS byte cap"
+
+  grep -F 'OPEN DECISIONS:' "$out" | grep -F 'more omitted (byte cap):' >/dev/null \
+    || fail "byte cap did not report an omitted count: $(cat "$out")"
+  # Every omitted key must be named on its own short line. Collect the keys that
+  # were shown in full, then require each unshown key to appear in an omitted line.
+  shown_keys=$(grep -E '^task[0-9]+ \[key=k[0-9]+\] needs-decision:' "$out" \
+    | sed -n 's/.*\[key=\([^]]*\)\].*/\1/p' | sort)
+  omitted_keys=$(grep -E '^OPEN DECISIONS: omitted ' "$out" \
+    | sed -n 's/.*\[key=\([^]]*\)\].*/\1/p' | sort)
+  omitted_lines=$(grep -c '^OPEN DECISIONS: omitted ' "$out" || true)
+  [ "$omitted_lines" -gt 0 ] || fail "no omitted-key lines were printed: $(cat "$out")"
+  i=1
+  while [ "$i" -le 40 ]; do
+    key=$(printf 'k%02d' "$i")
+    if printf '%s\n' "$shown_keys" | grep -Fx "$key" >/dev/null; then
+      :
+    elif printf '%s\n' "$omitted_keys" | grep -Fx "$key" >/dev/null; then
+      :
+    else
+      fail "decision key $key was neither shown nor named as omitted"
+    fi
+    i=$((i + 1))
+  done
+  pass "OPEN DECISIONS names every key omitted by the byte cap"
+}
+
 test_buried_decision_still_surfaces
 test_over_long_decision_note_is_capped_with_a_marker
+test_byte_cap_names_every_omitted_decision_key
 test_explicit_resolution_closes_it
 test_later_unrelated_terminal_line_does_not_close_it
 test_reserved_key_namespace_is_owned_by_its_library

@@ -46,12 +46,15 @@
 #                       detected primary harness.
 #   5. read-once contract - the do-not-re-read contract covering every source
 #                       represented by the two digests below.
-#   6. fleet digest   - a compact data/backlog.md identity/metadata listing,
-#                       every state/*.meta, a bounded state/*.status tail,
-#                       the away posture (state/.afk-contract and the legacy
-#                       state/.afk daemon flag), and a cheap per-task
-#                       endpoint-liveness read, each bounded and crash-
-#                       isolated so one task's read can never abort the
+#   6. fleet digest   - a compact data/backlog.md identity/metadata listing
+#                       (hold_reason capped), compact identity for every
+#                       state/*.meta plus a shared one-or-two-line status
+#                       tail, an orphan status-log count (plus ids written in
+#                       the last 48 hours), the away posture
+#                       (state/.afk-contract and the legacy state/.afk daemon
+#                       flag), and a cheap per-task endpoint-liveness read,
+#                       each under the whole-digest byte budget and
+#                       crash-isolated so one task's read can never abort the
 #                       digest: read-only, always runs. The per-task reads
 #                       run serially, so with a wedged backend the stage's
 #                       ceiling is tasks x the per-read bound
@@ -144,16 +147,19 @@
 #   - `done` rows are never listed. Retained completion history belongs to the
 #     reporting surfaces (bin/fm-bearings-snapshot.sh, /ahoy), and at startup it
 #     is pure weight - 10 done rows cost 3.3KB in an observed main-home digest.
-#   - Every in-flight, held, and blocked row is listed IN FULL, with its
-#     hold_kind/hold_reason and blocked_by. Those are the rows AGENTS.md
-#     sections 7 and 10 make actionable at startup, so they are never bounded
-#     away.
-#   - Only the plain queued (dispatchable-now) listing is bounded, by
+#   - Every in-flight, held, and blocked row is listed, with its hold_kind,
+#     hold_reason, and blocked_by. hold_reason is cut to FM_LINE_CAP_DEFAULT
+#     characters (same marker as status tails) on both the tasks-axi and manual
+#     paths, because uncapped hold essays were observed at over 2 KB each.
+#   - Only the plain queued (dispatchable-now) listing is count-bounded, by
 #     FM_SESSION_START_QUEUED_LIMIT, default 20. Anything it omits is disclosed
 #     with an exact remainder count and the command that shows the rest, so a
 #     deep queue costs a counter rather than kilobytes.
 #     (This replaces FM_SESSION_START_BACKLOG_LIMIT, which bounded the whole
 #     listing indiscriminately and so could drop a held or blocked row.)
+#   - The composed backlog body also sits under the whole-digest per-section
+#     byte budget below; overflow is disclosed with an exact remainder and the
+#     command that shows the rest.
 # When compatible tasks-axi is selected and available, the shared tasks-axi
 # backend probe remains the compatibility owner and this script asks
 # `tasks-axi list` for the compact identity fields plus blocked_by, hold_kind,
@@ -164,18 +170,26 @@
 # When manual mode is selected, or tasks-axi is unavailable or incompatible,
 # this script prints only backlog section headings and item title lines, so
 # title-line hold and blocked-by metadata remain visible while indented bodies
-# stay out of the startup digest; the same never-bound-a-held-or-blocked-row
-# rule applies, recognized there from the title line's own hold/blocked-by
-# markers.
+# stay out of the startup digest; the same never-omit-a-held-or-blocked-row-
+# before-the-byte-budget rule applies, recognized there from the title line's
+# own hold/blocked-by markers.
 # Full bodies are targeted follow-up only: `bin/fm-tasks-axi.sh show <id> --full` when
 # compatible tasks-axi is available, or `data/backlog.md` when the file body is
 # truly needed.
 #
-# STATUS TAILS: FM_SESSION_START_STATUS_TAIL bounds how many lines each task's
-# tail prints, and bin/fm-line-cap-lib.sh bounds how long each of those lines
-# may be. Both bounds are safe because the section prints every task's full
-# status log path, and AGENTS.md section 8 treats a status line as a wake EVENT
-# rather than current state - bin/fm-crew-state.sh owns current state.
+# STATUS TAILS: live endpoints print identity keys plus the latest one or two
+# status lines (FM_SESSION_START_STATUS_TAIL, default 2) under one shared tail
+# header. bin/fm-line-cap-lib.sh bounds how long each of those lines may be.
+# Orphan status logs (a .status with no matching .meta) print only a count plus
+# the ids written in the last 48 hours; the full log path pattern stays in the
+# shared header and the read-once contract. AGENTS.md section 8 treats a status
+# line as a wake EVENT rather than current state - bin/fm-crew-state.sh owns
+# current state.
+#
+# WHOLE-DIGEST BYTE BUDGET: the producer enforces a 64 KB hard ceiling and the
+# per-section ceilings in this file's DIGEST_BUDGET_* constants. Each section
+# that overflows discloses with "N more omitted - <command>", and a DIGEST
+# OVERSIZE banner fires when the composed total still exceeds the ceiling.
 #
 # RUNTIME BOUND: the digest is now executed through a native session-open
 # adapter (see bin/fm-sessionstart-run.sh), which blocks either hook-driven
@@ -392,8 +406,9 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 # agent's environment.
 if fm_tasks_axi_compatible; then TASKS_AXI_COMPATIBLE=1; else TASKS_AXI_COMPATIBLE=0; fi
 
-STATUS_TAIL=${FM_SESSION_START_STATUS_TAIL:-5}
-case "$STATUS_TAIL" in ''|*[!0-9]*) STATUS_TAIL=5 ;; esac
+# Live work under way: identity keys plus the latest one or two status lines.
+STATUS_TAIL=${FM_SESSION_START_STATUS_TAIL:-2}
+case "$STATUS_TAIL" in ''|*[!0-9]*) STATUS_TAIL=2 ;; esac
 QUEUED_LIMIT=${FM_SESSION_START_QUEUED_LIMIT:-20}
 case "$QUEUED_LIMIT" in ''|*[!0-9]*|0) QUEUED_LIMIT=20 ;; esac
 # One per-task endpoint read may never outlive this bound: a hung backend CLI
@@ -404,30 +419,125 @@ case "$ENDPOINT_TIMEOUT" in ''|*[!0-9]*) ENDPOINT_TIMEOUT=10 ;; esac
 [ "$ENDPOINT_TIMEOUT" -gt 0 ] 2>/dev/null || ENDPOINT_TIMEOUT=10
 BACKLOG_FIELDS=blocked_by,hold_kind,hold_reason
 
+# Whole-digest byte budget (J4 ceiling column). Per-section overflow discloses
+# with "N more omitted - <command>"; DIGEST_CEILING_BYTES banners the total.
+DIGEST_CEILING_BYTES=${FM_SESSION_START_DIGEST_CEILING:-65536}
+case "$DIGEST_CEILING_BYTES" in ''|*[!0-9]*|0) DIGEST_CEILING_BYTES=65536 ;; esac
+DIGEST_BUDGET_WAKE=${FM_SESSION_START_BUDGET_WAKE:-6144}
+DIGEST_BUDGET_SUPERVISION=${FM_SESSION_START_BUDGET_SUPERVISION:-8704}
+DIGEST_BUDGET_READ_ONCE=${FM_SESSION_START_BUDGET_READ_ONCE:-1536}
+DIGEST_BUDGET_BACKLOG=${FM_SESSION_START_BUDGET_BACKLOG:-6144}
+DIGEST_BUDGET_WORK=${FM_SESSION_START_BUDGET_WORK:-10240}
+DIGEST_BUDGET_ORPHANS=${FM_SESSION_START_BUDGET_ORPHANS:-1024}
+DIGEST_BUDGET_REGISTRY=${FM_SESSION_START_BUDGET_REGISTRY:-4096}
+DIGEST_BUDGET_MEMORY=${FM_SESSION_START_BUDGET_MEMORY:-23040}
+for _digest_budget in DIGEST_BUDGET_WAKE DIGEST_BUDGET_SUPERVISION DIGEST_BUDGET_READ_ONCE \
+  DIGEST_BUDGET_BACKLOG DIGEST_BUDGET_WORK DIGEST_BUDGET_ORPHANS DIGEST_BUDGET_REGISTRY \
+  DIGEST_BUDGET_MEMORY; do
+  case "${!_digest_budget}" in ''|*[!0-9]*|0) eval "$_digest_budget=1024" ;; esac
+done
+unset _digest_budget
+DIGEST_TOTAL_BYTES=0
+ORPHAN_RECENT_SECS=${FM_SESSION_START_ORPHAN_RECENT_SECS:-172800}
+case "$ORPHAN_RECENT_SECS" in ''|*[!0-9]*) ORPHAN_RECENT_SECS=172800 ;; esac
+
 RULE='================================================================================'
 SUBRULE='--------------------------------------------------------------------------------'
 
 section() { printf '\n%s\n%s\n%s\n' "$RULE" "$1" "$RULE"; }
 subsection() { printf '\n%s\n%s\n' "$1" "$SUBRULE"; }
 
-# print_file_or_absent <path> <label>: full contents under a labeled
-# subsection, or an explicit ABSENT marker. Absence is semantically
-# meaningful for every one of these files (captain.md absent = firstmate
-# repo built-in defaults, projects.md absent = rebuild from clones, etc. -
-# AGENTS.md section 3) and must never be confused with an empty-but-present
-# file, so the two cases print differently.
-print_file_or_absent() {
-  local path=$1 label=$2
-  subsection "$label"
-  if [ -f "$path" ]; then
-    if [ -s "$path" ]; then
-      cat "$path"
-    else
-      printf '(present, empty)\n'
+# digest_file_mtime <path>: epoch seconds of mtime, or empty on failure.
+digest_file_mtime() {
+  local path=$1 mtime
+  mtime=$(/usr/bin/stat -f '%m' "$path" 2>/dev/null) \
+    || mtime=$(stat -c '%Y' "$path" 2>/dev/null) \
+    || return 1
+  case "$mtime" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$mtime"
+}
+
+# digest_count_bytes <text>: byte length of <text> (no trailing NUL).
+digest_count_bytes() {
+  printf '%s' "$1" | wc -c | tr -d ' '
+}
+
+# digest_print_lines_budgeted <budget> <omit_command>: print stdin lines while
+# under <budget> bytes; then disclose how many whole lines were omitted.
+digest_print_lines_budgeted() {
+  local budget=$1 omit_cmd=$2 line used=0 omitted=0 bytes omit_line cap_max
+  if [ "$budget" -le 0 ] 2>/dev/null; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      omitted=$((omitted + 1))
+    done
+    if [ "$omitted" -gt 0 ]; then
+      omit_line=$(printf '%d more omitted - %s\n' "$omitted" "$omit_cmd")
+      printf '%s' "$omit_line"
+      DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line}))
     fi
-  else
-    printf 'ABSENT\n'
+    return 0
   fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    bytes=$(( ${#line} + 1 ))
+    if [ "$used" -gt 0 ] && [ $((used + bytes)) -gt "$budget" ]; then
+      omitted=$((omitted + 1))
+      while IFS= read -r line || [ -n "$line" ]; do
+        omitted=$((omitted + 1))
+      done
+      break
+    fi
+    if [ "$used" -eq 0 ] && [ "$bytes" -gt "$budget" ]; then
+      cap_max=$((budget - 1))
+      [ "$cap_max" -gt 0 ] || cap_max=1
+      fm_cap_line_var "$line" "$cap_max"
+      line=$FM_LINE_CAP_LINE
+      bytes=$(( ${#line} + 1 ))
+    fi
+    printf '%s\n' "$line"
+    used=$((used + bytes))
+  done
+  DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + used))
+  if [ "$omitted" -gt 0 ]; then
+    omit_line=$(printf '%d more omitted - %s\n' "$omitted" "$omit_cmd")
+    printf '%s' "$omit_line"
+    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line}))
+  fi
+}
+
+# print_registry_rows_budgeted <path> <label> <budget>: one line per row, each
+# capped at FM_LINE_CAP_DEFAULT, under a labeled subsection that names the full
+# path. Does not edit the source file.
+print_registry_rows_budgeted() {
+  local path=$1 label=$2 budget=$3 line body=''
+  subsection "$label (full file: $path)"
+  if [ ! -f "$path" ]; then
+    printf 'ABSENT\n'
+    return 0
+  fi
+  if [ ! -s "$path" ]; then
+    printf '(present, empty)\n'
+    return 0
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    fm_cap_line_var "$line"
+    body+="$FM_LINE_CAP_LINE"$'\n'
+  done < "$path"
+  printf '%s' "$body" | digest_print_lines_budgeted "$budget" "cat $path"
+}
+
+# print_memory_file_budgeted <path> <label> <budget>: full file under budget.
+print_memory_file_budgeted() {
+  local path=$1 label=$2 budget=$3
+  subsection "$label"
+  if [ ! -f "$path" ]; then
+    printf 'ABSENT\n'
+    return 0
+  fi
+  if [ ! -s "$path" ]; then
+    printf '(present, empty)\n'
+    return 0
+  fi
+  digest_print_lines_budgeted "$budget" "cat $path" < "$path"
 }
 
 print_backlog_pointer() {
@@ -441,10 +551,89 @@ print_backlog_pointer() {
 # because awk's -v applies escape processing before the regex is ever compiled.
 MANUAL_KEEP_RE='[(]hold|blocked-by:'
 
+# Cap a manual backlog title line's "(hold: ...)" reason to FM_LINE_CAP_DEFAULT.
+cap_manual_hold_reason_line() {
+  local line=$1 prefix reason suffix rest
+  case "$line" in
+    *'(hold: '*) ;;
+    *) printf '%s\n' "$line"; return 0 ;;
+  esac
+  prefix=${line%%'(hold: '*}'(hold: '
+  rest=${line#*'(hold: '}
+  case "$rest" in
+    *') (hold-kind:'*)
+      reason=${rest%%') (hold-kind:'*}
+      suffix=') (hold-kind:'${rest#*') (hold-kind:'}
+      ;;
+    *')'*)
+      reason=${rest%%')'*}
+      suffix=')'${rest#*')'}
+      ;;
+    *)
+      printf '%s\n' "$line"
+      return 0
+      ;;
+  esac
+  fm_cap_line_var "$reason"
+  printf '%s%s%s\n' "$prefix" "$FM_LINE_CAP_LINE" "$suffix"
+}
+
+# Cap the hold_reason field (last CSV field) of tasks-axi compact task rows.
+# Non-row lines (headers, counts, help) pass through unchanged.
+cap_tasks_axi_hold_reason_stream() {
+  awk -v max="$FM_LINE_CAP_DEFAULT" -v suffix="$FM_LINE_CAP_SUFFIX" '
+    function split_csv(s, out,    i, n, ch, field, in_q) {
+      n = 0; field = ""; in_q = 0
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (in_q) {
+          if (ch == "\"") {
+            if (substr(s, i + 1, 1) == "\"") { field = field "\""; i++; continue }
+            in_q = 0
+            continue
+          }
+          field = field ch
+          continue
+        }
+        if (ch == "\"") { in_q = 1; continue }
+        if (ch == ",") { n++; out[n] = field; field = ""; continue }
+        field = field ch
+      }
+      n++; out[n] = field
+      return n
+    }
+    function csv_escape(s) {
+      if (s ~ /[",]/ || length(s) > max) {
+        gsub(/"/, "\"\"", s)
+        return "\"" s "\""
+      }
+      return s
+    }
+    function cap(s, keep) {
+      if (length(s) <= max) return s
+      keep = max - length(suffix)
+      if (keep < 0) keep = 0
+      return substr(s, 1, keep) suffix
+    }
+    {
+      if ($0 !~ /^[[:space:]]+[^[:space:],]+,/) { print; next }
+      n = split_csv($0, f)
+      if (n < 8) { print; next }
+      # Leave rows whose hold_reason is already under the cap untouched so
+      # tasks-axi quoting such as "-" is preserved byte-for-byte.
+      if (length(f[8]) <= max) { print; next }
+      f[8] = cap(f[8])
+      out = f[1]
+      for (i = 2; i <= 8; i++) out = out "," csv_escape(f[i])
+      print out
+    }
+  '
+}
+
 print_backlog_manual_compact() {
-  local path=$1 reason=$2
-  printf 'compact backlog listing (%s; done rows omitted; every in-flight, held, and blocked title line kept; other queued bounded to %s; indented task bodies omitted)\n' \
-    "$reason" "$QUEUED_LIMIT"
+  local path=$1 reason=$2 line
+  printf 'compact backlog listing (%s; done rows omitted; every in-flight, held, and blocked title line kept; other queued bounded to %s; indented task bodies omitted; hold_reason capped at %s characters)\n' \
+    "$reason" "$QUEUED_LIMIT" "$FM_LINE_CAP_DEFAULT"
   awk -v max="$QUEUED_LIMIT" -v keep_re="$MANUAL_KEEP_RE" '
     function state_for_heading(line, heading) {
       heading = line
@@ -481,7 +670,9 @@ print_backlog_manual_compact() {
         }
       }
     }
-  ' "$path"
+  ' "$path" | while IFS= read -r line || [ -n "$line" ]; do
+    cap_manual_hold_reason_line "$line"
+  done
 }
 
 # tasks-axi closes every listing with its own help block. This section composes
@@ -530,14 +721,14 @@ print_backlog_tasks_axi_compact() {
   elif ! ready=$(tasks-axi ready --file "$path" 2>&1); then
     err=$ready
   else
-    printf 'compact backlog listing (tasks-axi; done rows omitted; every in-flight, held, and blocked row shown in full; ready queued bounded to %s; task bodies omitted)\n' \
-      "$QUEUED_LIMIT"
+    printf 'compact backlog listing (tasks-axi; done rows omitted; every in-flight, held, and blocked row shown; hold_reason capped at %s characters; ready queued bounded to %s; task bodies omitted)\n' \
+      "$FM_LINE_CAP_DEFAULT" "$QUEUED_LIMIT"
     printf '\nin flight:\n'
-    printf '%s\n' "$in_flight" | strip_axi_help
+    printf '%s\n' "$in_flight" | strip_axi_help | cap_tasks_axi_hold_reason_stream
     printf '\nheld (captain- or time-gated; an in-flight item that is also held appears in both groups):\n'
-    printf '%s\n' "$held" | strip_axi_help
+    printf '%s\n' "$held" | strip_axi_help | cap_tasks_axi_hold_reason_stream
     printf '\nblocked queued:\n'
-    printf '%s\n' "$blocked" | strip_axi_help
+    printf '%s\n' "$blocked" | strip_axi_help | cap_tasks_axi_hold_reason_stream
     printf '\nready queued (dispatchable now):\n'
     print_ready_queued_bounded "$ready"
     return 0
@@ -548,18 +739,22 @@ print_backlog_tasks_axi_compact() {
 }
 
 print_backlog_compact() {
-  local path=$1 label=$2
+  local path=$1 label=$2 body
   subsection "$label"
   if [ -f "$path" ]; then
     if [ -s "$path" ]; then
-      if fm_tasks_axi_backend_available "$CONFIG"; then
-        print_backlog_tasks_axi_compact "$path"
-      elif fm_backlog_backend_manual "$CONFIG"; then
-        print_backlog_manual_compact "$path" "manual backend"
-      else
-        print_backlog_manual_compact "$path" "tasks-axi unavailable or incompatible"
-      fi
-      print_backlog_pointer
+      body=$(
+        if fm_tasks_axi_backend_available "$CONFIG"; then
+          print_backlog_tasks_axi_compact "$path"
+        elif fm_backlog_backend_manual "$CONFIG"; then
+          print_backlog_manual_compact "$path" "manual backend"
+        else
+          print_backlog_manual_compact "$path" "tasks-axi unavailable or incompatible"
+        fi
+        print_backlog_pointer
+      )
+      printf '%s\n' "$body" | digest_print_lines_budgeted "$DIGEST_BUDGET_BACKLOG" \
+        "bin/fm-tasks-axi.sh list --file data/backlog.md / cat data/backlog.md"
     else
       printf '(present, empty)\n'
     fi
@@ -568,17 +763,149 @@ print_backlog_compact() {
   fi
 }
 
-print_status_tail() {
+# Print the latest STATUS_TAIL lines of <status>, each capped, with no header.
+print_status_tail_lines() {
   local status=$1 line
-  printf 'status tail (last %s line(s), each capped at %s characters, wake-EVENT history, not current state; full log: %s):\n' \
-    "$STATUS_TAIL" "$FM_LINE_CAP_DEFAULT" "$status"
-  # A crewmate writes its own status lines, so their length is unbounded: one
-  # observed line ran 865 characters. Cap each one the way the wake digest's
-  # OPEN DECISIONS section does; the lede carries the state word and the key,
-  # and the full log path above reaches the rest.
+  [ -f "$status" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     fm_cap_line "$line"
   done < <(tail -n "$STATUS_TAIL" "$status")
+}
+
+# Compact identity + endpoint + status lines for one live meta record.
+print_compact_meta_block() {
+  local meta=$1 id status window target backend endpoint_rc endpoint_line
+  local kind harness model worktree pr line
+  id=$(basename "$meta" .meta)
+  kind=$(fm_meta_get "$meta" kind)
+  harness=$(fm_meta_get "$meta" harness)
+  model=$(fm_meta_get "$meta" model)
+  backend=$(fm_backend_of_meta "$meta")
+  window=$(fm_meta_get "$meta" window)
+  worktree=$(fm_meta_get "$meta" worktree)
+  pr=$(fm_meta_get "$meta" pr)
+  target=$(fm_backend_target_of_meta "$meta")
+
+  printf -- '--- %s ---\n' "$id"
+  printf 'id=%s' "$id"
+  [ -n "$kind" ] && printf ' kind=%s' "$kind"
+  [ -n "$harness" ] && printf ' harness=%s' "$harness"
+  [ -n "$model" ] && printf ' model=%s' "$model"
+  printf ' backend=%s' "$backend"
+  [ -n "$window" ] && printf ' window=%s' "$window"
+  [ -n "$worktree" ] && printf ' worktree=%s' "$worktree"
+  [ -n "$pr" ] && printf ' pr=%s' "$pr"
+  printf '\n'
+
+  if [ -n "$window" ]; then
+    endpoint_rc=0
+    fm_session_start_endpoint_read "$backend" "${target:-$window}" "fm-$id" || endpoint_rc=$?
+    if [ "$endpoint_rc" -eq 0 ]; then
+      endpoint_line=$(printf 'endpoint: alive (backend=%s window=%s)' "$backend" "$window")
+    elif [ "$endpoint_rc" -eq 124 ] || [ "$endpoint_rc" -ge 128 ]; then
+      endpoint_line=$(printf 'endpoint: error (backend=%s window=%s - the endpoint read died or hit its %ss bound; the digest continued past it)' \
+        "$backend" "$window" "$ENDPOINT_TIMEOUT")
+    else
+      endpoint_line=$(printf 'endpoint: dead (backend=%s window=%s)' "$backend" "$window")
+    fi
+  else
+    endpoint_line='endpoint: unknown (no window recorded)'
+  fi
+  printf '%s\n' "$endpoint_line"
+
+  status="$STATE/$id.status"
+  if [ -f "$status" ]; then
+    print_status_tail_lines "$status"
+  else
+    printf 'status: (no status file yet: %s)\n' "$status"
+  fi
+}
+
+print_work_under_way() {
+  local meta used=0 omitted=0 block bytes omit_line header shown=0
+  subsection "Work under way (state/*.meta)"
+  # Build the header without a trailing newline inside $(), which strips one;
+  # print it with printf '%s\n' so the shared header stays on its own line.
+  header=$(printf 'status tails (last %s line(s) each, each capped at %s characters, wake-EVENT history, not current state; full log: state/<id>.status' \
+    "$STATUS_TAIL" "$FM_LINE_CAP_DEFAULT")
+  printf '%s\n' "$header"
+  used=$(( ${#header} + 1 ))
+  DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + used))
+
+  for meta in "$STATE"/*.meta; do
+    [ -f "$meta" ] || continue
+    if [ "$omitted" -gt 0 ]; then
+      omitted=$((omitted + 1))
+      continue
+    fi
+    block=$(print_compact_meta_block "$meta")
+    block=$block$'\n'
+    bytes=$(digest_count_bytes "$block")
+    if [ "$shown" -gt 0 ] && [ $((used + bytes)) -gt "$DIGEST_BUDGET_WORK" ]; then
+      omitted=1
+      continue
+    fi
+    printf '%s' "$block"
+    used=$((used + bytes))
+    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + bytes))
+    shown=$((shown + 1))
+  done
+  if [ "$shown" -eq 0 ] && [ "$omitted" -eq 0 ]; then
+    printf '(none)\n'
+  fi
+  if [ "$omitted" -gt 0 ]; then
+    omit_line=$(printf '%d more omitted - ls state/*.meta; bin/fm-crew-state.sh\n' "$omitted")
+    printf '%s' "$omit_line"
+    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line}))
+  fi
+}
+
+print_orphan_status_summary() {
+  local status id mtime now cutoff total=0 recent='' recent_n=0 body bytes recent_hours
+  subsection "Orphan status logs (state/*.status without matching .meta)"
+  now=$(date +%s)
+  cutoff=$((now - ORPHAN_RECENT_SECS))
+  for status in "$STATE"/*.status; do
+    [ -f "$status" ] || continue
+    id=$(basename "$status" .status)
+    [ -f "$STATE/$id.meta" ] && continue
+    total=$((total + 1))
+    mtime=$(digest_file_mtime "$status") || mtime=
+    case "$mtime" in
+      ''|*[!0-9]*) ;;
+      *)
+        if [ "$mtime" -ge "$cutoff" ]; then
+          recent_n=$((recent_n + 1))
+          if [ -n "$recent" ]; then
+            recent="$recent $id"
+          else
+            recent=$id
+          fi
+        fi
+        ;;
+    esac
+  done
+  if [ "$total" -eq 0 ]; then
+    printf '(none)\n'
+    return 0
+  fi
+  recent_hours=$((ORPHAN_RECENT_SECS / 3600))
+  body=$(printf '%d orphan status log(s) (no matching .meta). Recent (written in last %sh): ' \
+    "$total" "$recent_hours")
+  if [ "$recent_n" -eq 0 ]; then
+    body="${body}(none)"
+  else
+    body="${body}${recent}"
+  fi
+  body="${body}"$(printf '\nFull logs: state/<id>.status. List: ls state/*.status\n')
+  bytes=$(digest_count_bytes "$body")
+  if [ "$bytes" -gt "$DIGEST_BUDGET_ORPHANS" ]; then
+    body=$(printf '%d orphan status log(s) (no matching .meta). Recent ids truncated under budget.\n%d more omitted - ls state/*.status\n' \
+      "$total" "$recent_n")
+    bytes=$(digest_count_bytes "$body")
+  fi
+  printf '%s' "$body"
+  DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + bytes))
 }
 
 # fm_session_start_endpoint_read <backend> <target> [expected-label]: ONE
@@ -802,7 +1129,8 @@ else
   fi
   DRAIN_OUT=$("$SCRIPT_DIR/fm-wake-drain.sh" 2>&1)
   if [ -n "$DRAIN_OUT" ]; then
-    printf '%s\n' "$DRAIN_OUT"
+    printf '%s\n' "$DRAIN_OUT" | digest_print_lines_budgeted "$DIGEST_BUDGET_WAKE" \
+      "bin/fm-wake-drain.sh"
   else
     printf '(no queued wakes)\n'
   fi
@@ -816,6 +1144,8 @@ AFK_MODE=$(fm_afk_mode "$STATE")
 X_MODE_PRESENT=0
 [ -f "$CONFIG/x-mode.env" ] && X_MODE_PRESENT=1
 
+# Extension-load diagnostics stay outside the supervision-instructions budget so
+# a long path-heavy reminder cannot displace the operating block itself.
 if [ "$PRIMARY_HARNESS" = pi ] || [ "$PRIMARY_HARNESS" = pi-signed ]; then
   PI_EXT="$FM_ROOT/.pi/extensions/fm-primary-pi-watch.ts"
   PI_TURNEND_EXT="$FM_ROOT/.pi/extensions/fm-primary-turnend-guard.ts"
@@ -849,12 +1179,14 @@ if [ "$PRIMARY_HARNESS" = omp ]; then
     printf 'OMP_WATCH_EXTENSION: not loaded - restart omp with this home as its working directory so %s and %s auto-load from .omp/extensions/ for turn-end guard and background wake coverage; pass -e %s -e %s only when omp must start from another directory, never together with auto-discovery (omp loads a file named both ways twice)\n' "$OMP_TURNEND_EXT" "$OMP_EXT" "$OMP_TURNEND_EXT" "$OMP_EXT"
   fi
 fi
-"$SCRIPT_DIR/fm-supervision-instructions.sh" \
+SUPERVISION_BODY=$("$SCRIPT_DIR/fm-supervision-instructions.sh" \
   --harness "$PRIMARY_HARNESS" \
   --read-only "$READ_ONLY" \
   --afk "$AFK_PRESENT" \
   --afk-mode "$AFK_MODE" \
-  --x-mode "$X_MODE_PRESENT"
+  --x-mode "$X_MODE_PRESENT")
+printf '%s\n' "$SUPERVISION_BODY" | digest_print_lines_budgeted "$DIGEST_BUDGET_SUPERVISION" \
+  "bin/fm-supervision-instructions.sh --harness $PRIMARY_HARNESS"
 
 # --- 5. read-once contract -------------------------------------------------
 # Ahead of the two digests it governs, not after them: a truncated tail is
@@ -864,11 +1196,13 @@ fi
 # a stage that never ran, which the truncation banner names by stage.
 stage read-once
 section "READ-ONCE CONTRACT"
-cat <<'EOF'
-Everything below is printed in full for this session start: every state/*.meta,
-a compact data/backlog.md listing, a bounded tail of every state/*.status, each
-installed extension's session-start contribution, data/projects.md,
-data/secondmates.md, data/captain.md, data/captain-shared.md, and data/learnings.md.
+READ_ONCE_BODY=$(cat <<'EOF'
+Everything below is printed for this session start under the digest byte budget:
+compact identity for every state/*.meta, a compact data/backlog.md listing,
+an orphan status-log count (plus ids written in the last 48 hours), each
+installed extension's session-start contribution, data/projects.md and
+data/secondmates.md (each row capped), data/captain.md, data/captain-shared.md,
+and data/learnings.md.
 Do NOT re-read any of them after reading this digest, and do NOT bulk-read
 data/backlog.md or state/*.status: re-reading everything defeats the entire
 point of this command.
@@ -877,15 +1211,18 @@ Go to a source directly only when:
   - this digest flagged it ABSENT (then rebuild or create it per AGENTS.md),
   - its contents looked unparseable or corrupt,
   - an individual full status log is needed for older wake-event history, or a
-    status line was capped and its tail matters (each task's full log path is
-    printed with its tail),
+    status line was capped and its tail matters (live tasks name state/<id>.status),
   - a full task body is needed (bin/fm-tasks-axi.sh show <id> --full, or data/backlog.md),
   - the backlog listing disclosed omitted queued items and this turn needs them,
+  - an orphan or section overflow line named a follow-up command this turn needs,
   - the NETWORK CHECKS section reported its checks still IN PROGRESS and this
     turn needs their verdict (bin/fm-startup-network.sh report),
   - or a STARTUP TRUNCATED banner named the stage that would have printed it, in
     which case that stage's sources were never emitted and must be reconciled.
 EOF
+)
+printf '%s\n' "$READ_ONCE_BODY" | digest_print_lines_budgeted "$DIGEST_BUDGET_READ_ONCE" \
+  "sed -n '/READ-ONCE CONTRACT/,/^====/p' from bin/fm-session-start.sh"
 
 # --- 6. fleet-state digest ---------------------------------------------
 # Before CONTEXT: see this file's ORDERING note. Live fleet identity is what a
@@ -893,57 +1230,8 @@ EOF
 stage fleet-state
 section "FLEET STATE"
 print_backlog_compact "$DATA/backlog.md" "data/backlog.md"
-
-subsection "Work under way (state/*.meta)"
-META_FOUND=0
-for meta in "$STATE"/*.meta; do
-  [ -f "$meta" ] || continue
-  META_FOUND=1
-  id=$(basename "$meta" .meta)
-  printf '\n--- %s ---\n' "$id"
-  cat "$meta"
-
-  window=$(fm_meta_get "$meta" window)
-  target=$(fm_backend_target_of_meta "$meta")
-  if [ -n "$window" ]; then
-    backend=$(fm_backend_of_meta "$meta")
-    endpoint_rc=0
-    fm_session_start_endpoint_read "$backend" "${target:-$window}" "fm-$id" || endpoint_rc=$?
-    # Only the timeout owner's own statuses mean the read itself failed: 124 is
-    # the bound firing and >=128 is a signal death. Every other nonzero status
-    # is the probe's own verdict that the endpoint is gone.
-    if [ "$endpoint_rc" -eq 0 ]; then
-      printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"
-    elif [ "$endpoint_rc" -eq 124 ] || [ "$endpoint_rc" -ge 128 ]; then
-      printf 'endpoint: error (backend=%s window=%s - the endpoint read died or hit its %ss bound; the digest continued past it)\n' \
-        "$backend" "$window" "$ENDPOINT_TIMEOUT"
-    else
-      printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window"
-    fi
-  else
-    printf 'endpoint: unknown (no window recorded)\n'
-  fi
-
-  status="$STATE/$id.status"
-  if [ -f "$status" ]; then
-    print_status_tail "$status"
-  else
-    printf 'status tail: (no status file yet: %s)\n' "$status"
-  fi
-done
-[ "$META_FOUND" -eq 1 ] || printf '(none)\n'
-
-subsection "Orphan status logs (state/*.status without matching .meta)"
-ORPHAN_STATUS_FOUND=0
-for status in "$STATE"/*.status; do
-  [ -f "$status" ] || continue
-  id=$(basename "$status" .status)
-  [ -f "$STATE/$id.meta" ] && continue
-  ORPHAN_STATUS_FOUND=1
-  printf '\n--- %s ---\n' "$id"
-  print_status_tail "$status"
-done
-[ "$ORPHAN_STATUS_FOUND" -eq 1 ] || printf '(none)\n'
+print_work_under_way
+print_orphan_status_summary
 
 # Pending incidental findings (bin/fm-findings-lib.sh). A ship worker's
 # out-of-scope observation must stay visible until it is triaged; teardown
@@ -1067,14 +1355,36 @@ fi
 # take (see this file's ORDERING note).
 stage context
 section "CONTEXT"
-print_file_or_absent "$DATA/projects.md" "data/projects.md"
-print_file_or_absent "$DATA/secondmates.md" "data/secondmates.md"
-print_file_or_absent "$DATA/captain.md" "data/captain.md"
-print_file_or_absent "$DATA/captain-shared.md" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)"
-print_file_or_absent "$DATA/learnings.md" "data/learnings.md"
+# Registry rows are capped and share DIGEST_BUDGET_REGISTRY; captain memory
+# files share DIGEST_BUDGET_MEMORY (the captain's startup-memory budget).
+REGISTRY_USED_BEFORE=$DIGEST_TOTAL_BYTES
+print_registry_rows_budgeted "$DATA/projects.md" "data/projects.md" "$DIGEST_BUDGET_REGISTRY"
+REGISTRY_SPENT=$((DIGEST_TOTAL_BYTES - REGISTRY_USED_BEFORE))
+REGISTRY_REMAIN=$((DIGEST_BUDGET_REGISTRY - REGISTRY_SPENT))
+[ "$REGISTRY_REMAIN" -gt 0 ] || REGISTRY_REMAIN=0
+print_registry_rows_budgeted "$DATA/secondmates.md" "data/secondmates.md" "$REGISTRY_REMAIN"
+
+MEMORY_USED_BEFORE=$DIGEST_TOTAL_BYTES
+print_memory_file_budgeted "$DATA/captain.md" "data/captain.md" "$DIGEST_BUDGET_MEMORY"
+MEMORY_SPENT=$((DIGEST_TOTAL_BYTES - MEMORY_USED_BEFORE))
+MEMORY_REMAIN=$((DIGEST_BUDGET_MEMORY - MEMORY_SPENT))
+[ "$MEMORY_REMAIN" -gt 0 ] || MEMORY_REMAIN=0
+print_memory_file_budgeted "$DATA/captain-shared.md" \
+  "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)" \
+  "$MEMORY_REMAIN"
+MEMORY_SPENT=$((DIGEST_TOTAL_BYTES - MEMORY_USED_BEFORE))
+MEMORY_REMAIN=$((DIGEST_BUDGET_MEMORY - MEMORY_SPENT))
+[ "$MEMORY_REMAIN" -gt 0 ] || MEMORY_REMAIN=0
+print_memory_file_budgeted "$DATA/learnings.md" "data/learnings.md" "$MEMORY_REMAIN"
 
 # --- 9. closing reminder -----------------------------------------------
 stage next-step
+if [ "$DIGEST_TOTAL_BYTES" -gt "$DIGEST_CEILING_BYTES" ]; then
+  printf '\n%s\n' "$RULE"
+  printf 'DIGEST OVERSIZE: composed digest is %s bytes, over the %s-byte ceiling; sections above already disclose their own omissions - prefer targeted reads named there rather than re-reading the whole digest.\n' \
+    "$DIGEST_TOTAL_BYTES" "$DIGEST_CEILING_BYTES"
+  printf '%s\n' "$RULE"
+fi
 section "NEXT STEP"
 if [ "$READ_ONLY" -eq 1 ]; then
   cat <<'EOF'
