@@ -3200,15 +3200,16 @@ count=0
 [ ! -f "$FM_ARM_COUNT" ] || count=$(cat "$FM_ARM_COUNT")
 count=$((count + 1))
 printf '%s\n' "$count" > "$FM_ARM_COUNT"
+# Stop with the suite temp root too, so an arm started after cleanup cannot outlive it.
 late_close() {
   sleep 0.4
   printf 'signal: late registered actionable outcome\n'
-  while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+  while [ ! -e "$FM_STOP_FILE" ] && [ -d "${FM_STOP_FILE%/*}" ]; do sleep 0.02; done
   exit 0
 }
 trap late_close TERM INT
 printf 'watcher: started pid=%s\n' "$$"
-while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+while [ ! -e "$FM_STOP_FILE" ] && [ -d "${FM_STOP_FILE%/*}" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
   out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_COUNT="$count" FM_STOP_FILE="$stop" FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 node --input-type=module 2>&1 <<'EOF'
