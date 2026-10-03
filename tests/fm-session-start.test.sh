@@ -1352,7 +1352,7 @@ EOF
   assert_contains "$out" "check: budget overflow fixture 200" "wake queue was truncated after the drain presented it"
   assert_not_contains "$out" "more omitted - bin/fm-wake-drain.sh" "wake queue was post-hoc truncated"
   assert_contains "$out" "Do NOT re-read any of them after reading this digest" "read-once body missing"
-  assert_contains "$out" "more omitted - cat data/backlog.md" "backlog overflow missing"
+  assert_contains "$out" "more omitted - cat $home/data/backlog.md" "backlog overflow missing"
   assert_contains "$out" "memory-line-1000 " "captain memory head missing"
   assert_contains "$out" "more omitted - cat $home/data/captain.md" "memory overflow missing"
   assert_not_contains "$out" "memory-line-1999" "captain memory exceeded its budget"
@@ -1440,9 +1440,66 @@ EOF
 
   out=$(FM_SESSION_START_BUDGET_WORK=100 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_not_contains "$out" "id=task-a" "first work record bypassed the work-under-way budget"
-  assert_contains "$out" "1 more omitted - cat state/*.meta" "first-record overflow was not disclosed"
+  assert_contains "$out" "1 more omitted - cat $home/state/*.meta" "first-record overflow was not disclosed"
 
   pass "work-under-way budget bounds the first record, header included"
+}
+
+test_recovery_paths_follow_split_home_overrides() {
+  local rec root home fakebin data state quoted_data quoted_state out i command recovered
+  rec=$(new_world recovery-paths)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  data="$home/separate data"
+  state="$home/separate state"
+  mkdir -p "$data" "$state"
+  quoted_data=$(printf '%q' "$data")
+  quoted_state=$(printf '%q' "$state")
+  printf 'manual\n' > "$home/config/backlog-backend"
+  {
+    printf '# Backlog\n\n## Queued\n'
+    for i in $(seq 1 200); do
+      printf -- '- [ ] held-%s - Held fixture (hold: waiting on review %s)\n' "$i" "$i"
+    done
+  } > "$data/backlog.md"
+  printf 'kind=ship\n' > "$state/live.meta"
+  printf 'working: split-home tail\n' > "$state/live.status"
+  printf 'done: retired\n' > "$state/retired.status"
+
+  out=$(FM_DATA_OVERRIDE="$data" FM_STATE_OVERRIDE="$state" \
+    FM_SESSION_START_BUDGET_WORK=100 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "more omitted - cat $quoted_data/backlog.md" "backlog recovery ignored data override"
+  assert_contains "$out" "full log: $quoted_state/<id>.status" "work status header ignored state override"
+  assert_contains "$out" "1 more omitted - cat $quoted_state/*.meta" "work recovery ignored state override"
+  assert_contains "$out" "Full logs: $quoted_state/<id>.status. List: ls $quoted_state/*.status" "orphan recovery ignored state override"
+  command=$(printf '%s\n' "$out" | sed -n 's/^[0-9][0-9]* more omitted - \(cat .*backlog.md\)$/\1/p')
+  recovered=$(bash -c "$command")
+  assert_contains "$recovered" "held-200" "backlog command did not recover omitted records"
+  command=$(printf '%s\n' "$out" | sed -n 's/^1 more omitted - \(cat .*\.meta\)$/\1/p')
+  recovered=$(bash -c "$command")
+  assert_contains "$recovered" "kind=ship" "metadata command did not recover omitted records"
+
+  {
+    printf '# Backlog\n\n## Queued\n'
+    for i in $(seq 1 30); do printf -- '- [ ] ready-%s - Ready task\n' "$i"; done
+  } > "$data/backlog.md"
+  for i in $(seq 1 100); do
+    printf 'done: retired\n' > "$state/long-orphan-identity-$i.status"
+  done
+  out=$(FM_DATA_OVERRIDE="$data" FM_STATE_OVERRIDE="$state" \
+    run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "or $quoted_data/backlog.md." "ordinary backlog pointer ignored data override"
+  assert_contains "$out" "read the full file named below for the rest" "queued overflow lost its recovery pointer"
+  assert_contains "$out" "id=live kind=ship" "ordinary compact work path lost override records"
+  assert_contains "$out" "working: split-home tail" "ordinary compact work path lost status tail"
+  assert_contains "$out" "101 more omitted - ls $quoted_state/*.status" "orphan overflow ignored state override"
+  command=$(printf '%s\n' "$out" | sed -n 's/^101 more omitted - \(ls .*\.status\)$/\1/p')
+  recovered=$(bash -c "$command")
+  assert_contains "$recovered" "$state/long-orphan-identity-100.status" "orphan command did not recover omitted records"
+  pass "recovery commands follow split-home overrides and quote paths with spaces"
 }
 
 test_many_orphans_keep_digest_under_ceiling() {
@@ -3357,6 +3414,7 @@ test_hold_reason_capped_on_tasks_axi_and_manual_paths
 test_registry_rows_capped_at_line_cap
 test_work_under_way_prints_compact_identity
 test_work_under_way_budget_bounds_first_record
+test_recovery_paths_follow_split_home_overrides
 test_many_orphans_keep_digest_under_ceiling
 test_digest_section_budgets_and_complete_stdout_accounting
 test_pending_findings_surface_and_stay_silent

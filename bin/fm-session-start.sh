@@ -538,7 +538,8 @@ print_memory_file_budgeted() {
 }
 
 print_backlog_pointer() {
-  printf 'Full task bodies remain available on demand: bin/fm-tasks-axi.sh show <id> --full when compatible tasks-axi is available, or data/backlog.md.\n'
+  printf 'Full task bodies remain available on demand: bin/fm-tasks-axi.sh show <id> --full when compatible tasks-axi is available, or %s.\n' \
+    "$(printf '%q' "$DATA/backlog.md")"
 }
 
 # A queued title line whose own text already marks it held or blocked. The
@@ -663,7 +664,7 @@ print_backlog_manual_compact() {
         printf "(shown %d in-flight, %d held or blocked queued, %d of %d other queued title line(s); %d done row(s) omitted)\n", \
           in_flight, gated, plain_shown, plain_total, done_total
         if (plain_total > plain_shown) {
-          printf "(%d more queued - raise FM_SESSION_START_QUEUED_LIMIT or read data/backlog.md for the rest)\n", plain_total - plain_shown
+          printf "(%d more queued - raise FM_SESSION_START_QUEUED_LIMIT or read the full file named below for the rest)\n", plain_total - plain_shown
         }
       }
     }
@@ -751,7 +752,7 @@ print_backlog_compact() {
         print_backlog_pointer
       )
       digest_print_lines_budgeted "$DIGEST_BUDGET_BACKLOG" \
-        "cat data/backlog.md" <<< "$body"
+        "cat $(printf '%q' "$path")" <<< "$body"
     else
       printf '(present, empty)\n'
     fi
@@ -823,8 +824,8 @@ print_work_under_way() {
   subsection "Work under way (state/*.meta)"
   # Build the header without a trailing newline inside $(), which strips one;
   # print it with printf '%s\n' so the shared header stays on its own line.
-  header=$(printf 'status tails (last %s line(s) each, each capped at %s characters, wake-EVENT history, not current state; full log: state/<id>.status' \
-    "$STATUS_TAIL" "$FM_LINE_CAP_DEFAULT")
+  header=$(printf 'status tails (last %s line(s) each, each capped at %s characters, wake-EVENT history, not current state; full log: %s/<id>.status' \
+    "$STATUS_TAIL" "$FM_LINE_CAP_DEFAULT" "$(printf '%q' "$STATE")")
   printf '%s\n' "$header"
   used=$(( $(digest_count_bytes "$header") + 1 ))
   DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + used))
@@ -851,7 +852,7 @@ print_work_under_way() {
     printf '(none)\n'
   fi
   if [ "$omitted" -gt 0 ]; then
-    omit_line=$(printf '%d more omitted - cat state/*.meta\n' "$omitted")
+    omit_line=$(printf '%d more omitted - cat %s/*.meta\n' "$omitted" "$(printf '%q' "$STATE")")
     printf '%s\n' "$omit_line"
     DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + $(digest_count_bytes "$omit_line") + 1))
   fi
@@ -893,11 +894,12 @@ print_orphan_status_summary() {
   else
     body="${body}${recent}"
   fi
-  body="${body}"$(printf '\nFull logs: state/<id>.status. List: ls state/*.status\n')
+  body="${body}"$(printf '\nFull logs: %s/<id>.status. List: ls %s/*.status\n' \
+    "$(printf '%q' "$STATE")" "$(printf '%q' "$STATE")")
   bytes=$(digest_count_bytes "$body")
   if [ "$bytes" -gt "$DIGEST_BUDGET_ORPHANS" ]; then
-    body=$(printf '%d orphan status log(s) (no matching .meta). Recent ids truncated under budget.\n%d more omitted - ls state/*.status\n' \
-      "$total" "$recent_n")
+    body=$(printf '%d orphan status log(s) (no matching .meta). Recent ids truncated under budget.\n%d more omitted - ls %s/*.status\n' \
+      "$total" "$recent_n" "$(printf '%q' "$STATE")")
     bytes=$(digest_count_bytes "$body")
   fi
   printf '%s' "$body"
