@@ -1,46 +1,20 @@
-== S1 search-only call via real varlock, no approval tap, no real av ==
-$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY,TAVILY_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
-" $k "${!k:-<unset>}"; done
-EXA_API_KEY=lab-exa
-TAVILY_API_KEY=lab-tavily
-BRAVE_SEARCH_API_KEY=<unset>
-UNRELATED_VAR=<unset>
-DEEPSEEK_API_KEY=<unset>
-OP_SERVICE_ACCOUNT_TOKEN=ops_FAKE_STUB_TOKEN
+=== S1: search-only call, all five keys, no av on PATH; tool sees keys, no bearer token ===
+type -P av -> none
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY,TAVILY_API_KEY,BRAVE_SEARCH_API_KEY,LINKUP_API_KEY,PARALLEL_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY LINKUP_API_KEY PARALLEL_API_KEY; do echo "$k=${!k:+set(len ${#k})}"; done; env | grep -c "^OP_SERVICE_ACCOUNT_TOKEN=" | sed "s/^/OP_SERVICE_ACCOUNT_TOKEN lines in tool env: /"; env | grep -c "ops_" | sed "s/^/ops_ occurrences in tool env: /"
+EXA_API_KEY=set(len 11)
+TAVILY_API_KEY=set(len 14)
+BRAVE_SEARCH_API_KEY=set(len 20)
+LINKUP_API_KEY=set(len 14)
+PARALLEL_API_KEY=set(len 16)
+OP_SERVICE_ACCOUNT_TOKEN lines in tool env: 0
+ops_<REDACTED> occurrences in tool env: 0
 [exit 0]
 
-av log:
-(av never called)
-== S2 non-search key under varlock-op routes to Automic (av stub) ==
-$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
-" $k "${!k:-<unset>}"; done
-EXA_API_KEY=<unset>
-TAVILY_API_KEY=<unset>
-BRAVE_SEARCH_API_KEY=<unset>
-UNRELATED_VAR=<unset>
-DEEPSEEK_API_KEY=automic-value
-OP_SERVICE_ACCOUNT_TOKEN=<unset>
-[exit 0]
-
-av log:
-av list
-av inject +DEEPSEEK_API_KEY -- true
-av inject +DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s\n" $k "${!k:-<unset>}"; done
-== S3 mixed call: av outermost wraps real varlock ==
-$ LAB_TOKEN=ops_FAKE_STUB_TOKEN /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY,DEEPSEEK_API_KEY -- bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s
-" $k "${!k:-<unset>}"; done
-EXA_API_KEY=lab-exa
-TAVILY_API_KEY=<unset>
-BRAVE_SEARCH_API_KEY=<unset>
-UNRELATED_VAR=<unset>
-DEEPSEEK_API_KEY=automic-value
-OP_SERVICE_ACCOUNT_TOKEN=ops_FAKE_STUB_TOKEN
-[exit 0]
-
-av log:
-av list
-av inject +DEEPSEEK_API_KEY -- true
-av inject +DEEPSEEK_API_KEY -- /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.NNU7O2/lab/bin/varlock run --path /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.NNU7O2/lab/home/config/varlock --filter EXA_API_KEY -- /bin/bash -c 
+=== S2: schema omits TAVILY_API_KEY; tool must NOT run ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY,TAVILY_API_KEY -- bash -c echo TOOL-RAN
+error: varlock-op did not resolve a non-empty value for TAVILY_API_KEY
+Command failed with exit code 1
+command [/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/tmp.iXk0EsGYep/bash -c 
     count=$1
     shift
     for ((i = 0; i < count; i++)); do
@@ -51,15 +25,67 @@ av inject +DEEPSEEK_API_KEY -- /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/
         exit 1
       fi
     done
+    unset OP_SERVICE_ACCOUNT_TOKEN
     exec "$@"
-   fm-varlock-op 1 EXA_API_KEY bash -c for k in EXA_API_KEY TAVILY_API_KEY BRAVE_SEARCH_API_KEY UNRELATED_VAR DEEPSEEK_API_KEY OP_SERVICE_ACCOUNT_TOKEN; do printf "%s=%s\n" $k "${!k:-<unset>}"; done
-== S4 missing keychain token refuses, tool not run ==
-$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
-error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/secret-backend to automic
+   fm-varlock-op 2 EXA_API_KEY TAVILY_API_KEY bash -c echo TOOL-RAN] failed
+try running the same command without varlock
+if you get a different result, varlock may be the problem...
 [exit 1]
 
-== S5 malformed token refuses, value not echoed ==
-$ LAB_TOKEN=not-a-real-token /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M3ZZT4K14BG5ZBWTRGFMQ8C3/bin/fm-av-run.sh EXA_API_KEY -- echo TOOL-RAN
-error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_ token there or set config/secret-backend to automic
+=== S3: non-allowlisted key alone under varlock-op stays on Automic (av absent -> Automic refusal, varlock never used) ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh DEEPSEEK_API_KEY -- bash -c echo TOOL-RAN
+error: the 'av' CLI (Automic Vault) was not found on PATH; install Automic Vault or set config/av-inject to off
+[exit 1]
+
+=== S3b: mixed call with av absent refuses on Automic requirement, tool not run ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY,DEEPSEEK_API_KEY -- bash -c echo TOOL-RAN
+error: the 'av' CLI (Automic Vault) was not found on PATH; install Automic Vault or set config/av-inject to off
+[exit 1]
+
+=== S4: missing keychain token / malformed token refuse, tool not run ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_<REDACTED> token there or set config/secret-backend to automic
+[exit 1]
+
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: no usable service-account token in the keychain item 'firstmate-rapid-recon' (account OP_SERVICE_ACCOUNT_TOKEN); store the ops_<REDACTED> token there or set config/secret-backend to automic
+[exit 1]
+
+=== S5: well-formed but bad ops_ token rejected by real varlock + 1Password plugin; tool not run ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+SYNCHRONOUS TERMINATION NOTICE: When explicitly exiting the process via process.exit or via a parent process, asynchronous tasks in your exitHooks will not run. Either remove these tasks, use gracefulExit() instead of process.exit(), or ensure your parent process sends a SIGINT to the process running this code.
+<anonymous_script>:971
+			default: throw new Error(err.message);
+			               ^
+
+Error: invalid service account token, please make sure you provide a valid service account token as parameter:  service account deserialization failed, please create another token
+    at throwError (eval at loadPluginModuleCJS (file:///private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.S5y8SZ/node_modules/varlock/dist/env-graph-DBpUXve5.mjs:624:19), <anonymous>:971:19)
+    at WasmCore.eval (eval at loadPluginModuleCJS (file:///private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.S5y8SZ/node_modules/varlock/dist/env-graph-DBpUXve5.mjs:624:19), <anonymous>:1018:30)
+    at Generator.throw (<anonymous>)
+    at rejected (eval at loadPluginModuleCJS (file:///private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-vl.S5y8SZ/node_modules/varlock/dist/env-graph-DBpUXve5.mjs:624:19), <anonymous>:995:29)
+
+Node.js v26.3.0
+[exit 1]
+
+=== S6: backend selection: typo refuses with diagnostic; absent file = automic (needs av) ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: unknown secret backend 'varlok-op'; config/secret-backend must be automic or varlock-op
+[exit 1]
+
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: unknown secret backend 'VARLOCK-OP'; config/secret-backend must be automic or varlock-op
+[exit 1]
+
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: the 'av' CLI (Automic Vault) was not found on PATH; install Automic Vault or set config/av-inject to off
+[exit 1]
+
+=== S7: missing schema / missing varlock refuse ===
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: no varlock schema at <LAB>/config/varlock/.env.schema; create it per docs/configuration.md "Secret backend"
+[exit 1]
+
+$ /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M41ZZ98D3DYE1BQSCQTN0AKE/bin/fm-av-run.sh EXA_API_KEY -- bash -c echo TOOL-RAN
+error: the 'varlock' CLI was not found on PATH; install varlock or set config/secret-backend to automic
 [exit 1]
 
