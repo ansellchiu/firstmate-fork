@@ -61,10 +61,17 @@ case "$GENERATION" in ''|*[!0-9]*) die "generation must be a positive integer" ;
 HOME_REAL=$(CDPATH='' cd -- "$FM_HOME" 2>/dev/null && pwd -P) || die "FM_HOME is unavailable"
 PARENT="$HOME_REAL/$(dirname "$REL")"
 # The captain accepts this config/data parent TOCTOU within Firstmate's single-user trust boundary.
-[ ! -L "$PARENT" ] || die "inherited destination parent is a symlink"
+ANCESTOR=$PARENT
+while [ "$ANCESTOR" != "$HOME_REAL" ]; do
+  [ ! -L "$ANCESTOR" ] || die "inherited destination parent is a symlink"
+  if [ -e "$ANCESTOR" ]; then
+    [ -d "$ANCESTOR" ] || die "inherited destination parent is not a directory"
+  fi
+  ANCESTOR=$(dirname "$ANCESTOR")
+done
 mkdir -p "$PARENT" || die "cannot create inherited destination parent"
 PARENT_REAL=$(CDPATH='' cd -- "$PARENT" && pwd -P)
-case "$PARENT_REAL" in "$HOME_REAL/config"|"$HOME_REAL/data") ;; *) die "inherited destination escapes FM_HOME" ;; esac
+[ "$PARENT_REAL" = "$PARENT" ] || die "inherited destination escapes FM_HOME"
 DEST="$PARENT_REAL/$(basename "$REL")"
 [ ! -L "$DEST" ] || die "inherited destination is a symlink"
 if [ -e "$DEST" ]; then
