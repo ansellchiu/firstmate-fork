@@ -240,7 +240,8 @@ The wrapper reads `source` from the hook payload.
 Native stdout context injection is supported.
 Observed on Claude Code 2.1.273, 2.1.274, and 2.1.288: when SessionStart hook output exceeds about 10,000 characters, the model receives a roughly 2 KB preview plus a persisted full-output file rather than the whole digest inline.
 That limit is observed behavior, not an authoritative documented ceiling.
-`bin/fm-session-start.sh` therefore emits a compact FIRST CONTEXT block under 2,000 bytes as its first output, ahead of the SESSION START header, so captain identity, communication preferences, and the imperative to read the saved full digest survive that preview.
+`bin/fm-session-start.sh` therefore emits a compact FIRST CONTEXT block under 2,000 bytes as its first output, ahead of the SESSION START header, so the imperative to read the saved full digest and the captain's `# Identity` section survive that preview.
+Identity takes all remaining budget; `# Communication preferences` get only what is left, and any truncated section ends at a line boundary with a pointer to its source file.
 
 The full digest retains FLEET STATE and NETWORK CHECKS before CONTEXT so curated memory absorbs tail truncation.
 
