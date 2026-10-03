@@ -319,26 +319,40 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
     # is lost, so the child still runs bounded.
     SESSION_START_STAGE_FILE=/dev/null
   fi
-  if [ "$REEMIT" -eq 1 ]; then
-    if [ -n "$SESSION_SOURCE" ]; then
+  SESSION_START_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/fm-session-start-output.XXXXXX") || {
+    printf 'STARTUP TRUNCATED - unable to allocate digest byte counter.\n'
+    exit 0
+  }
+  {
+    if [ "$REEMIT" -eq 1 ]; then
+      if [ -n "$SESSION_SOURCE" ]; then
+        fm_run_timed "$SESSION_START_BUDGET" \
+          env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
+          "$SCRIPT_DIR/fm-session-start.sh" --reemit --source "$SESSION_SOURCE"
+      else
+        fm_run_timed "$SESSION_START_BUDGET" \
+          env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
+          "$SCRIPT_DIR/fm-session-start.sh" --reemit
+      fi
+    elif [ -n "$SESSION_SOURCE" ]; then
       fm_run_timed "$SESSION_START_BUDGET" \
         env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-        "$SCRIPT_DIR/fm-session-start.sh" --reemit --source "$SESSION_SOURCE"
+        "$SCRIPT_DIR/fm-session-start.sh" --source "$SESSION_SOURCE"
     else
       fm_run_timed "$SESSION_START_BUDGET" \
         env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-        "$SCRIPT_DIR/fm-session-start.sh" --reemit
+        "$SCRIPT_DIR/fm-session-start.sh"
     fi
-  elif [ -n "$SESSION_SOURCE" ]; then
-    fm_run_timed "$SESSION_START_BUDGET" \
-      env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-      "$SCRIPT_DIR/fm-session-start.sh" --source "$SESSION_SOURCE"
-  else
-    fm_run_timed "$SESSION_START_BUDGET" \
-      env FM_SESSION_START_STAGE_FILE="$SESSION_START_STAGE_FILE" \
-      "$SCRIPT_DIR/fm-session-start.sh"
+  } | tee "$SESSION_START_OUTPUT"
+  SESSION_START_RC=${PIPESTATUS[0]}
+  DIGEST_TOTAL_BYTES=$(wc -c < "$SESSION_START_OUTPUT" | tr -d ' ')
+  rm -f "$SESSION_START_OUTPUT"
+  DIGEST_CEILING_BYTES=${FM_SESSION_START_DIGEST_CEILING:-65536}
+  case "$DIGEST_CEILING_BYTES" in ''|*[!0-9]*|0) DIGEST_CEILING_BYTES=65536 ;; esac
+  if [ "$DIGEST_TOTAL_BYTES" -gt "$DIGEST_CEILING_BYTES" ]; then
+    printf '\nDIGEST OVERSIZE: composed digest is %s bytes, over the %s-byte ceiling; prefer targeted reads named above rather than re-reading the whole digest.\n' \
+      "$DIGEST_TOTAL_BYTES" "$DIGEST_CEILING_BYTES"
   fi
-  SESSION_START_RC=$?
   # ANY nonzero child exit is a truncation: the banner contract promises that
   # a stage that cannot print is named. Exit 124 is the bound firing; any
   # other status means the child died or was killed mid-stage, which truncates
@@ -421,17 +435,14 @@ BACKLOG_FIELDS=blocked_by,hold_kind,hold_reason
 
 # Whole-digest byte budget (J4 ceiling column). Per-section overflow discloses
 # with "N more omitted - <command>"; DIGEST_CEILING_BYTES banners the total.
-DIGEST_CEILING_BYTES=${FM_SESSION_START_DIGEST_CEILING:-65536}
-case "$DIGEST_CEILING_BYTES" in ''|*[!0-9]*|0) DIGEST_CEILING_BYTES=65536 ;; esac
 DIGEST_BUDGET_WAKE=${FM_SESSION_START_BUDGET_WAKE:-6144}
-DIGEST_BUDGET_SUPERVISION=${FM_SESSION_START_BUDGET_SUPERVISION:-8704}
 DIGEST_BUDGET_READ_ONCE=${FM_SESSION_START_BUDGET_READ_ONCE:-1536}
 DIGEST_BUDGET_BACKLOG=${FM_SESSION_START_BUDGET_BACKLOG:-6144}
 DIGEST_BUDGET_WORK=${FM_SESSION_START_BUDGET_WORK:-10240}
 DIGEST_BUDGET_ORPHANS=${FM_SESSION_START_BUDGET_ORPHANS:-1024}
 DIGEST_BUDGET_REGISTRY=${FM_SESSION_START_BUDGET_REGISTRY:-4096}
 DIGEST_BUDGET_MEMORY=${FM_SESSION_START_BUDGET_MEMORY:-23040}
-for _digest_budget in DIGEST_BUDGET_WAKE DIGEST_BUDGET_SUPERVISION DIGEST_BUDGET_READ_ONCE \
+for _digest_budget in DIGEST_BUDGET_WAKE DIGEST_BUDGET_READ_ONCE \
   DIGEST_BUDGET_BACKLOG DIGEST_BUDGET_WORK DIGEST_BUDGET_ORPHANS DIGEST_BUDGET_REGISTRY \
   DIGEST_BUDGET_MEMORY; do
   case "${!_digest_budget}" in ''|*[!0-9]*|0) eval "$_digest_budget=1024" ;; esac
@@ -465,33 +476,26 @@ digest_count_bytes() {
 # digest_print_lines_budgeted <budget> <omit_command>: print stdin lines while
 # under <budget> bytes; then disclose how many whole lines were omitted.
 digest_print_lines_budgeted() {
-  local budget=$1 omit_cmd=$2 line used=0 omitted=0 bytes omit_line cap_max
+  local budget=$1 omit_cmd=$2 line used=0 omitted=0 bytes omit_line LC_ALL=C
   if [ "$budget" -le 0 ] 2>/dev/null; then
     while IFS= read -r line || [ -n "$line" ]; do
       omitted=$((omitted + 1))
     done
     if [ "$omitted" -gt 0 ]; then
       omit_line=$(printf '%d more omitted - %s\n' "$omitted" "$omit_cmd")
-      printf '%s' "$omit_line"
-      DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line}))
+      printf '%s\n' "$omit_line"
+      DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line} + 1))
     fi
     return 0
   fi
   while IFS= read -r line || [ -n "$line" ]; do
     bytes=$(( ${#line} + 1 ))
-    if [ "$used" -gt 0 ] && [ $((used + bytes)) -gt "$budget" ]; then
+    if [ $((used + bytes)) -gt "$budget" ]; then
       omitted=$((omitted + 1))
       while IFS= read -r line || [ -n "$line" ]; do
         omitted=$((omitted + 1))
       done
       break
-    fi
-    if [ "$used" -eq 0 ] && [ "$bytes" -gt "$budget" ]; then
-      cap_max=$((budget - 1))
-      [ "$cap_max" -gt 0 ] || cap_max=1
-      fm_cap_line_var "$line" "$cap_max"
-      line=$FM_LINE_CAP_LINE
-      bytes=$(( ${#line} + 1 ))
     fi
     printf '%s\n' "$line"
     used=$((used + bytes))
@@ -499,8 +503,8 @@ digest_print_lines_budgeted() {
   DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + used))
   if [ "$omitted" -gt 0 ]; then
     omit_line=$(printf '%d more omitted - %s\n' "$omitted" "$omit_cmd")
-    printf '%s' "$omit_line"
-    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line}))
+    printf '%s\n' "$omit_line"
+    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line} + 1))
   fi
 }
 
@@ -522,7 +526,7 @@ print_registry_rows_budgeted() {
     fm_cap_line_var "$line"
     body+="$FM_LINE_CAP_LINE"$'\n'
   done < "$path"
-  printf '%s' "$body" | digest_print_lines_budgeted "$budget" "cat $path"
+  digest_print_lines_budgeted "$budget" "cat $path" <<< "${body%$'\n'}"
 }
 
 # print_memory_file_budgeted <path> <label> <budget>: full file under budget.
@@ -566,8 +570,8 @@ cap_manual_hold_reason_line() {
       suffix=') (hold-kind:'${rest#*') (hold-kind:'}
       ;;
     *')'*)
-      reason=${rest%%')'*}
-      suffix=')'${rest#*')'}
+      reason=${rest%')'*}
+      suffix=')'${rest##*')'}
       ;;
     *)
       printf '%s\n' "$line"
@@ -753,8 +757,8 @@ print_backlog_compact() {
         fi
         print_backlog_pointer
       )
-      printf '%s\n' "$body" | digest_print_lines_budgeted "$DIGEST_BUDGET_BACKLOG" \
-        "bin/fm-tasks-axi.sh list --file data/backlog.md / cat data/backlog.md"
+      digest_print_lines_budgeted "$DIGEST_BUDGET_BACKLOG" \
+        "bin/fm-tasks-axi.sh list --file data/backlog.md / cat data/backlog.md" <<< "$body"
     else
       printf '(present, empty)\n'
     fi
@@ -829,7 +833,7 @@ print_work_under_way() {
   header=$(printf 'status tails (last %s line(s) each, each capped at %s characters, wake-EVENT history, not current state; full log: state/<id>.status' \
     "$STATUS_TAIL" "$FM_LINE_CAP_DEFAULT")
   printf '%s\n' "$header"
-  used=$(( ${#header} + 1 ))
+  used=$(( $(digest_count_bytes "$header") + 1 ))
   DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + used))
 
   for meta in "$STATE"/*.meta; do
@@ -855,8 +859,8 @@ print_work_under_way() {
   fi
   if [ "$omitted" -gt 0 ]; then
     omit_line=$(printf '%d more omitted - ls state/*.meta; bin/fm-crew-state.sh\n' "$omitted")
-    printf '%s' "$omit_line"
-    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + ${#omit_line}))
+    printf '%s\n' "$omit_line"
+    DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + $(digest_count_bytes "$omit_line") + 1))
   fi
 }
 
@@ -1129,8 +1133,8 @@ else
   fi
   DRAIN_OUT=$("$SCRIPT_DIR/fm-wake-drain.sh" 2>&1)
   if [ -n "$DRAIN_OUT" ]; then
-    printf '%s\n' "$DRAIN_OUT" | digest_print_lines_budgeted "$DIGEST_BUDGET_WAKE" \
-      "bin/fm-wake-drain.sh"
+    digest_print_lines_budgeted "$DIGEST_BUDGET_WAKE" \
+      "bin/fm-wake-drain.sh" <<< "$DRAIN_OUT"
   else
     printf '(no queued wakes)\n'
   fi
@@ -1185,8 +1189,7 @@ SUPERVISION_BODY=$("$SCRIPT_DIR/fm-supervision-instructions.sh" \
   --afk "$AFK_PRESENT" \
   --afk-mode "$AFK_MODE" \
   --x-mode "$X_MODE_PRESENT")
-printf '%s\n' "$SUPERVISION_BODY" | digest_print_lines_budgeted "$DIGEST_BUDGET_SUPERVISION" \
-  "bin/fm-supervision-instructions.sh --harness $PRIMARY_HARNESS"
+printf '%s\n' "$SUPERVISION_BODY"
 
 # --- 5. read-once contract -------------------------------------------------
 # Ahead of the two digests it governs, not after them: a truncated tail is
@@ -1221,8 +1224,8 @@ Go to a source directly only when:
     which case that stage's sources were never emitted and must be reconciled.
 EOF
 )
-printf '%s\n' "$READ_ONCE_BODY" | digest_print_lines_budgeted "$DIGEST_BUDGET_READ_ONCE" \
-  "sed -n '/READ-ONCE CONTRACT/,/^====/p' from bin/fm-session-start.sh"
+digest_print_lines_budgeted "$DIGEST_BUDGET_READ_ONCE" \
+  "sed -n '/READ-ONCE CONTRACT/,/^====/p' from bin/fm-session-start.sh" <<< "$READ_ONCE_BODY"
 
 # --- 6. fleet-state digest ---------------------------------------------
 # Before CONTEXT: see this file's ORDERING note. Live fleet identity is what a
@@ -1379,12 +1382,6 @@ print_memory_file_budgeted "$DATA/learnings.md" "data/learnings.md" "$MEMORY_REM
 
 # --- 9. closing reminder -----------------------------------------------
 stage next-step
-if [ "$DIGEST_TOTAL_BYTES" -gt "$DIGEST_CEILING_BYTES" ]; then
-  printf '\n%s\n' "$RULE"
-  printf 'DIGEST OVERSIZE: composed digest is %s bytes, over the %s-byte ceiling; sections above already disclose their own omissions - prefer targeted reads named there rather than re-reading the whole digest.\n' \
-    "$DIGEST_TOTAL_BYTES" "$DIGEST_CEILING_BYTES"
-  printf '%s\n' "$RULE"
-fi
 section "NEXT STEP"
 if [ "$READ_ONLY" -eq 1 ]; then
   cat <<'EOF'

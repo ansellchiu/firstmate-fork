@@ -1267,7 +1267,7 @@ EOF
 }
 
 test_hold_reason_capped_on_tasks_axi_and_manual_paths() {
-  local rec root home fakebin out line longest
+  local rec root home fakebin out line long_hold id reason
   rec=$(new_world hold-reason-cap)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1293,12 +1293,17 @@ EOF
   long_hold=$(awk 'BEGIN { printf "essay"; while (i++ < 80) printf " padding-word" }')
   {
     printf '# Backlog\n\n## Queued\n'
-    printf -- '- [ ] essay-hold - Essay hold (repo: firstmate) (kind: ship) (hold: %s) (hold-kind: captain)\n' \
+    printf -- '- [ ] essay-hold - Essay hold (repo: firstmate) (kind: ship) (hold: waiting on PR (#12) %s) (hold-kind: captain)\n' \
       "$long_hold"
+    printf -- '- [ ] nested-held - Held (hold: waiting on PR (#12) %s)\n' "$long_hold"
+    printf '\n## In flight\n'
+    printf -- '- [ ] nested-flight - Flight (hold: waiting on PR (#12) %s)\n' "$long_hold"
+    printf '\n## Queued\n'
+    printf -- '- [ ] nested-blocked - Blocked (blocked-by: dependency) (hold: waiting on PR (#12) %s)\n' "$long_hold"
   } > "$home/data/backlog.md"
   printf '%s\n' manual > "$home/config/backlog-backend"
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_contains "$out" "(hold: essay" "manual path dropped the hold marker"
+  assert_contains "$out" "(hold: waiting on PR (#12)" "manual path dropped the hold marker"
   assert_contains "$out" " [truncated]" "manual hold_reason was not capped"
   line=$(printf '%s\n' "$out" | grep -F 'essay-hold' | head -1)
   case "$line" in
@@ -1306,7 +1311,56 @@ EOF
     *) fail "manual hold_reason was not capped inside (hold: ...): $line" ;;
   esac
 
+  for id in nested-held nested-flight nested-blocked; do
+    line=$(printf '%s\n' "$out" | grep -F "$id" | head -1)
+    assert_contains "$line" "[truncated])" "nested-parenthesis hold cap missing for $id"
+    reason=${line#*'(hold: '}
+    reason=${reason%')'}
+    [ "${#reason}" -le 220 ] || fail "$id hold reason exceeded 220 characters"
+  done
   pass "hold_reason is capped at 220 characters on tasks-axi and manual backlog paths"
+}
+
+test_digest_section_budgets_and_complete_stdout_accounting() {
+  local rec root home fakebin out expected prefix measured reported
+  rec=$(new_world digest-budget-accounting)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+  printf 'manual\n' > "$home/config/backlog-backend"
+  printf '# Backlog\n\n## Queued\n- [ ] budget-task - Task\n' > "$home/data/backlog.md"
+  printf '界界\n界界\n界界\n' > "$home/data/projects.md"
+  printf 'secondmate-row\n' > "$home/data/secondmates.md"
+  printf 'memory-row\n' > "$home/data/captain.md"
+  append_wake "$home/state" signal budget-task "check: budget overflow fixture" || fail "seed wake failed"
+  out=$(FM_FAKE_HARNESS=pi LC_ALL=en_US.UTF-8 \
+    FM_SESSION_START_BUDGET_REGISTRY=14 FM_SESSION_START_BUDGET_MEMORY=1 \
+    FM_SESSION_START_BUDGET_BACKLOG=1 FM_SESSION_START_BUDGET_READ_ONCE=1 \
+    FM_SESSION_START_BUDGET_WAKE=1 FM_SESSION_START_BUDGET_SUPERVISION=1 \
+    FM_SESSION_START_DIGEST_CEILING=100 \
+    run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  [ "$(printf '%s\n' "$out" | grep -c '^界界$')" -eq 2 ] \
+    || fail "registry budget counted characters instead of bytes"
+  assert_contains "$out" "1 more omitted - cat $home/data/projects.md" "project overflow missing"
+  assert_contains "$out" "1 more omitted - cat $home/data/secondmates.md" "registry spend was lost between files"
+  assert_not_contains "$out" "secondmate-row" "secondmate registry exceeded shared budget"
+  assert_contains "$out" "more omitted - bin/fm-wake-drain.sh" "wake overflow missing"
+  assert_contains "$out" "more omitted - sed -n" "read-once overflow missing"
+  assert_contains "$out" "more omitted - bin/fm-tasks-axi.sh list" "backlog overflow missing"
+  assert_contains "$out" "more omitted - cat $home/data/captain.md" "memory overflow missing"
+  assert_not_contains "$out" "memory-row" "oversized first memory line leaked"
+  expected=$(FM_ROOT_OVERRIDE="$root" FM_HOME="$home" \
+    "$ROOT/bin/fm-supervision-instructions.sh" --harness pi --read-only 0 --afk 0 --afk-mode away --x-mode 0)
+  assert_contains "$out" "$expected" "supervision operating block was truncated or changed"
+  assert_contains "$out" "DIGEST OVERSIZE:" "lowered whole-digest ceiling did not trigger banner"
+  prefix=${out%$'\nDIGEST OVERSIZE:'*}
+  measured=$(printf '%s' "$prefix" | wc -c | tr -d ' ')
+  reported=$(printf '%s\n' "$out" | sed -n 's/^DIGEST OVERSIZE: composed digest is \([0-9]*\) bytes.*/\1/p')
+  [ "$reported" -eq "$measured" ] \
+    || fail "whole-digest count $reported differs from emitted stdout $measured"
+  pass "byte budgets share spending, disclose overflow, and preserve supervision"
 }
 
 test_registry_rows_capped_at_line_cap() {
@@ -3261,6 +3315,7 @@ test_hold_reason_capped_on_tasks_axi_and_manual_paths
 test_registry_rows_capped_at_line_cap
 test_work_under_way_prints_compact_identity
 test_many_orphans_keep_digest_under_ceiling
+test_digest_section_budgets_and_complete_stdout_accounting
 test_pending_findings_surface_and_stay_silent
 test_endpoint_liveness_tmux
 test_endpoint_liveness_herdr
