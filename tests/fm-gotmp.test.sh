@@ -227,14 +227,10 @@ fm_tasks_axi_backend_available() { return 1; }
 fm_tasks_axi_compatible() { return 1; }
 fm_backlog_backend_manual() { return 1; }
 SH
-  ln -s "$ROOT/bin/fm-backlog-transition-lib.sh" "$fake/bin/fm-backlog-transition-lib.sh"
-  # fm-receipt.sh: teardown's completion-receipt gate and archive for a ship task.
-  # fm-dod-lib.sh is the captain-intent reader fm-receipt.sh sources at load
-  # time, so without it the gate cannot read a receipt that is sitting right there.
-  ln -s "$ROOT/bin/fm-receipt.sh" "$fake/bin/fm-receipt.sh"
-  ln -s "$ROOT/bin/fm-dod-lib.sh" "$fake/bin/fm-dod-lib.sh"
-  # fm-findings-lib.sh: teardown sources it for the incidental-findings checkpoint.
-  ln -s "$ROOT/bin/fm-findings-lib.sh" "$fake/bin/fm-findings-lib.sh"
+  # Every other real sibling teardown sources, as make_fake_root links them.
+  for f in "$ROOT/bin/"*; do
+    [ -e "$fake/bin/${f##*/}" ] || ln -s "$f" "$fake/bin/${f##*/}"
+  done
   # No tasktmp= line at all.
   cat > "$fake/state/$id.meta" <<META
 window=fakeses:fm-$id

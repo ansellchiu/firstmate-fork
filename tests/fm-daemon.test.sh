@@ -2523,7 +2523,7 @@ test_wedge_circuit_breaker_skips_retyping_unchanged_digest() {
   PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
     FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
     FM_ESCALATE_BATCH_SECS=99999 FM_MAX_DEFER_SECS=60 housekeeping "$state"
-  count1=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  count1=$(delivered_digest "$sent" 2>/dev/null | grep -c 'Supervisor escalate' || true)
   [ "$count1" -eq 1 ] || fail "first tick should type the digest exactly once, typed $count1"
   [ -s "$state/.subsuper-inject-wedged" ] || fail "first tick did not raise the wedge alarm"
   [ -s "$state/.subsuper-inject-wedged.count" ] || fail "first tick did not snapshot the wedged buffer's line count"
@@ -2539,7 +2539,7 @@ test_wedge_circuit_breaker_skips_retyping_unchanged_digest() {
   PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
     FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
     FM_ESCALATE_BATCH_SECS=1 FM_MAX_DEFER_SECS=60 housekeeping "$state"
-  count2=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  count2=$(delivered_digest "$sent" 2>/dev/null | grep -c 'Supervisor escalate' || true)
   [ "$count2" -eq 1 ] || fail "housekeeping retyped an unchanged, already-alarmed digest on later ticks, typed $count2 time(s)"
   [ -s "$state/.subsuper-escalations" ] || fail "buffer lost while wedged (must survive untouched for catch-up)"
   [ -s "$state/.subsuper-inject-wedged" ] || fail "wedge marker lost on a later tick"
@@ -2559,7 +2559,7 @@ test_wedge_circuit_breaker_flushes_a_new_escalation_after_the_alarm() {
   PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
     FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
     FM_ESCALATE_BATCH_SECS=99999 FM_MAX_DEFER_SECS=60 housekeeping "$state"
-  count1=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  count1=$(delivered_digest "$sent" 2>/dev/null | grep -c 'Supervisor escalate' || true)
   [ "$count1" -eq 1 ] || fail "first tick should type the digest exactly once, typed $count1"
   printf '╭─────╮\n│ >   │\n╰─────╯\n' > "$dir/composer"
   # A genuinely new escalation arrives while wedged: it must still flush
@@ -2569,9 +2569,9 @@ test_wedge_circuit_breaker_flushes_a_new_escalation_after_the_alarm() {
   PATH="$fakebin:$PATH" FM_FAKE_COMPOSER="$dir/composer" FM_FAKE_SENT="$sent" \
     FM_FAKE_SWALLOW="$dir/.swallow" FM_FAKE_PERSIST_SWALLOW=1 FM_INJECT_CONFIRM_SLEEP=0.05 \
     FM_ESCALATE_BATCH_SECS=1 FM_MAX_DEFER_SECS=60 housekeeping "$state"
-  count2=$(grep -c 'Supervisor escalate' "$sent" 2>/dev/null || true)
+  count2=$(delivered_digest "$sent" 2>/dev/null | grep -c 'Supervisor escalate' || true)
   [ "$count2" -eq 2 ] || fail "a new escalation appended after the alarm must still flush normally, typed $count2 time(s) total"
-  grep -q 'needs-decision: pick A | done: PR https://x/y/pull/3' "$sent" \
+  delivered_digest "$sent" 2>/dev/null | grep -q 'needs-decision: pick A | done: PR https://x/y/pull/3' \
     || fail "the retyped digest after a new escalation should include BOTH the original and the new item, sent: $(cat "$sent")"
   pass "housekeeping's circuit breaker still flushes normally once a new escalation is appended after the alarm"
 }

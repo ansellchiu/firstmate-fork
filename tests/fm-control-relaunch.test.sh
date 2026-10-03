@@ -1993,7 +1993,10 @@ case "${1:-} ${2:-}" in
   'pane process-info')
     # A retained registration with a shell-only pane models an exited agent
     # whose Herdr status authority still belongs to its previous session.
-    if [ -f "$D/herdr-agent-registration" ]; then
+    if [ -f "$D/herdr-agent-live" ]; then
+      printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[{"pid":4243,"name":"pi","argv":["pi"],"cmdline":"pi"}]}}}\n' \
+        "$(cat "$D/herdr-pane")"
+    elif [ -f "$D/herdr-agent-registration" ]; then
       printf '{"result":{"type":"pane_process_info","process_info":{"pane_id":"%s","shell_pid":4242,"foreground_processes":[]}}}\n' \
         "$(cat "$D/herdr-pane")"
     else
@@ -2125,7 +2128,7 @@ test_herdr_relaunch_resumes_only_the_registered_pi_session() {
     }
     dir=$HERDR_CASE_DIR
     rm -f "$dir/fake/herdr-stopped"
-    sed -i 's/^harness=claude$/harness=pi/' "$dir/home/state/resume-$registered.meta"
+    sed -i.bak 's/^harness=claude$/harness=pi/' "$dir/home/state/resume-$registered.meta" && rm -f "$dir/home/state/resume-$registered.meta.bak"
     # Keep the pane's status authority registered to an existing Pi session,
     # while process-info proves that its previous agent has exited.
     printf '{"result":{"agent":{"agent":"%s","agent_status":"idle","agent_session":{"kind":"path","value":"/tmp/pi-bound-session.jsonl"}}}}\n' \
