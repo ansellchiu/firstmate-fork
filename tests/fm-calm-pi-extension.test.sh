@@ -29,7 +29,20 @@ TMUX_SESSION="fm-calm-e2e"
 record_pi_version_evidence() {
   local version=$1 context=$2
   [ -n "$version" ] || fail "$context could not determine the installed Pi version"
+  PI_VERSION_EVIDENCE="$context on Pi $version"
 }
+
+# Every red names the Pi that produced it, bounded to one line, so a real drift failure
+# is never mistaken for a rendering assertion against some other Pi generation.
+PI_VERSION_EVIDENCE=
+fail() {
+  printf 'not ok - %s\n' "$1" >&2
+  [ -z "$PI_VERSION_EVIDENCE" ] || printf 'pi-version-evidence: %.160s\n' "$PI_VERSION_EVIDENCE" >&2
+  exit 1
+}
+if command -v pi >/dev/null 2>&1; then
+  PI_VERSION_EVIDENCE="installed Pi $(pi --version 2>/dev/null | head -1)"
+fi
 
 cleanup() {
   if command -v tmux >/dev/null 2>&1; then
@@ -3947,7 +3960,7 @@ SH
 }
 
 test_interactive_terminal_e2e() {
-  local project config home session_file export_file export_dom default_snapshot expanded_snapshot hidden_snapshot active_before_snapshot active_hidden_snapshot export_snapshot export_settled_snapshot restored_snapshot working_snapshot working_response_snapshot restarted_snapshot resumed_restored_snapshot hash_before hash_after now version chrome chrome_report active_wait active_screen_wait boat_frame_one boat_frame_two boat_resized_snapshot boat_focus_snapshot boat_cleared_snapshot boat_hull_line boat_sail_line boat_column_one boat_column_two boat_line boat_color_snapshot boat_color_line boat_water_snapshot boat_water_line boat_water_first boat_water_changed boat_narrow_snapshot boat_freeze_snapshot boat_resume_snapshot boat_freeze_column boat_freeze_sail boat_resume_column boat_resume_sail
+  local calm_stderr expansion_anchor project config home session_file export_file export_dom default_snapshot expanded_snapshot hidden_snapshot active_before_snapshot active_hidden_snapshot export_snapshot export_settled_snapshot restored_snapshot working_snapshot working_response_snapshot restarted_snapshot resumed_restored_snapshot hash_before hash_after now version chrome chrome_report active_wait active_screen_wait boat_frame_one boat_frame_two boat_resized_snapshot boat_focus_snapshot boat_cleared_snapshot boat_hull_line boat_sail_line boat_column_one boat_column_two boat_line boat_color_snapshot boat_color_line boat_water_snapshot boat_water_line boat_water_first boat_water_changed boat_narrow_snapshot boat_freeze_snapshot boat_resume_snapshot boat_freeze_column boat_freeze_sail boat_resume_column boat_resume_sail
   if ! command -v pi >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1; then
     echo "skip: pi or tmux not found for Pi calm interactive E2E"
     return 0
@@ -4194,8 +4207,33 @@ TS
 {"type":"message","id":"a0000016","parentId":"a0000015","timestamp":"$now","message":{"role":"assistant","content":[{"type":"text","text":"The deterministic tool example is complete."}],"api":"anthropic-messages","provider":"anthropic","model":"claude-sonnet-4-5","usage":{"input":2,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":3,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":16}}
 JSON
 
-  tmux -L "$TMUX_SOCKET" new-session -d -s "$TMUX_SESSION" -x 180 -y 44 \
-    "cd '$project' && env FM_HOME='$home' PI_CODING_AGENT_DIR='$config' FM_OPERATIONAL_INPUT_SCRIPT='$OPERATIONAL_INPUT' PI_OFFLINE=1 pi --approve --no-skills --no-prompt-templates --no-context-files --session '$session_file'; rc=\$?; printf '\nPI_EXIT=%s\n' \"\$rc\"; sleep 30"
+  # FM_CALM_E2E_DEGRADE=collapsed-thinking forces that one patched Pi API to be absent
+  # in the launched Pi, to show the suite reports the adapter degraded alone.
+  if [ "${FM_CALM_E2E_DEGRADE:-}" = collapsed-thinking ]; then
+    # Loads before fm-calm.ts and goes through the same package import Calm uses, so it
+    # blinds the exact Pi instance Calm probes, bundled or not.
+    cat >"$project/.pi/extensions/fm-calm-e2e-degrade.ts" <<'TS'
+import { AssistantMessageComponent } from "@earendil-works/pi-coding-agent";
+
+// Calm's adapter probes this property once at install; hide it from that one read so the
+// adapter sees the API as absent while Pi itself keeps rendering with the real method.
+const proto = AssistantMessageComponent.prototype;
+const real = proto.updateContent;
+let reads = 0;
+Object.defineProperty(proto, "updateContent", {
+  configurable: true,
+  get: () => (reads++ === 0 ? undefined : real),
+});
+
+export default function () {}
+TS
+  elif [ -n "${FM_CALM_E2E_DEGRADE:-}" ]; then
+    fail "unknown FM_CALM_E2E_DEGRADE adapter: $FM_CALM_E2E_DEGRADE"
+  fi
+  calm_stderr="$TMP_ROOT/e2e-pi-stderr.txt"
+  : >"$calm_stderr"
+  tmux -L "$TMUX_SOCKET" new-session -d -s "$TMUX_SESSION" -x 180 -y 140 \
+    "cd '$project' && env FM_HOME='$home' PI_CODING_AGENT_DIR='$config' FM_OPERATIONAL_INPUT_SCRIPT='$OPERATIONAL_INPUT' PI_OFFLINE=1 pi --approve --no-skills --no-prompt-templates --no-context-files --session '$session_file' 2>>'$calm_stderr'; rc=\$?; printf '\nPI_EXIT=%s\n' \"\$rc\"; sleep 30"
   wait_for_text "$default_snapshot" "The deterministic tool example is complete." \
     || fail "Pi calm E2E did not reach the restored session transcript"
   assert_contains "$(cat "$default_snapshot")" "CALM_E2E_OUTPUT" "calm mode was not off by default"
@@ -4207,13 +4245,46 @@ JSON
   assert_not_contains "$(cat "$default_snapshot")" 'Run `bin/fm-session-start.sh` now' \
     "native session-start context unexpectedly rendered while Calm was off"
   tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" C-o
-  wait_for_text "$expanded_snapshot" "escape to interrupt" \
-    || fail "Ctrl+O did not retain Pi's ordinary startup and tool expansion behavior"
+  # Derive the expansion anchor from the running Pi instead of naming one generation's
+  # hint text: the non-blank lines Ctrl+O adds to the Calm-off screen. Some may be an
+  # animated working row, so the restore check below needs only one of them to survive.
+  expansion_anchor="$TMP_ROOT/expansion-anchor.txt"
+  active_wait=0
+  : >"$expansion_anchor"
+  while [ ! -s "$expansion_anchor" ] && [ "$active_wait" -lt 120 ]; do
+    tmux -L "$TMUX_SOCKET" capture-pane -p -t "$TMUX_SESSION" -S -600 >"$expanded_snapshot" 2>/dev/null || true
+    grep -vxFf "$default_snapshot" "$expanded_snapshot" | grep '[^[:space:]]' >"$expansion_anchor" || true
+    [ -s "$expansion_anchor" ] || sleep 0.05
+    active_wait=$((active_wait + 1))
+  done
+  [ -s "$expansion_anchor" ] \
+    || fail "Ctrl+O did not retain Pi's ordinary startup and tool expansion behavior (Pi $version: the screen did not change)"
   # The expansion redraw lands a frame or two after the footer hint, so wait for the
   # tool output this block actually asserts instead of assuming one implies the other.
   wait_for_text "$expanded_snapshot" "CALM_E2E_OUTPUT" \
     || fail "ordinary Ctrl+O expansion hid tool activity while calm mode was off"
   assert_contains "$(cat "$expanded_snapshot")" "CALM_E2E_OUTPUT" "ordinary Ctrl+O expansion hid tool activity while calm mode was off"
+
+  if [ -n "${FM_CALM_E2E_DEGRADE:-}" ]; then
+    # The rest of Calm must still register and act; only collapsed-thinking degrades.
+    tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" -l "/calm"
+    tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" M-s
+    active_wait=0
+    while [ "$active_wait" -lt 120 ]; do
+      tmux -L "$TMUX_SOCKET" capture-pane -p -t "$TMUX_SESSION" -S -600 >"$hidden_snapshot"
+      grep -Fq "FIRSTMATE WATCHER WAKE: signal: /tmp/probe.status" "$hidden_snapshot" || break
+      sleep 0.05
+      active_wait=$((active_wait + 1))
+    done
+    [ "$(cat "$home/config/calm" 2>/dev/null)" = on ] || fail "Calm did not activate when only the collapsed-thinking adapter was unavailable"
+    assert_not_contains "$(cat "$hidden_snapshot")" "FIRSTMATE WATCHER WAKE: signal: /tmp/probe.status" "an unrelated degraded adapter stopped Calm hiding Firstmate operational rows"
+    assert_contains "$(cat "$hidden_snapshot")" "I will run one command." "the forced-unavailable collapsed-thinking adapter still collapsed the mid-turn assistant working note"
+    assert_contains "$(cat "$calm_stderr")" "collapsed-thinking presentation adapter unavailable" "the degraded adapter gave no diagnostic"
+    tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" -l "/quit"
+    tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" M-s
+    pass "Pi calm E2E with the collapsed-thinking API forced unavailable on Pi $version degrades only that adapter with a diagnostic, keeps Calm-off rendering intact, and still hides Firstmate operational rows"
+    return 0
+  fi
 
   tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" -l "/calm"
   tmux -L "$TMUX_SOCKET" send-keys -t "$TMUX_SESSION" M-s
@@ -4531,7 +4602,8 @@ JS
   assert_not_contains "$(cat "$restored_snapshot")" "Navigated to selected point" "second /calm added a navigation status row"
   assert_contains "$(cat "$restored_snapshot")" "Thinking..." "second /calm did not restore Pi's collapsed thinking labels"
   assert_contains "$(cat "$restored_snapshot")" "I will run one command." "second /calm did not restore the mid-turn assistant working note"
-  assert_contains "$(cat "$restored_snapshot")" "escape to interrupt" "/calm changed the active Ctrl+O expansion state"
+  grep -qxFf "$expansion_anchor" "$restored_snapshot" \
+    || fail "/calm changed the active Ctrl+O expansion state (Pi $version: none of the lines Ctrl+O added survived)"
 
   hash_after=$(shasum -a 256 "$session_file" | awk '{print $1}')
   [ "$hash_before" = "$hash_after" ] || fail "/calm changed the persisted session or context data"
@@ -4867,7 +4939,7 @@ JS
     || fail "Pi did not exit cleanly before the Calm persistence restart"
   tmux -L "$TMUX_SOCKET" kill-session -t "$TMUX_SESSION" 2>/dev/null || true
 
-  tmux -L "$TMUX_SOCKET" new-session -d -s "$TMUX_SESSION" -x 180 -y 44 \
+  tmux -L "$TMUX_SOCKET" new-session -d -s "$TMUX_SESSION" -x 180 -y 140 \
     "cd '$project' && env FM_HOME='$home' PI_CODING_AGENT_DIR='$config' FM_OPERATIONAL_INPUT_SCRIPT='$OPERATIONAL_INPUT' PI_OFFLINE=1 pi --approve --no-skills --no-prompt-templates --no-context-files --session '$session_file'; rc=\$?; printf '\nPI_EXIT=%s\n' \"\$rc\"; sleep 30"
   wait_for_text "$restarted_snapshot" "CALM_WORKING_E2E_RESPONSE" \
     || fail "Pi did not restore the persisted session after restart"
