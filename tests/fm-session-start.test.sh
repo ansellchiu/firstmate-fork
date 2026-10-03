@@ -8,9 +8,11 @@
 #   - the lock-refusal read-only path: banner leads, every mutating step is
 #     skipped (including bootstrap's seven mutating sweeps, verified by their
 #     ABSENCE), the digest still completes
-#   - output section ordering: the safety preamble leads unchanged, live fleet
-#     state precedes the curated memory a truncated tail may take, and the
-#     read-once contract precedes both
+#   - output section ordering: FIRST CONTEXT leads, the safety preamble follows,
+#     live fleet state precedes curated memory, and the read-once contract
+#     precedes both bulk digests
+#   - FIRST CONTEXT: leads the output, fits its first 2000 bytes with a large
+#     captain.md, and degrades cleanly when captain.md is absent
 #   - context-aware next-step guidance for read-only, AFK, X mode, and normal
 #     watcher ownership
 #   - status-tail bounding, default and FM_SESSION_START_STATUS_TAIL override
@@ -1016,13 +1018,12 @@ SH
 
 # --- output ordering ----------------------------------------------------------
 
-# The digest is delivered through a harness that truncates from the TAIL, so
-# section order decides what a truncated startup loses. The safety preamble
-# still leads, live fleet identity now outranks curated memory, and the
-# read-once contract arrives before the payload it governs.
+# Section order decides what a head-preview or truncated startup still carries.
+# FIRST CONTEXT leads, the safety preamble follows, live fleet state precedes
+# curated memory, and the read-once contract arrives before both bulk digests.
 test_output_ordering_diagnostics_lead() {
-  local rec root home fakebin out lock_line boot_line wake_line read_once_line
-  local context_line fleet_line next_line inventory_line missing_line
+  local rec root home fakebin out first_line lock_line boot_line wake_line
+  local read_once_line context_line fleet_line network_line next_line inventory_line missing_line
   rec=$(new_world ordering)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1033,47 +1034,248 @@ EOF
   rm -f "$fakebin/node"
 
   printf 'window=fm-sess:w1\nkind=ship\n' > "$home/state/task-a.meta"
-  printf 'Captain memory that may be truncated away safely.\n' > "$home/data/captain.md"
+  printf '# Notes\n\n- Captain memory that must precede the fleet dump.\n' > "$home/data/captain.md"
 
   out=$(run_session_start "$home" "$root" "$fakebin:$(fm_test_base_path_sans "$BASE_PATH" node)")
 
+  first_line=$(printf '%s\n' "$out" | grep -n '^FIRST CONTEXT$' | head -1 | cut -d: -f1)
   lock_line=$(printf '%s\n' "$out" | grep -n '^LOCK$' | head -1 | cut -d: -f1)
   boot_line=$(printf '%s\n' "$out" | grep -n '^BOOTSTRAP$' | head -1 | cut -d: -f1)
   wake_line=$(printf '%s\n' "$out" | grep -n '^WAKE QUEUE$' | head -1 | cut -d: -f1)
   read_once_line=$(printf '%s\n' "$out" | grep -n '^READ-ONCE CONTRACT$' | head -1 | cut -d: -f1)
   context_line=$(printf '%s\n' "$out" | grep -n '^CONTEXT$' | head -1 | cut -d: -f1)
   fleet_line=$(printf '%s\n' "$out" | grep -n '^FLEET STATE$' | head -1 | cut -d: -f1)
+  network_line=$(printf '%s\n' "$out" | grep -n '^NETWORK CHECKS$' | head -1 | cut -d: -f1)
   next_line=$(printf '%s\n' "$out" | grep -n '^NEXT STEP$' | head -1 | cut -d: -f1)
   inventory_line=$(printf '%s\n' "$out" | grep -n '^--- task-a ---$' | head -1 | cut -d: -f1)
 
-  if [ -z "$lock_line" ] || [ -z "$boot_line" ] || [ -z "$wake_line" ] \
+  if [ -z "$first_line" ] || [ -z "$lock_line" ] || [ -z "$boot_line" ] || [ -z "$wake_line" ] \
     || [ -z "$read_once_line" ] || [ -z "$context_line" ] || [ -z "$fleet_line" ] \
     || [ -z "$next_line" ] || [ -z "$inventory_line" ]; then
     fail "one or more section headers missing from digest: $out"
   fi
 
-  # The safety preamble's order is unchanged: mutation authority, then
-  # diagnostics, then this turn's work queue, before anything bulky is read.
+  # FIRST CONTEXT leads; then mutation authority, diagnostics, and this turn's
+  # work queue, before anything bulky is read.
+  [ "$first_line" -lt "$lock_line" ] || fail "FIRST CONTEXT did not precede LOCK"
   [ "$lock_line" -lt "$boot_line" ] || fail "LOCK did not precede BOOTSTRAP"
   [ "$boot_line" -lt "$wake_line" ] || fail "BOOTSTRAP did not precede WAKE QUEUE"
   [ "$wake_line" -lt "$read_once_line" ] || fail "WAKE QUEUE did not precede the read-once contract"
 
+  [ "$read_once_line" -lt "$context_line" ] || fail "the read-once contract did not precede CONTEXT"
   [ "$read_once_line" -lt "$fleet_line" ] || fail "the read-once contract did not precede FLEET STATE"
-  [ "$fleet_line" -lt "$context_line" ] || fail "FLEET STATE did not precede CONTEXT"
+  [ "$fleet_line" -lt "$network_line" ] || fail "FLEET STATE did not precede NETWORK CHECKS"
+  [ "$network_line" -lt "$context_line" ] || fail "NETWORK CHECKS did not precede CONTEXT"
   [ "$context_line" -lt "$next_line" ] || fail "CONTEXT did not precede NEXT STEP"
+  [ "$fleet_line" -lt "$next_line" ] || fail "FLEET STATE did not precede NEXT STEP"
 
-  # The live-task inventory - the record recovery actually depends on - must sit
-  # ahead of the curated memory a truncated tail is allowed to take.
   [ "$inventory_line" -lt "$context_line" ] \
-    || fail "the live-task inventory was buried behind the curated memory files"
-  assert_contains "$out" "Captain memory that may be truncated away safely." \
+    || fail "the live-task inventory was buried behind curated memory"
+  assert_contains "$out" "Captain memory that must precede the fleet dump." \
     "the ordering fixture did not actually print a memory file"
 
   missing_line=$(printf '%s\n' "$out" | grep -n 'MISSING: node' | head -1 | cut -d: -f1)
   [ -n "$missing_line" ] || fail "MISSING diagnostic did not appear at all"
   [ "$missing_line" -lt "$fleet_line" ] || fail "actionable MISSING diagnostic was buried after the bulk fleet-state digest"
 
-  pass "digest sections are ordered safety-preamble first, live fleet state before curated memory"
+  pass "digest sections are ordered FIRST CONTEXT, safety preamble, then fleet state before memory"
+}
+
+# FIRST CONTEXT must lead, fit the first 2 KB of output even with a large
+# captain.md, and degrade to an ABSENT note when captain.md is missing.
+test_first_context_leads_and_respects_byte_budget() {
+  local rec root home fakebin out first_line lock_line block i mode preview
+  rec=$(new_world first-context)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  {
+    printf '# Identity\n\n'
+    i=0
+    while [ "$i" -lt 400 ]; do
+      printf '%s\n' "- Preference line $i with enough text to overflow a two-kilobyte preview budget."
+      i=$((i + 1))
+    done
+    printf '\n# Communication preferences\n\n'
+    printf '%s\n' '- Preference must wait for identity.'
+    printf '\n# Other section\n- Later section must not appear in FIRST CONTEXT.\n'
+  } > "$home/data/captain.md"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  first_line=$(printf '%s\n' "$out" | grep -n '^FIRST CONTEXT$' | head -1 | cut -d: -f1)
+  lock_line=$(printf '%s\n' "$out" | grep -n '^LOCK$' | head -1 | cut -d: -f1)
+  [ -n "$first_line" ] || fail "FIRST CONTEXT section missing: $out"
+  [ -n "$lock_line" ] || fail "LOCK section missing: $out"
+  [ "$first_line" -lt "$lock_line" ] || fail "FIRST CONTEXT did not precede LOCK"
+
+  # Measure from the FIRST CONTEXT rule/title through the line before LOCK.
+  block=$(printf '%s\n' "$out" | awk '
+    { lines[NR] = $0 }
+    END {
+      start = 0
+      for (i = 1; i <= NR; i++) if (lines[i] == "FIRST CONTEXT") { start = (i > 1 ? i - 1 : 1); break }
+      if (start < 1) exit 1
+      for (i = start; i <= NR; i++) {
+        if (lines[i] == "LOCK") break
+        print lines[i]
+      }
+    }
+  ')
+  assert_contains "$block" \
+    "If this output was shown only as a preview with a saved full-output file, read that whole file before acting." \
+    "FIRST CONTEXT lost its preview-file instruction"
+  assert_contains "$block" "# Identity" \
+    "FIRST CONTEXT did not carry the captain identity heading"
+  assert_contains "$block" "[truncated - full # Identity section in data/captain.md]" \
+    "an oversized identity was not truncated with an explicit source pointer"
+  assert_not_contains "$block" "Later section must not appear in FIRST CONTEXT." \
+    "FIRST CONTEXT leaked a non-Identity captain section into the lead block"
+
+  # The harness preview is the first 2 KB of the whole hook stdout, including
+  # the re-emit header, so the instruction and pointer must survive from byte 0.
+  for mode in normal reemit; do
+    if [ "$mode" = normal ]; then
+      out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+    else
+      out=$(run_named_harness_session_start claude "$home" "$root" "$fakebin:$BASE_PATH" --reemit)
+    fi
+    preview=$(printf '%s' "$out" | head -c 2000)
+    assert_contains "$preview" \
+      "If this output was shown only as a preview with a saved full-output file, read that whole file before acting." \
+      "the 2 KB output preview lost the preview-file instruction ($mode)"
+    assert_contains "$preview" "[truncated - full # Identity section in data/captain.md]" \
+      "the 2 KB output preview lost the identity source pointer ($mode)"
+  done
+
+  # Absent captain.md: instruction remains, ABSENT note, never an error exit.
+  rm -f "$home/data/captain.md"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "FIRST CONTEXT" "absent captain.md dropped FIRST CONTEXT entirely"
+  assert_contains "$out" \
+    "If this output was shown only as a preview with a saved full-output file, read that whole file before acting." \
+    "absent captain.md dropped the preview-file instruction"
+  assert_contains "$out" "data/captain.md # Identity" \
+    "absent captain.md lost the identity label"
+  # The FIRST CONTEXT absent marker is the labeled identity body, not the later
+  # full CONTEXT file marker alone.
+  printf '%s\n' "$out" | awk '
+    /^FIRST CONTEXT$/ { in_first = 1 }
+    /^LOCK$/ { in_first = 0 }
+    in_first && $0 == "ABSENT" { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' || fail "absent captain.md did not print ABSENT inside FIRST CONTEXT"
+
+  pass "FIRST CONTEXT leads, fits the first 2000 output bytes, and degrades cleanly when captain.md is absent"
+}
+
+test_first_context_preferences_follow_all_identities() {
+  local rec root home fakebin out block mode file i preview
+  rec=$(new_world first-context-preferences)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  for file in captain.md captain-shared.md; do
+    printf '# Communication preferences\n- Preference from %s.\n\n# Identity\n- Identity from %s.\n\n# Other\n- Excluded from %s.\n' \
+      "$file" "$file" "$file" > "$home/data/$file"
+  done
+  for mode in normal reemit; do
+    if [ "$mode" = normal ]; then
+      out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+    else
+      out=$(run_named_harness_session_start claude "$home" "$root" "$fakebin:$BASE_PATH" --reemit)
+    fi
+    block=$(printf '%s\n' "$out" | awk '/^FIRST CONTEXT$/ { printing = 1 } /^LOCK$/ { exit } printing { print }')
+    for file in captain.md captain-shared.md; do
+      assert_contains "$block" "Identity from $file." "missing complete identity ($mode)"
+      assert_contains "$block" "Preference from $file." "missing communication preferences ($mode)"
+      assert_not_contains "$block" "Excluded from $file." "unselected captain section leaked ($mode)"
+    done
+    printf '%s\n' "$block" | awk '
+      /Identity from captain-shared.md/ { identity = NR }
+      /Preference from captain.md/ { preference = NR }
+      END { exit identity && preference && identity < preference ? 0 : 1 }
+    ' || fail "communication preferences displaced shared identity ($mode)"
+  done
+  for file in captain.md captain-shared.md; do
+    {
+      printf '# Identity\n- Identity from %s.\n\n# Communication preferences\n' "$file"
+      printf '%s\n' "- First preference from $file."
+      i=0
+      while [ "$i" -lt 300 ]; do
+        printf 'LONG-LINE-%s-%s-' "$file" "$i"
+        i=$((i + 1))
+      done
+      printf '\n- After oversized line from %s.\n\n# Other\n- Excluded from %s.\n' "$file" "$file"
+    } > "$home/data/$file"
+  done
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  block=$(printf '%s\n' "$out" | awk '
+    { lines[NR] = $0 }
+    /^FIRST CONTEXT$/ { start = NR - 1 }
+    /^LOCK$/ { for (i = start; i < NR; i++) print lines[i]; exit }
+  ')
+  for file in captain.md captain-shared.md; do
+    assert_contains "$block" "Identity from $file." "overflow displaced complete identity"
+    assert_contains "$block" "First preference from $file." "fitting preference was dropped"
+    assert_contains "$block" "[truncated - full # Communication preferences section in data/$file]" \
+      "overflow lost its source pointer"
+    assert_not_contains "$block" "LONG-LINE-$file" "overflow cut a preference line"
+    assert_not_contains "$block" "After oversized line from $file." "overflow skipped past a line"
+    assert_not_contains "$block" "Excluded from $file." "overflow leaked an unselected section"
+  done
+  preview=$(printf '%s' "$out" | head -c 2000)
+  for file in captain.md captain-shared.md; do
+    assert_contains "$preview" "[truncated - full # Communication preferences section in data/$file]" \
+      "the 2 KB output preview lost the preferences source pointer"
+  done
+  printf '# Communication preferences\n- Preferences without identity.\n' > "$home/data/captain.md"
+  rm -f "$home/data/captain-shared.md"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  block=$(printf '%s\n' "$out" | awk '/^FIRST CONTEXT$/ { printing = 1 } /^LOCK$/ { exit } printing { print }')
+  assert_contains "$block" '(no # Identity section in data/captain.md)' "missing identity was not disclosed"
+  assert_contains "$block" 'Preferences without identity.' "missing identity suppressed preferences"
+  assert_not_contains "$block" 'captain-shared.md' "absent shared preferences were emitted"
+  {
+    printf '# Identity\n'
+    i=0
+    while [ "$i" -lt 30 ]; do
+      printf -- '- Identity line %02d keeps the captain context.\n' "$i"
+      i=$((i + 1))
+    done
+    printf -- '- The captain calls kunchenguid "the Admiral".\n\n# Communication preferences\n'
+    i=0
+    while [ "$i" -lt 100 ]; do
+      printf -- '- Preference line %02d must yield to identity.\n' "$i"
+      i=$((i + 1))
+    done
+  } > "$home/data/captain.md"
+  {
+    printf '# Identity\n- Shared identity follows the captain identity.\n\n# Communication preferences\n'
+    i=0
+    while [ "$i" -lt 100 ]; do
+      printf -- '- Shared preference line %02d must yield to identity.\n' "$i"
+      i=$((i + 1))
+    done
+  } > "$home/data/captain-shared.md"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  preview=$(printf '%s' "$out" | head -c 2000)
+  i=0
+  while [ "$i" -lt 30 ]; do
+    assert_contains "$preview" "$(printf -- '- Identity line %02d keeps the captain context.' "$i")" \
+      "a long identity lost a line to communication preferences"
+    i=$((i + 1))
+  done
+  assert_contains "$preview" 'The captain calls kunchenguid "the Admiral".' \
+    "a long identity lost its last line to communication preferences"
+  assert_not_contains "$preview" '[truncated - full # Identity section in data/captain.md]' \
+    "an identity that fits was truncated"
+  pass "FIRST CONTEXT prioritizes both identities and truncates only selected sections at whole lines"
 }
 
 # The contract has to survive tail truncation and stay honest once it precedes
@@ -3074,6 +3276,8 @@ test_lock_write_failure_read_only_path
 test_trace_context_effective_state_is_frozen_after_lock
 test_session_lock_concurrent_single_winner
 test_output_ordering_diagnostics_lead
+test_first_context_leads_and_respects_byte_budget
+test_first_context_preferences_follow_all_identities
 test_read_once_contract_is_stated_once_before_its_subject
 test_herdr_backend_diagnostics_follow_real_session_start
 test_session_start_relaunches_missing_pi_secondmate
@@ -3130,8 +3334,7 @@ EOF
   assert_contains "$out" "fixture digest line" "the contributor's body did not reach the digest"
   assert_contains "$out" "hello-ext" "the contributor's subsection was not titled"
 
-  # Position is a contract: extensions must not displace the network checks or
-  # the curated memory a truncated tail is meant to take first.
+  # Position is a contract: extensions must not displace the network checks.
   ext_line=$(printf '%s\n' "$out" | grep -n '^EXTENSIONS$' | head -1 | cut -d: -f1)
   net_line=$(printf '%s\n' "$out" | grep -n '^NETWORK CHECKS$' | head -1 | cut -d: -f1)
   [ -n "$ext_line" ] && [ -n "$net_line" ] \
