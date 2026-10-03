@@ -1,0 +1,2 @@
+::error::expected stock macOS Bash 3.2.57, got 5.3.20(1)-release
+rc=1

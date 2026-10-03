@@ -1,0 +1,3 @@
+pi-watch serial run 1 rc=1
+pi-watch serial run 2 rc=0
+pi-watch serial run 3 rc=0

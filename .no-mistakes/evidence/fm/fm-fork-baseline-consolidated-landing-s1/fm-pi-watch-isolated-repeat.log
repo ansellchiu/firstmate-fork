@@ -1,0 +1,6 @@
+isolated run 1 rc=1
+not ok - Pi session replacement must auto-arm and carry an in-flight actionable close: expected exit 0, got 1
+isolated run 2 rc=0
+isolated run 3 rc=0
+isolated run 4 rc=0
+isolated run 5 rc=0

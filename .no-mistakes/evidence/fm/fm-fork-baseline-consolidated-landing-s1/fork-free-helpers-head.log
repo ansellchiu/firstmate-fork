@@ -1,0 +1,16 @@
+== bash (homebrew 5.3) ==
+ok - fm_dirname_to and fm_basename_to match dirname and basename on every edge case
+ok - fm_epoch_seconds_to reads the clock like date +%s and forks date at most as often
+ok - signal seen paths and absolute lock paths are byte-identical to the dirname/basename/tr forms
+ok - recovery marker reads accept exactly the one-line records wc -l accepted
+ok - window_to_task resolves every recorded window exactly as the grep/tail/cut pipeline did
+ok - classify stat helpers resolve the kernel name once per process
+rc=0
+== /bin/bash 3.2 ==
+ok - fm_dirname_to and fm_basename_to match dirname and basename on every edge case
+ok - fm_epoch_seconds_to reads the clock like date +%s and forks date at most as often
+ok - signal seen paths and absolute lock paths are byte-identical to the dirname/basename/tr forms
+ok - recovery marker reads accept exactly the one-line records wc -l accepted
+ok - window_to_task resolves every recorded window exactly as the grep/tail/cut pipeline did
+ok - classify stat helpers resolve the kernel name once per process
+rc=0

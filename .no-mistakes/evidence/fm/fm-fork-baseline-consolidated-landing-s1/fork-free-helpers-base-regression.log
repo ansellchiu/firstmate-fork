@@ -1,0 +1,9 @@
+== BASE classify-lib, bash ==
+ok - fm_dirname_to and fm_basename_to match dirname and basename on every edge case
+ok - fm_epoch_seconds_to reads the clock like date +%s and forks date at most as often
+ok - signal seen paths and absolute lock paths are byte-identical to the dirname/basename/tr forms
+ok - recovery marker reads accept exactly the one-line records wc -l accepted
+ok - window_to_task resolves every recorded window exactly as the grep/tail/cut pipeline did
+not ok - classify stat helpers differs under /opt/homebrew/bin/bash (C):
+uname ran 2 times for 15 stat reads
+rc=1
