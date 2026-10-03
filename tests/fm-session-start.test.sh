@@ -1322,7 +1322,7 @@ EOF
 }
 
 test_digest_section_budgets_and_complete_stdout_accounting() {
-  local rec root home fakebin out expected prefix measured reported recover recovered
+  local rec root home fakebin out expected prefix measured reported i
   rec=$(new_world digest-budget-accounting)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1330,42 +1330,42 @@ EOF
   make_fake_toolchain "$fakebin"
   make_fake_ps_harness "$fakebin" pi
   printf 'manual\n' > "$home/config/backlog-backend"
-  printf '# Backlog\n\n## Queued\n- [ ] budget-task - Task\n' > "$home/data/backlog.md"
-  printf '界界\n界界\n界界\n' > "$home/data/projects.md"
+  {
+    printf '# Backlog\n\n## Queued\n'
+    for i in $(seq 1 200); do
+      printf -- '- [ ] budget-task-%s - Held fixture row (hold: waiting on captain review %s)\n' "$i" "$i"
+    done
+  } > "$home/data/backlog.md"
+  for i in $(seq 1 1000); do printf '界界\n'; done > "$home/data/projects.md"
   printf 'secondmate-row\n' > "$home/data/secondmates.md"
-  printf 'memory-row\n' > "$home/data/captain.md"
-  append_wake "$home/state" signal budget-task "check: budget overflow fixture" || fail "seed wake failed"
-  out=$(FM_FAKE_HARNESS=pi LC_ALL=en_US.UTF-8 \
-    FM_SESSION_START_BUDGET_REGISTRY=14 FM_SESSION_START_BUDGET_MEMORY=1 \
-    FM_SESSION_START_BUDGET_BACKLOG=1 FM_SESSION_START_BUDGET_READ_ONCE=1 \
-    FM_SESSION_START_BUDGET_SUPERVISION=1 \
-    FM_SESSION_START_DIGEST_CEILING=100 \
-    run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  [ "$(printf '%s\n' "$out" | grep -c '^界界$')" -eq 2 ] \
-    || fail "registry budget counted characters instead of bytes"
-  assert_contains "$out" "1 more omitted - cat $home/data/projects.md" "project overflow missing"
+  for i in $(seq 1000 1999); do printf 'memory-line-%s mmmmmmmmmmmmmmmmmmmm\n' "$i"; done > "$home/data/captain.md"
+  for i in $(seq 1 200); do
+    append_wake "$home/state" signal "budget-task-$i" "check: budget overflow fixture $i $(head -c 200 /dev/zero | tr '\0' 'w')" \
+      || fail "seed wake failed"
+  done
+  out=$(FM_FAKE_HARNESS=pi LC_ALL=en_US.UTF-8 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  [ "$(printf '%s\n' "$out" | grep -c '^界界$')" -eq 585 ] \
+    || fail "registry budget did not stop at 4096 bytes"
+  assert_contains "$out" "415 more omitted - cat $home/data/projects.md" "project overflow missing"
   assert_contains "$out" "1 more omitted - cat $home/data/secondmates.md" "registry spend was lost between files"
   assert_not_contains "$out" "secondmate-row" "secondmate registry exceeded shared budget"
-  assert_contains "$out" "check: budget overflow fixture" "wake queue was truncated after the drain presented it"
+  assert_contains "$out" "check: budget overflow fixture 200" "wake queue was truncated after the drain presented it"
   assert_not_contains "$out" "more omitted - bin/fm-wake-drain.sh" "wake queue was post-hoc truncated"
-  recover=$(printf '%s\n' "$out" | sed -n 's/^[0-9]* more omitted - \(awk .*READ_ONCE_BODY.*\)$/\1/p')
-  [ -n "$recover" ] || fail "read-once overflow missing"
-  recovered=$(cd "$ROOT" && eval "$recover")
-  assert_contains "$recovered" "Do NOT re-read any of them after reading this digest" \
-    "read-once recovery command did not print the omitted body"
-  assert_not_contains "$recovered" "READ_ONCE_BODY" "read-once recovery command printed implementation"
-  assert_contains "$out" "more omitted - bin/fm-tasks-axi.sh list" "backlog overflow missing"
+  assert_contains "$out" "Do NOT re-read any of them after reading this digest" "read-once body missing"
+  assert_contains "$out" "more omitted - cat data/backlog.md" "backlog overflow missing"
+  assert_contains "$out" "memory-line-1000 " "captain memory head missing"
   assert_contains "$out" "more omitted - cat $home/data/captain.md" "memory overflow missing"
-  assert_not_contains "$out" "memory-row" "oversized first memory line leaked"
+  assert_not_contains "$out" "memory-line-1999" "captain memory exceeded its budget"
   expected=$(FM_ROOT_OVERRIDE="$root" FM_HOME="$home" \
     "$ROOT/bin/fm-supervision-instructions.sh" --harness pi --read-only 0 --afk 0 --afk-mode away --x-mode 0)
   assert_contains "$out" "$expected" "supervision operating block was truncated or changed"
-  assert_contains "$out" "DIGEST OVERSIZE:" "lowered whole-digest ceiling did not trigger banner"
+  assert_contains "$out" "DIGEST OVERSIZE:" "digest over 64 KB did not trigger banner"
   prefix=${out%$'\nDIGEST OVERSIZE:'*}
   measured=$(printf '%s' "$prefix" | wc -c | tr -d ' ')
   reported=$(printf '%s\n' "$out" | sed -n 's/^DIGEST OVERSIZE: composed digest is \([0-9]*\) bytes.*/\1/p')
   [ "$reported" -eq "$measured" ] \
     || fail "whole-digest count $reported differs from emitted stdout $measured"
+  [ "$measured" -gt 65536 ] || fail "banner fired for a $measured-byte digest under the ceiling"
   pass "byte budgets share spending, disclose overflow, and preserve supervision"
 }
 
@@ -1440,7 +1440,7 @@ EOF
 
   out=$(FM_SESSION_START_BUDGET_WORK=100 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_not_contains "$out" "id=task-a" "first work record bypassed the work-under-way budget"
-  assert_contains "$out" "1 more omitted - ls state/*.meta" "first-record overflow was not disclosed"
+  assert_contains "$out" "1 more omitted - cat state/*.meta" "first-record overflow was not disclosed"
 
   pass "work-under-way budget bounds the first record, header included"
 }

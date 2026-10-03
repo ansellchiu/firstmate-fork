@@ -349,8 +349,7 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
   SESSION_START_RC=${PIPESTATUS[0]}
   DIGEST_TOTAL_BYTES=$(wc -c < "$SESSION_START_OUTPUT" | tr -d ' ')
   [ "$SESSION_START_OUTPUT" = /dev/null ] || rm -f "$SESSION_START_OUTPUT"
-  DIGEST_CEILING_BYTES=${FM_SESSION_START_DIGEST_CEILING:-65536}
-  case "$DIGEST_CEILING_BYTES" in ''|*[!0-9]*|0) DIGEST_CEILING_BYTES=65536 ;; esac
+  DIGEST_CEILING_BYTES=65536
   if [ "$DIGEST_TOTAL_BYTES" -gt "$DIGEST_CEILING_BYTES" ]; then
     printf '\nDIGEST OVERSIZE: composed digest is %s bytes, over the %s-byte ceiling; prefer targeted reads named above rather than re-reading the whole digest.\n' \
       "$DIGEST_TOTAL_BYTES" "$DIGEST_CEILING_BYTES"
@@ -437,18 +436,13 @@ BACKLOG_FIELDS=blocked_by,hold_kind,hold_reason
 
 # Whole-digest byte budget (J4 ceiling column). Per-section overflow discloses
 # with "N more omitted - <command>"; DIGEST_CEILING_BYTES banners the total.
-DIGEST_BUDGET_READ_ONCE=${FM_SESSION_START_BUDGET_READ_ONCE:-1536}
-DIGEST_BUDGET_BACKLOG=${FM_SESSION_START_BUDGET_BACKLOG:-6144}
+DIGEST_BUDGET_READ_ONCE=1536
+DIGEST_BUDGET_BACKLOG=6144
 DIGEST_BUDGET_WORK=${FM_SESSION_START_BUDGET_WORK:-10240}
-DIGEST_BUDGET_ORPHANS=${FM_SESSION_START_BUDGET_ORPHANS:-1024}
-DIGEST_BUDGET_REGISTRY=${FM_SESSION_START_BUDGET_REGISTRY:-4096}
-DIGEST_BUDGET_MEMORY=${FM_SESSION_START_BUDGET_MEMORY:-23040}
-for _digest_budget in DIGEST_BUDGET_READ_ONCE \
-  DIGEST_BUDGET_BACKLOG DIGEST_BUDGET_WORK DIGEST_BUDGET_ORPHANS DIGEST_BUDGET_REGISTRY \
-  DIGEST_BUDGET_MEMORY; do
-  case "${!_digest_budget}" in ''|*[!0-9]*|0) eval "$_digest_budget=1024" ;; esac
-done
-unset _digest_budget
+case "$DIGEST_BUDGET_WORK" in ''|*[!0-9]*|0) DIGEST_BUDGET_WORK=10240 ;; esac
+DIGEST_BUDGET_ORPHANS=1024
+DIGEST_BUDGET_REGISTRY=4096
+DIGEST_BUDGET_MEMORY=23040
 DIGEST_TOTAL_BYTES=0
 
 RULE='================================================================================'
@@ -525,7 +519,7 @@ print_registry_rows_budgeted() {
     fm_cap_line_var "$line"
     body+="$FM_LINE_CAP_LINE"$'\n'
   done < "$path"
-  digest_print_lines_budgeted "$budget" "cat $path" <<< "${body%$'\n'}"
+  digest_print_lines_budgeted "$budget" "cat $(printf '%q' "$path")" <<< "${body%$'\n'}"
 }
 
 # print_memory_file_budgeted <path> <label> <budget>: full file under budget.
@@ -540,7 +534,7 @@ print_memory_file_budgeted() {
     printf '(present, empty)\n'
     return 0
   fi
-  digest_print_lines_budgeted "$budget" "cat $path" < "$path"
+  digest_print_lines_budgeted "$budget" "cat $(printf '%q' "$path")" < "$path"
 }
 
 print_backlog_pointer() {
@@ -757,7 +751,7 @@ print_backlog_compact() {
         print_backlog_pointer
       )
       digest_print_lines_budgeted "$DIGEST_BUDGET_BACKLOG" \
-        "bin/fm-tasks-axi.sh list --file data/backlog.md / cat data/backlog.md" <<< "$body"
+        "cat data/backlog.md" <<< "$body"
     else
       printf '(present, empty)\n'
     fi
@@ -857,7 +851,7 @@ print_work_under_way() {
     printf '(none)\n'
   fi
   if [ "$omitted" -gt 0 ]; then
-    omit_line=$(printf '%d more omitted - ls state/*.meta; bin/fm-crew-state.sh\n' "$omitted")
+    omit_line=$(printf '%d more omitted - cat state/*.meta\n' "$omitted")
     printf '%s\n' "$omit_line"
     DIGEST_TOTAL_BYTES=$((DIGEST_TOTAL_BYTES + $(digest_count_bytes "$omit_line") + 1))
   fi
