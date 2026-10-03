@@ -3350,15 +3350,16 @@ printf '%s\n' "$count" > "$FM_ARM_COUNT"
 previous=$(cat "$FM_ARM_COUNT.pid" 2>/dev/null || true)
 printf '%s\n' "$$" > "$FM_ARM_COUNT.pid"
 [ -z "$previous" ] || kill -TERM "$previous" 2>/dev/null || true
+# Stop with the suite temp root too, so an arm started after cleanup cannot outlive it.
 late_close() {
   sleep 0.4
   printf 'signal: late registered actionable outcome\n'
-  while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+  while [ ! -e "$FM_STOP_FILE" ] && [ -d "${FM_STOP_FILE%/*}" ]; do sleep 0.02; done
   exit 0
 }
 trap late_close TERM INT
 printf 'watcher: started pid=%s\n' "$$"
-while [ ! -e "$FM_STOP_FILE" ]; do sleep 0.02; done
+while [ ! -e "$FM_STOP_FILE" ] && [ -d "${FM_STOP_FILE%/*}" ]; do sleep 0.02; done
 SH
   chmod +x "$repo/bin/fm-watch-arm.sh"
   out=$(PLUGIN="$plugin" FM_HOME="$home" FM_ROOT_OVERRIDE="$repo" FM_ARM_COUNT="$count" FM_STOP_FILE="$stop" FM_WATCH_ARM_RETIRE_TIMEOUT_MS=20 node --input-type=module 2>&1 <<'EOF'
@@ -3910,6 +3911,10 @@ for (let moduleIndex = 1; moduleIndex <= 2; moduleIndex += 1) {
 // their late actionable closes under distinct process-wide tokens.
 const collectorMod = await import(`${pathToFileURL(process.env.PLUGIN).href}?token-module=collector`);
 const collector = makePi();
+// Hold the first collector delivery open. Otherwise it finishes that record,
+// and a second outcome arriving behind it folds into the outstanding wake and
+// is finished too, both clearing the handoff this test observes.
+collector.pi.sendUserMessage = () => new Promise(() => {});
 collectorMod.default(collector.pi);
 const collectorArm = await collector.getTool().execute("arm-collector", {}, undefined, undefined, {});
 if (!collectorArm.details?.ok) throw new Error(`collector arm failed: ${JSON.stringify(collectorArm.details)}`);
