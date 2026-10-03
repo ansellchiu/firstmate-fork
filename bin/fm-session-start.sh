@@ -455,7 +455,7 @@ extract_captain_section() {
 }
 
 print_first_context() {
-  local instruction block file heading body part pointer reserve room prefix bytes i j
+  local instruction block file heading body part pointer room prefix i
   local -a bodies labels pointers
 
   instruction='If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.'
@@ -482,15 +482,7 @@ print_first_context() {
 
   for ((i = 0; i < ${#bodies[@]}; i++)); do
     part=$(printf '\n%s\n%s\n%s' "${labels[i]}" "$SUBRULE" "${bodies[i]}")
-    reserve=1
-    for ((j = i + 1; j < ${#bodies[@]}; j++)); do
-      [[ ${labels[j]} == *'# Identity' ]] || continue
-      pointer=$(printf '\n%s\n%s\n%s' "${labels[j]}" "$SUBRULE" "${pointers[j]}")
-      bytes=$(printf '\n%s\n%s\n%s' "${labels[j]}" "$SUBRULE" "${bodies[j]}" | wc -c)
-      [ "$bytes" -le "$(printf '%s' "$pointer" | wc -c)" ] || bytes=$(printf '%s' "$pointer" | wc -c)
-      reserve=$((reserve + bytes))
-    done
-    room=$((FIRST_CONTEXT_BUDGET - $(printf '%s' "$block" | wc -c) - reserve))
+    room=$((FIRST_CONTEXT_BUDGET - $(printf '%s' "$block" | wc -c) - 1))
     if [ "$(printf '%s' "$part" | wc -c)" -gt "$room" ]; then
       pointer=$(printf '\n%s\n%s\n' "${labels[i]}" "$SUBRULE")
       room=$((room - $(printf '%s' "$pointer" | wc -c) - ${#pointers[i]} - 1))

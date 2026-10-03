@@ -1255,6 +1255,14 @@ EOF
       i=$((i + 1))
     done
   } > "$home/data/captain.md"
+  {
+    printf '# Identity\n- Shared identity follows the captain identity.\n\n# Communication preferences\n'
+    i=0
+    while [ "$i" -lt 100 ]; do
+      printf -- '- Shared preference line %02d must yield to identity.\n' "$i"
+      i=$((i + 1))
+    done
+  } > "$home/data/captain-shared.md"
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   preview=$(printf '%s' "$out" | head -c 2000)
   i=0
