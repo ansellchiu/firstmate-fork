@@ -2792,14 +2792,6 @@ scan_captain_relevant_statuses() {  # <state>
   return 0
 }
 
-_fm_classify_status_mtime() {  # <file>
-  if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
-    LC_ALL=C stat -f '%m' "$1" 2>/dev/null
-  else
-    LC_ALL=C stat -c '%Y' "$1" 2>/dev/null
-  fi
-}
-
 # Composite signature of a task's underlying pane and status state.
 # Used by the watcher to detect whether state has changed between consecutive
 # stale escalations.
@@ -2807,7 +2799,7 @@ stale_underlying_state_sig() {  # <task> <state> <pane-hash>
   local task=$1 state=$2 pane_hash=$3 statusf mtime sig
   statusf="$state/$task.status"
   if [ -e "$statusf" ]; then
-    mtime=$(_fm_classify_status_mtime "$statusf") || mtime=0
+    mtime=$(_fm_status_file_mtime "$statusf") || mtime=0
     sig=$(status_observed_signature "$statusf" 2>/dev/null) || sig="sig-error"
   else
     mtime="absent"
@@ -2933,11 +2925,6 @@ detect_stale_blocker() {  # <pane-text> [agent-alive-verdict]
 # supervision turn should re-read only the records that actually moved, not the
 # whole fleet. wake_changed_records names them from a persisted fingerprint
 # manifest, so a quiet task costs nothing to skip.
-
-# uname once, locally: this library is sourced standalone by tests and by
-# consumers that do not also source bin/fm-wake-lib.sh, so it cannot borrow that
-# library's copy.
-_FM_CLASSIFY_UNAME=$(uname 2>/dev/null || echo unknown)
 
 # Seconds a routine batch accumulates before presentation or quiet telemetry
 # rollover. 0 disables batching entirely. A malformed override is not a window,
@@ -3161,7 +3148,7 @@ wake_record_fingerprint() {  # <state> <task>
   local state=$1 task=$2 part out='' one
   for part in "$state/$task.status" "$state/$task.meta"; do
     if [ -f "$part" ] && [ ! -L "$part" ]; then
-      if [ "$_FM_CLASSIFY_UNAME" = Darwin ]; then
+      if [ "$_FM_CLASSIFY_UNAME_S" = Darwin ]; then
         one=$(stat -f '%z:%Fm' "$part" 2>/dev/null) || one=unreadable
       else
         one=$(stat -c '%s:%Y' "$part" 2>/dev/null) || one=unreadable
