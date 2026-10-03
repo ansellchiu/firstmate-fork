@@ -26,9 +26,10 @@
 # ORDERING, and why LOCK now runs before BOOTSTRAP (the old AGENTS.md order
 # was bootstrap-then-lock):
 #
-#   1. first-context  - a compact, byte-budgeted identity block immediately
-#                       after the opening header: an imperative preview-file
-#                       instruction plus each present home's # Identity
+#   1. first-context  - a compact, byte-budgeted identity block as the very
+#                       first output, ahead of the opening header: an
+#                       imperative preview-file instruction plus each
+#                       present home's # Identity
 #                       section, then # Communication preferences, from
 #                       data/captain.md and data/captain-shared.md.
 #                       Hard budget FIRST_CONTEXT_BUDGET (2000 bytes) so the
@@ -750,6 +751,14 @@ if [ "$REEMIT" -eq 0 ] && [ "$SESSION_SOURCE" = startup ]; then
   AGENTS_START_HASH=$(hash_file_sha256 "$FM_ROOT/AGENTS.md" 2>/dev/null || true)
 fi
 
+# --- 1. first-context --------------------------------------------------
+# The first bytes of output, ahead of the opening header, LOCK, and every bulky
+# section: a harness head preview of an oversized digest must still carry
+# captain identity and the imperative to read the saved full output.
+# Hard-budgeted; see print_first_context.
+stage first-context
+print_first_context
+
 if [ "$REEMIT" -eq 1 ]; then
   section "SESSION START (CONTEXT RE-EMIT) - $FM_HOME"
   printf 'This session already took the helm at its own startup and has only lost its\n'
@@ -761,13 +770,6 @@ if [ "$REEMIT" -eq 1 ]; then
 else
   section "SESSION START - $FM_HOME"
 fi
-# --- 1. first-context --------------------------------------------------
-# Before LOCK and every bulky section: a harness head preview of an oversized
-# digest must still carry captain identity and the imperative to read the
-# saved full output. Hard-budgeted; see print_first_context.
-stage first-context
-print_first_context
-
 # --- 2. lock -----------------------------------------------------------
 stage lock
 subsection "LOCK"

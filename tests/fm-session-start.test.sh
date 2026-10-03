@@ -11,7 +11,7 @@
 #   - output section ordering: FIRST CONTEXT leads, the safety preamble follows,
 #     live fleet state precedes curated memory, and the read-once contract
 #     precedes both bulk digests
-#   - FIRST CONTEXT: appears before LOCK, stays under 2000 bytes with a large
+#   - FIRST CONTEXT: leads the output, fits its first 2000 bytes with a large
 #     captain.md, and degrades cleanly when captain.md is absent
 #   - context-aware next-step guidance for read-only, AFK, X mode, and normal
 #     watcher ownership
@@ -1034,7 +1034,7 @@ EOF
   rm -f "$fakebin/node"
 
   printf 'window=fm-sess:w1\nkind=ship\n' > "$home/state/task-a.meta"
-  printf '# Identity\n\n- Captain memory that must precede the fleet dump.\n' > "$home/data/captain.md"
+  printf '# Notes\n\n- Captain memory that must precede the fleet dump.\n' > "$home/data/captain.md"
 
   out=$(run_session_start "$home" "$root" "$fakebin:$(fm_test_base_path_sans "$BASE_PATH" node)")
 
@@ -1081,10 +1081,10 @@ EOF
   pass "digest sections are ordered FIRST CONTEXT, safety preamble, then fleet state before memory"
 }
 
-# FIRST CONTEXT must lead, stay under the 2 KB preview budget even with a large
+# FIRST CONTEXT must lead, fit the first 2 KB of output even with a large
 # captain.md, and degrade to an ABSENT note when captain.md is missing.
 test_first_context_leads_and_respects_byte_budget() {
-  local rec root home fakebin out first_line lock_line block bytes i
+  local rec root home fakebin out first_line lock_line block i mode preview
   rec=$(new_world first-context)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1134,8 +1134,22 @@ EOF
     "an oversized identity was not truncated with an explicit source pointer"
   assert_not_contains "$block" "Later section must not appear in FIRST CONTEXT." \
     "FIRST CONTEXT leaked a non-Identity captain section into the lead block"
-  bytes=$(printf '%s' "$block" | wc -c | tr -d ' ')
-  [ "$bytes" -le 2000 ] || fail "FIRST CONTEXT block was $bytes bytes (budget 2000): $block"
+
+  # The harness preview is the first 2 KB of the whole hook stdout, including
+  # the re-emit header, so the instruction and pointer must survive from byte 0.
+  for mode in normal reemit; do
+    if [ "$mode" = normal ]; then
+      out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+    else
+      out=$(run_named_harness_session_start claude "$home" "$root" "$fakebin:$BASE_PATH" --reemit)
+    fi
+    preview=$(printf '%s' "$out" | head -c 2000)
+    assert_contains "$preview" \
+      "If this output was shown only as a preview with a saved full-output file, read that whole file before acting." \
+      "the 2 KB output preview lost the preview-file instruction ($mode)"
+    assert_contains "$preview" "[truncated - full # Identity section in data/captain.md]" \
+      "the 2 KB output preview lost the identity source pointer ($mode)"
+  done
 
   # Absent captain.md: instruction remains, ABSENT note, never an error exit.
   rm -f "$home/data/captain.md"
@@ -1155,11 +1169,11 @@ EOF
     END { exit found ? 0 : 1 }
   ' || fail "absent captain.md did not print ABSENT inside FIRST CONTEXT"
 
-  pass "FIRST CONTEXT leads, stays under 2000 bytes, and degrades cleanly when captain.md is absent"
+  pass "FIRST CONTEXT leads, fits the first 2000 output bytes, and degrades cleanly when captain.md is absent"
 }
 
 test_first_context_preferences_follow_all_identities() {
-  local rec root home fakebin out block mode file i bytes
+  local rec root home fakebin out block mode file i preview
   rec=$(new_world first-context-preferences)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1215,8 +1229,11 @@ EOF
     assert_not_contains "$block" "After oversized line from $file." "overflow skipped past a line"
     assert_not_contains "$block" "Excluded from $file." "overflow leaked an unselected section"
   done
-  bytes=$(printf '%s' "$block" | wc -c | tr -d ' ')
-  [ "$bytes" -le 2000 ] || fail "preferences block exceeded 2000 bytes: $bytes"
+  preview=$(printf '%s' "$out" | head -c 2000)
+  for file in captain.md captain-shared.md; do
+    assert_contains "$preview" "[truncated - full # Communication preferences section in data/$file]" \
+      "the 2 KB output preview lost the preferences source pointer"
+  done
   printf '# Communication preferences\n- Preferences without identity.\n' > "$home/data/captain.md"
   rm -f "$home/data/captain-shared.md"
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
