@@ -640,7 +640,7 @@ Any other value refuses the call rather than defaulting, because a typo must not
 `FM_SECRET_BACKEND` overrides the file with the same values and exists for tests.
 `config/secret-backend` and `config/varlock/.env.schema` are primary-authoritative and inherited into secondmate homes, local and remote, like `config/av-inject`.
 
-The `varlock-op` half runs `varlock run --path <home>/config/varlock --filter <search keys> -- <tool>` after the same key-name validation as Automic, and refuses without running the tool for a missing `varlock`, a missing `config/varlock/.env.schema`, or a missing or malformed token.
+The `varlock-op` half runs `varlock run --path <home>/config/varlock --filter <search keys> -- <tool>` after the same key-name validation as Automic, and refuses without running the tool for a missing `varlock`, a missing `config/varlock/.env.schema`, a missing or malformed token, or a requested search key that does not resolve to a non-empty value, which `--filter` alone does not catch.
 Key names are validated as exact names, so the `--filter` is always the requested keys and never a glob.
 The operator supplies:
 

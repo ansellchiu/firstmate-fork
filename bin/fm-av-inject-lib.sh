@@ -253,6 +253,10 @@ fm_av_inject_approved() {  # <av-path>
 # handed over as an exec-time environment assignment, so it is never in argv, a
 # file, a log, or this process's own environment. A well-formed token that 1Password rejects is
 # refused by varlock itself, which does not run the tool on a resolution failure.
+# varlock's --filter only selects schema items that exist and does not require
+# every requested name, so the command varlock runs is a `bash -c` shim that
+# refuses, without running the tool, unless each requested key resolved to a
+# non-empty value; it tests values by indirect expansion and never prints one.
 # Args: <config-dir> <tool> [args...]
 fm_varlock_op_exec() {  # <config-dir> <tool> [args...]
   local config_dir=$1 arg key varlock sec tok filter="" schema_dir
