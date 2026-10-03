@@ -26,9 +26,16 @@
 # ORDERING, and why LOCK now runs before BOOTSTRAP (the old AGENTS.md order
 # was bootstrap-then-lock):
 #
-#   1. lock          - acquire the per-home session lock FIRST, before any
+#   1. first-context  - a compact, byte-budgeted identity block immediately
+#                       after the opening header: an imperative preview-file
+#                       instruction plus each present home's # Identity
+#                       section from data/captain.md and data/captain-shared.md.
+#                       Hard budget FIRST_CONTEXT_BUDGET (2000 bytes) so the
+#                       block survives a harness that shows only a short head
+#                       preview of an oversized digest.
+#   2. lock          - acquire the per-home session lock FIRST, before any
 #                       mutating step runs.
-#   2. bootstrap      - home-local stale Herdr projection cleanup runs only
+#   3. bootstrap      - home-local stale Herdr projection cleanup runs only
 #                       when this session actually holds the lock. Detect-only
 #                       diagnostics always run. Bootstrap's six MUTATING sweeps
 #                       (same-home backlog reconciliation,
@@ -36,17 +43,21 @@
 #                       handoff retry, X-mode artifact writes, fleet sync) also run only when
 #                       locked; the four network sweeps run in the deferred
 #                       stage rather than this synchronous bootstrap section.
-#   3. wake-drain     - presents durable wakes and advances recovery handling
+#   4. wake-drain     - presents durable wakes and advances recovery handling
 #                       state, so it only runs when locked. The local bounded
 #                       inactive-outcome startup scan runs in the deferred worker.
 #                       First, on every harness and away posture, it seeds the
 #                       outcome store's display tail copy when that is absent
 #                       (bin/fm-branch-outcome.sh seed-tail).
-#   4. supervision-instructions - the one emitted operating block for the
+#   5. supervision-instructions - the one emitted operating block for the
 #                       detected primary harness.
-#   5. read-once contract - the do-not-re-read contract covering every source
+#   6. read-once contract - the do-not-re-read contract covering every source
 #                       represented by the two digests below.
-#   6. fleet digest   - a compact data/backlog.md identity/metadata listing,
+#   7. context digest - data/projects.md, data/secondmates.md, data/captain.md,
+#                       data/captain-shared.md, data/learnings.md: read-only,
+#                       always safe, always runs. Ahead of fleet state so
+#                       curated memory is not buried behind the bulk dump.
+#   8. fleet digest   - a compact data/backlog.md identity/metadata listing,
 #                       every state/*.meta, a bounded state/*.status tail,
 #                       the away posture (state/.afk-contract and the legacy
 #                       state/.afk daemon flag), and a cheap per-task
@@ -57,19 +68,16 @@
 #                       ceiling is tasks x the per-read bound
 #                       (FM_SESSION_START_ENDPOINT_TIMEOUT, default 10s) and
 #                       can itself reach the digest's runtime bound.
-#   6a. extensions    - one bounded subsection per installed extension that
+#   8a. extensions    - one bounded subsection per installed extension that
 #                       registers a session-start hook: read-only, absent when
 #                       the home has no such extension.
-#   7. network checks - the result of the deferred network stage started back at
-#                       step 1, harvested WITHOUT waiting for it.
-#   8. context digest - data/projects.md, data/secondmates.md, data/captain.md,
-#                       data/captain-shared.md, data/learnings.md: read-only,
-#                       always safe, always runs.
-#   9. closing reminder - prints the context-specific watcher next step; this
+#   9. network checks - the result of the deferred network stage started back at
+#                       step 2, harvested WITHOUT waiting for it.
+#  10. closing reminder - prints the context-specific watcher next step; this
 #                       script points back to the emitted harness supervision
 #                       block and deliberately never arms the watcher itself.
 #
-# Those nine names are also the runtime-bound stage list below, so a truncated
+# Those stage names are also the runtime-bound stage list below, so a truncated
 # startup can name exactly which of them never ran - and the parent banners
 # EVERY nonzero child exit, not only the bound: a child that dies or is killed
 # mid-stage must never truncate the digest silently.
@@ -96,22 +104,19 @@
 # PROGRESS" and names exactly which checks are not yet confirmed, instead of
 # waiting for them. It never reports an unconfirmed check as passed.
 #
-# ORDERING, and why FLEET STATE now runs before CONTEXT: this digest is
-# delivered through a harness that truncates an oversized payload from the TAIL,
-# and it has really been truncated in practice - a 70KB digest arrived as lines
-# 1-435 of 578, cutting off eight lines before the live-task inventory. What a
-# truncated tail drops must therefore be the CHEAPEST thing to lose. Curated
-# memory is stable session to session, is already governed by a captain-set
-# budget (config/startup-memory-budget), and is recoverable with one targeted
-# read; live fleet identity - which tasks exist, their windows, worktrees,
-# backends, and endpoint liveness - changes every session and is exactly what
-# recovery depends on. So fleet state goes first and the memory files absorb the
-# truncation. The read-once contract moves ahead of both for the same reason: a
+# ORDERING, and why CONTEXT now runs before FLEET STATE: some harnesses show
+# only a short head preview of an oversized digest and persist the rest to a
+# file (observed on Claude Code SessionStart). Captain identity therefore
+# cannot sit after a large fleet dump. FIRST CONTEXT leads with the preview-file
+# instruction and identity under a hard byte budget; the full CONTEXT section
+# then precedes FLEET STATE so curated memory is available before the bulk
+# fleet dump. The read-once contract still precedes both full digests: a
 # contract that only arrives after the payload it governs is the first thing a
 # truncated digest loses, and it carries the truncation caveat that keeps it
 # honest when a stage below it never ran.
-# The LOCK/BOOTSTRAP/WAKE-QUEUE safety preamble keeps its order: it establishes
-# mutation authority and this turn's work queue before anything else is read.
+# The LOCK/BOOTSTRAP/WAKE-QUEUE safety preamble keeps its order after FIRST
+# CONTEXT: it establishes mutation authority and this turn's work queue before
+# the bulk digests are read.
 #
 # On a Pi primary, the supervision-block step also checks whether Pi's two
 # tracked primary extensions are loaded and prints a PI_WATCH_EXTENSION
@@ -278,7 +283,7 @@ done
 # The ordered stage list is the contract behind the truncation banner: the child
 # names the stage it is entering, and the parent reports every stage at or after
 # that one as never emitted. Keep it in the exact order the digest prints.
-SESSION_START_STAGES='lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks context next-step'
+SESSION_START_STAGES='first-context lock bootstrap wake-queue supervision-instructions read-once context fleet-state network-checks next-step'
 
 stage() {  # <stage-name>: breadcrumb for the parent's truncation banner
   [ -n "${FM_SESSION_START_STAGE_FILE:-}" ] || return 0
@@ -428,6 +433,94 @@ print_file_or_absent() {
   else
     printf 'ABSENT\n'
   fi
+}
+
+# Hard byte budget for the FIRST CONTEXT block: it must fit inside a harness
+# head preview that keeps only about 2 KB of an oversized SessionStart digest.
+FIRST_CONTEXT_BUDGET=2000
+
+# extract_identity_section <path>: the file's `# Identity` section through the
+# next top-level `# ` heading, or empty when that heading is absent.
+extract_identity_section() {
+  local path=$1
+  [ -f "$path" ] || return 0
+  awk '
+    /^# Identity([[:space:]]|$)/ { printing = 1 }
+    printing && /^# / && !/^# Identity([[:space:]]|$)/ { exit }
+    printing { print }
+  ' "$path"
+}
+
+# truncate_utf8_bytes <text> <max-bytes>: keep a byte-safe prefix of <text>.
+truncate_utf8_bytes() {
+  local text=$1 max=$2
+  printf '%s' "$text" | head -c "$max" 2>/dev/null || printf '%s' "$text" | dd bs=1 count="$max" 2>/dev/null
+}
+
+# print_first_context: compact identity + preview-file instruction. The whole
+# printed block stays under FIRST_CONTEXT_BUDGET bytes; overflow truncates the
+# identity text with an explicit pointer to the source file rather than
+# exceeding the budget. An absent captain file yields the instruction and an
+# ABSENT note, never an error.
+print_first_context() {
+  local instruction captain_body shared_body header captain_part shared_part
+  local block bytes room pointer_cap body_budget
+
+  instruction='If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.'
+  pointer_cap='[truncated - full # Identity section in data/captain.md]'
+
+  header=$(printf '\n%s\n%s\n%s\n\n%s\n' "$RULE" "FIRST CONTEXT" "$RULE" "$instruction")
+
+  if [ -f "$DATA/captain.md" ]; then
+    captain_body=$(extract_identity_section "$DATA/captain.md")
+    if [ -z "$captain_body" ]; then
+      captain_body='(no # Identity section in data/captain.md)'
+    fi
+  else
+    captain_body='ABSENT'
+  fi
+
+  shared_body=
+  if [ -f "$DATA/captain-shared.md" ]; then
+    shared_body=$(extract_identity_section "$DATA/captain-shared.md")
+    if [ -z "$shared_body" ]; then
+      shared_body='(no # Identity section in data/captain-shared.md)'
+    fi
+  fi
+
+  captain_part=$(printf '\n%s\n%s\n%s\n' 'data/captain.md # Identity' "$SUBRULE" "$captain_body")
+  shared_part=
+  if [ -n "$shared_body" ]; then
+    shared_part=$(printf '\n%s\n%s\n%s\n' 'data/captain-shared.md # Identity' "$SUBRULE" "$shared_body")
+  fi
+
+  block=$(printf '%s%s%s\n' "$header" "$captain_part" "$shared_part")
+  bytes=$(printf '%s' "$block" | wc -c | tr -d ' ')
+  if [ "$bytes" -le "$FIRST_CONTEXT_BUDGET" ]; then
+    printf '%s' "$block"
+    return 0
+  fi
+
+  # Over budget: keep framing, drop shared identity first, then truncate captain
+  # identity and end with an explicit pointer to the source file.
+  room=$((FIRST_CONTEXT_BUDGET - $(printf '%s\n' "$header" | wc -c | tr -d ' ')))
+  [ "$room" -gt 0 ] || room=0
+  body_budget=$((room - $(printf '\n%s\n%s\n' 'data/captain.md # Identity' "$SUBRULE" | wc -c | tr -d ' ')))
+  [ "$body_budget" -gt 0 ] || body_budget=0
+  if [ "$body_budget" -gt $(( ${#pointer_cap} + 1 )) ]; then
+    captain_body=$(printf '%s\n%s' \
+      "$(truncate_utf8_bytes "$captain_body" $((body_budget - ${#pointer_cap} - 1)))" \
+      "$pointer_cap")
+  else
+    captain_body=$(truncate_utf8_bytes "$pointer_cap" "$body_budget")
+  fi
+  captain_part=$(printf '\n%s\n%s\n%s\n' 'data/captain.md # Identity' "$SUBRULE" "$captain_body")
+  block=$(printf '%s%s\n' "$header" "$captain_part")
+  bytes=$(printf '%s' "$block" | wc -c | tr -d ' ')
+  if [ "$bytes" -gt "$FIRST_CONTEXT_BUDGET" ]; then
+    block=$(truncate_utf8_bytes "$block" "$FIRST_CONTEXT_BUDGET")
+  fi
+  printf '%s' "$block"
 }
 
 print_backlog_pointer() {
@@ -686,7 +779,14 @@ if [ "$REEMIT" -eq 1 ]; then
 else
   section "SESSION START - $FM_HOME"
 fi
-# --- 1. lock -----------------------------------------------------------
+# --- 1. first-context --------------------------------------------------
+# Before LOCK and every bulky section: a harness head preview of an oversized
+# digest must still carry captain identity and the imperative to read the
+# saved full output. Hard-budgeted; see print_first_context.
+stage first-context
+print_first_context
+
+# --- 2. lock -----------------------------------------------------------
 stage lock
 subsection "LOCK"
 LOCK_OUT=$("$SCRIPT_DIR/fm-lock.sh" 2>&1)
@@ -738,7 +838,7 @@ if [ "$READ_ONLY" -eq 0 ]; then
     --locked "$NETWORK_STAGE_LOCKED" --harvest-pid $$ >/dev/null 2>&1 || true
 fi
 
-# --- 2. bootstrap --------------------------------------------------------
+# --- 3. bootstrap --------------------------------------------------------
 # FM_BOOTSTRAP_NETWORK=skip on every path: bootstrap's own network half is what
 # the deferred stage above is running right now, and running it twice would both
 # re-block this digest and race the worker's sweeps against themselves.
@@ -763,7 +863,7 @@ else
   printf '(silent - all good)\n'
 fi
 
-# --- 3. wake-drain ---------------------------------------------------------
+# --- 4. wake-drain ---------------------------------------------------------
 # The inactive-outcome startup scan runs in the deferred worker launched above,
 # where its potentially slow current-state reads cannot block this digest. It
 # publishes findings through the same durable queue drained here; the watcher's
@@ -808,7 +908,7 @@ else
   fi
 fi
 
-# --- 4. supervision operating instructions ----------------------------------
+# --- 5. supervision operating instructions ----------------------------------
 stage supervision-instructions
 AFK_PRESENT=0
 [ -e "$STATE/.afk" ] && AFK_PRESENT=1
@@ -856,7 +956,7 @@ fi
   --afk-mode "$AFK_MODE" \
   --x-mode "$X_MODE_PRESENT"
 
-# --- 5. read-once contract -------------------------------------------------
+# --- 6. read-once contract -------------------------------------------------
 # Ahead of the two digests it governs, not after them: a truncated tail is
 # exactly what drops a closing reminder, and this contract is what stops the
 # next turn from re-reading everything the digest just printed. Because it now
@@ -865,10 +965,10 @@ fi
 stage read-once
 section "READ-ONCE CONTRACT"
 cat <<'EOF'
-Everything below is printed in full for this session start: every state/*.meta,
-a compact data/backlog.md listing, a bounded tail of every state/*.status, each
-installed extension's session-start contribution, data/projects.md,
-data/secondmates.md, data/captain.md, data/captain-shared.md, and data/learnings.md.
+Everything below is printed in full for this session start: data/projects.md,
+data/secondmates.md, data/captain.md, data/captain-shared.md, data/learnings.md,
+every state/*.meta, a compact data/backlog.md listing, a bounded tail of every state/*.status,
+and each installed extension's session-start contribution.
 Do NOT re-read any of them after reading this digest, and do NOT bulk-read
 data/backlog.md or state/*.status: re-reading everything defeats the entire
 point of this command.
@@ -887,9 +987,20 @@ Go to a source directly only when:
     which case that stage's sources were never emitted and must be reconciled.
 EOF
 
-# --- 6. fleet-state digest ---------------------------------------------
-# Before CONTEXT: see this file's ORDERING note. Live fleet identity is what a
-# truncated tail must never take.
+# --- 7. context digest -----------------------------------------------------
+# Before FLEET STATE: see this file's ORDERING note. Curated memory must not
+# sit behind the bulk fleet dump when a harness delivers only a head preview.
+stage context
+section "CONTEXT"
+print_file_or_absent "$DATA/projects.md" "data/projects.md"
+print_file_or_absent "$DATA/secondmates.md" "data/secondmates.md"
+print_file_or_absent "$DATA/captain.md" "data/captain.md"
+print_file_or_absent "$DATA/captain-shared.md" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)"
+print_file_or_absent "$DATA/learnings.md" "data/learnings.md"
+
+# --- 8. fleet-state digest ---------------------------------------------
+# After CONTEXT: live fleet identity remains recovery-critical, but the bulk
+# dump must not bury captain memory (see this file's ORDERING note).
 stage fleet-state
 section "FLEET STATE"
 print_backlog_compact "$DATA/backlog.md" "data/backlog.md"
@@ -1007,15 +1118,15 @@ if fm_pf_relay_active "$FM_HOME" \
   fi
 fi
 
-# --- 6a. extensions ---------------------------------------------------------
+# --- 8a. extensions ---------------------------------------------------------
 # Installed extensions contribute here, each in its own bounded subsection. The
-# position is deliberate: after the live fleet state, before the network checks
-# and the curated memory, so an extension can never displace either. An
-# extension that is absent, opted out, or simply idle contributes nothing and
-# prints no section - that is the expected condition, and it costs one
-# enumeration. A registered hook that fails or hangs does NOT stop the digest;
-# it is bounded, killed at the bound, and reported as an EXT_HOOK: line.
-# bin/fm-ext-hook-lib.sh owns that contract and the reasoning behind it.
+# position is deliberate: after the live fleet state and before the network
+# checks, so an extension can never displace either. An extension that is
+# absent, opted out, or simply idle contributes nothing and prints no section -
+# that is the expected condition, and it costs one enumeration. A registered
+# hook that fails or hangs does NOT stop the digest; it is bounded, killed at
+# the bound, and reported as an EXT_HOOK: line. bin/fm-ext-hook-lib.sh owns
+# that contract and the reasoning behind it.
 stage extensions
 EXT_HOOK_ROWS=$("$SCRIPT_DIR/fm-ext.sh" hooks session-start --home "$FM_HOME" 2>/dev/null) || EXT_HOOK_ROWS=
 if [ -n "$EXT_HOOK_ROWS" ]; then
@@ -1041,14 +1152,12 @@ $EXT_HOOK_ROWS
 EXT_HOOK_ROWS_EOF
 fi
 
-# --- 7. network checks ------------------------------------------------------
-# Deliberately here and not later: these lines are actionable (a stuck clone, a
-# secondmate that could not be relaunched, broken GitHub auth), and the section
-# after this one is the curated memory a truncated tail is meant to take first.
-# Deliberately here and not earlier: this is the last point in the digest, so the
-# worker started at step 1 has had the whole composition above to finish in. It
-# is a NON-BLOCKING read either way - whatever the worker has published by now is
-# printed, and whatever it has not is named as not yet confirmed.
+# --- 9. network checks ------------------------------------------------------
+# Deliberately near the end: these lines are actionable (a stuck clone, a
+# secondmate that could not be relaunched, broken GitHub auth), and the worker
+# started after the lock has had the whole composition above to finish in. It
+# is a NON-BLOCKING read either way - whatever the worker has published by now
+# is printed, and whatever it has not is named as not yet confirmed.
 stage network-checks
 section "NETWORK CHECKS"
 if [ "$READ_ONLY" -eq 1 ]; then
@@ -1060,20 +1169,7 @@ else
   "$SCRIPT_DIR/fm-startup-network.sh" harvest --pid $$ 2>&1 || true
 fi
 
-# --- 8. context digest -----------------------------------------------------
-# Last of the bulk sections deliberately: curated memory is stable session to
-# session, already governed by config/startup-memory-budget, and recoverable
-# with one targeted read, so it is the cheapest thing for a truncated tail to
-# take (see this file's ORDERING note).
-stage context
-section "CONTEXT"
-print_file_or_absent "$DATA/projects.md" "data/projects.md"
-print_file_or_absent "$DATA/secondmates.md" "data/secondmates.md"
-print_file_or_absent "$DATA/captain.md" "data/captain.md"
-print_file_or_absent "$DATA/captain-shared.md" "data/captain-shared.md (shared, main-authoritative, read-only in secondmate homes)"
-print_file_or_absent "$DATA/learnings.md" "data/learnings.md"
-
-# --- 9. closing reminder -----------------------------------------------
+# --- 10. closing reminder -----------------------------------------------
 stage next-step
 section "NEXT STEP"
 if [ "$READ_ONLY" -eq 1 ]; then

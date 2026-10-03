@@ -238,6 +238,9 @@ Claude is a run-tier harness.
 `.claude/settings.json` registers one unmatched `SessionStart` hook, invoked through `CLAUDE_PROJECT_DIR` with a 180s timeout.
 The wrapper reads `source` from the hook payload.
 Native stdout context injection is supported.
+Observed on Claude Code 2.1.273, 2.1.274, and 2.1.288: when SessionStart hook output exceeds about 10,000 characters, the model receives a roughly 2 KB preview plus a persisted full-output file rather than the whole digest inline.
+That limit is observed behavior, not an authoritative documented ceiling.
+`bin/fm-session-start.sh` therefore leads with a compact FIRST CONTEXT block under 2,000 bytes so captain identity and the imperative to read the saved full digest survive that preview.
 
 ### Codex exec
 
