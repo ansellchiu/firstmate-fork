@@ -2595,6 +2595,23 @@ EOF
   pass "a session start inside its budget prints no truncation banner"
 }
 
+test_unwritable_tmpdir_still_emits_the_digest() {
+  local rec root home fakebin out
+  rec=$(new_world unwritable-tmpdir)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  out=$(TMPDIR="$home/missing-tmpdir" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  assert_not_contains "$out" "unable to allocate digest byte counter" "an unwritable TMPDIR suppressed the digest"
+  assert_contains "$out" "NEXT STEP" "an unwritable TMPDIR dropped the digest body"
+
+  pass "an unwritable TMPDIR still emits the full digest"
+}
+
 test_runtime_bound_leaves_harness_ancestry_headroom() {
   local rec root home fakebin nest out
   rec=$(new_world runtime-bound-ancestry)
@@ -3466,6 +3483,7 @@ test_pi_diagnostic_rejects_previous_session_loaded_marker
 test_runtime_bound_truncates_loudly_and_exits_zero
 test_portable_timeout_escalates_term_resistant_process
 test_runtime_bound_leaves_a_healthy_digest_untouched
+test_unwritable_tmpdir_still_emits_the_digest
 test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact

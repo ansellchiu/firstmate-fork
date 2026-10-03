@@ -319,10 +319,12 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
     # is lost, so the child still runs bounded.
     SESSION_START_STAGE_FILE=/dev/null
   fi
-  SESSION_START_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/fm-session-start-output.XXXXXX") || {
-    printf 'STARTUP TRUNCATED - unable to allocate digest byte counter.\n'
-    exit 0
-  }
+  SESSION_START_OUTPUT=$(mktemp "${TMPDIR:-/tmp}/fm-session-start-output.XXXXXX" 2>/dev/null) || SESSION_START_OUTPUT=
+  if [ -z "$SESSION_START_OUTPUT" ]; then
+    # Without a counter file the digest still prints; only the oversize
+    # banner is lost, because /dev/null always counts as zero bytes.
+    SESSION_START_OUTPUT=/dev/null
+  fi
   {
     if [ "$REEMIT" -eq 1 ]; then
       if [ -n "$SESSION_SOURCE" ]; then
@@ -346,7 +348,7 @@ if [ -z "${FM_SESSION_START_STAGE_FILE:-}" ]; then
   } | tee "$SESSION_START_OUTPUT"
   SESSION_START_RC=${PIPESTATUS[0]}
   DIGEST_TOTAL_BYTES=$(wc -c < "$SESSION_START_OUTPUT" | tr -d ' ')
-  rm -f "$SESSION_START_OUTPUT"
+  [ "$SESSION_START_OUTPUT" = /dev/null ] || rm -f "$SESSION_START_OUTPUT"
   DIGEST_CEILING_BYTES=${FM_SESSION_START_DIGEST_CEILING:-65536}
   case "$DIGEST_CEILING_BYTES" in ''|*[!0-9]*|0) DIGEST_CEILING_BYTES=65536 ;; esac
   if [ "$DIGEST_TOTAL_BYTES" -gt "$DIGEST_CEILING_BYTES" ]; then
