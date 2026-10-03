@@ -1501,14 +1501,52 @@ SH
   pass "host: the dialog mirror, its feed, and the wake file are owner-only"
 }
 
-# Park again after a host was stopped mid-park. The fork acks the stopped
-# watcher's downtime silently while the wake queue is empty (fork PR 1), so the
-# new cycle parks on a live watcher instead of resurfacing that downtime to main.
+# Park again after a host was stopped mid-park. With the wake queue empty, the
+# fork acks the stopped watcher's downtime silently (fork PR 1) and the new
+# cycle parks. Otherwise the new cycle's first close is the downtime resurface,
+# which main drains before the next park. That close can end the park before
+# its cycle is ever seen live, so this waits for the exit itself.
+# The resurface pass-through leaves its successor running. Stop that watcher
+# and acknowledge the downtime its exit records, so the next park starts a
+# watcher it owns. Attaching instead would not observe the exit until the
+# beacon went stale, and this fixture's turn budget would already be gone.
+quiet_pass_through_successor() {  # <home>
+  local home=$1 pid i gen
+  pid=$(cat "$home/state/.watch.lock/pid" 2>/dev/null || true)
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null || true
+    i=0
+    while [ "$i" -lt 50 ] && kill -0 "$pid" 2>/dev/null; do
+      sleep 0.1
+      i=$((i + 1))
+    done
+    kill -0 "$pid" 2>/dev/null && fail "fixture: the pass-through successor did not stop"
+  fi
+  gen=$(cat "$home/state/.watcher-down" 2>/dev/null || true)
+  gen=${gen##*:}
+  [ -n "$gen" ] || return 0
+  FM_HOME="$home" bash -c '
+    . "$1"
+    fm_recovery_marker_ack "$2" "$3"
+  ' _ "$ROOT/bin/fm-wake-lib.sh" "$home/state/.watcher-down" "$gen" \
+    || fail "fixture: could not acknowledge the successor downtime"
+}
+
 park_after_stop() {  # <home>
+  local acked
+  acked="acked:downtime:$(sed -n 's/^pending:downtime://p' "$1/state/.watcher-down" 2>/dev/null)"
+  rm -f "$1/host.rc"
+  : > "$1/park.go"
+  wait_until 150 sh -c '[ -s "$1/host.rc" ] || [ "$(cat "$1/state/.watcher-down" 2>/dev/null)" = "$2" ]' _ "$1" "$acked" \
+    || fail "the watcher's downtime was neither acked silently nor resurfaced to main: $(cat "$1/host.out")"
+  if ! host_exited "$1"; then
+    watcher_live "$1" || fail "the silently acked downtime left no live watcher"
+    return 0
+  fi
+  assert_re '^check: rearm-resurface' "$1/host.out" "fixture: the first close after the watcher stopped was not its resurface"
+  main_drain_and_ack "$1"
+  quiet_pass_through_successor "$1"
   park_again "$1"
-  wait_until 150 grep -q '^acked:downtime:' "$1/state/.watcher-down" \
-    || fail "the stopped watcher's downtime was not acked silently: $(cat "$1/state/.watcher-down" 2>/dev/null)"
-  ! host_exited "$1" || fail "the stopped watcher's downtime reached main: $(cat "$1/host.out")"
 }
 
 # Dialog counts as delivered only once the turn that carried it is accepted
