@@ -1,0 +1,11 @@
+
+### [target] Scenario 4: 13 live tasks + slow (12s) backlog divergence tool; second drain starts 1s into first, default 10s timeout
+drain B rc=0 finished at +27s
+drain A rc=0 finished at +27s
+drain B 'STATUS PRESENTATION SKIPPED' lines: 0
+drain B section headers:
+     1 OPEN DECISIONS:
+
+### [target] Scenario 5: presentation fold timing, 13 tasks, no contention (avg of 5 drains)
+avg drain+ack cycle: 10.75s
+leaked owner dirs at end: 0

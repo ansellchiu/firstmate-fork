@@ -1,0 +1,3 @@
+ok - presentation and acknowledgement lock waits are bounded, retriable, and consume nothing when skipped
+ok - both receipt acknowledgement modes preserve holder advisories and retriable wakes
+ok - record divergence runs outside the status-presentation lock

@@ -1,0 +1,6 @@
+[target] run 1: presentation drain 4.85s, ack .60s
+[target] run 2: presentation drain 5.10s, ack .44s
+[target] run 3: presentation drain 5.19s, ack .55s
+[base-fd03ca89] run 1: presentation drain 5.81s, ack .36s
+[base-fd03ca89] run 2: presentation drain 4.99s, ack .42s
+[base-fd03ca89] run 3: presentation drain 7.02s, ack .51s

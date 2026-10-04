@@ -1,0 +1,12 @@
+
+### [base-fd03ca89] Scenario 4: 13 live tasks + slow (12s) backlog divergence tool; second drain starts 1s into first, default 10s timeout
+drain B rc=0 finished at +12s
+drain A rc=0 finished at +19s
+drain B 'STATUS PRESENTATION SKIPPED' lines: 1
+  STATUS PRESENTATION SKIPPED: lock remains held by live pid 31896 after 10s; retry on the next drain.
+drain B section headers:
+     1 STATUS PRESENTATION SKIPPED:
+
+### [base-fd03ca89] Scenario 5: presentation fold timing, 13 tasks, no contention (avg of 5 drains)
+avg drain+ack cycle: 9.37s
+leaked owner dirs at end: 0

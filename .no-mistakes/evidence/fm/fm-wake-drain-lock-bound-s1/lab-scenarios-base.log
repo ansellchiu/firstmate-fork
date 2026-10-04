@@ -1,0 +1,39 @@
+
+### [base-fd03ca89] Scenario 1: --ack-through behind a live queue-lock holder (FM_STATUS_PRESENTATION_LOCK_TIMEOUT unset => default 10s)
+presentation drain rc=0
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 94839.1791123081.NastbQ
+queue-lock holder pid=97995
+  /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-scen.35gCJv/scen.sh: line 14: 98515 Alarm clock: 14            perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$@"
+  rc=142 elapsed=25s
+queue unchanged after skipped ack: yes
+retry same ack command after holder exits:
+  rc=0 elapsed=1s
+queue empty after retry: yes
+leaked owner dirs: 0
+
+### [base-fd03ca89] Scenario 2: --ack-through behind a live inactive-outcome receipt (scan) lock holder, timeout=3
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 42359.1791123109.po4tjD
+receipt-lock holder pid=45010
+  /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-scen.35gCJv/scen.sh: line 14: 45605 Alarm clock: 14            perl -e 'alarm shift; exec @ARGV' "$timeout_s" "$@"
+  rc=142 elapsed=25s
+abcdef.presented
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-scen.35gCJv/scen.sh: line 34: kill: (45010) - No such process
+retry:
+  rc=0 elapsed=1s
+abcdef.presented
+
+### [base-fd03ca89] Scenario 3: plain presentation drain behind a live queue-lock holder, timeout=2 (unchanged behaviour)
+  WAKE DRAIN SKIPPED: queue lock remains held by live pid 75584 after 2s; retry on the next drain.
+  rc=0 elapsed=2s
+
+### [base-fd03ca89] Scenario 4: 13 live tasks + slow (6s) backlog divergence tool; second drain starts 1s into first, timeout=3
+drain B rc=0 finished at +6s
+drain A rc=0 finished at +12s
+drain B 'STATUS PRESENTATION SKIPPED' lines: 1
+  STATUS PRESENTATION SKIPPED: lock remains held by live pid 83991 after 3s; retry on the next drain.
+drain B section headers:
+     1 STATUS PRESENTATION SKIPPED:
+
+### [base-fd03ca89] Scenario 5: presentation fold timing, 13 tasks, no contention (avg of 5 drains)
+avg drain+ack cycle: 7.76s
+leaked owner dirs at end: 0
