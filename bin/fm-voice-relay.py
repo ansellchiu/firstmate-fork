@@ -396,7 +396,10 @@ class Credentials:
         self._source = None
         self._resolved = None
         self._ambient_spent = False
-        self._lock = asyncio.Lock()
+        # Python 3.9 binds asyncio synchronization primitives to the running
+        # event loop, so create this on first use rather than during import or
+        # synchronous construction of the relay.
+        self._lock = None
 
     def _usable(self):
         if self._creds is None:
@@ -408,6 +411,8 @@ class Credentials:
         return time.time() + self.REFRESH_MARGIN < self._expires
 
     async def get(self):
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             if not self._usable():
                 spend = self._source == FROM_ENVIRONMENT and bool(self.profile)
