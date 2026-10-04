@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# fm-slot-audit.sh - read-only audit of work-copy ownership in this home.
+# fm-slot-audit.sh - read-only audit of work-copy ownership in this home and the
+# local Firstmate homes registered with it.
 #
 # Usage: fm-slot-audit.sh
 #
 # Reports two kinds of ambiguity and changes nothing:
 #   DOUBLE_CLAIM <worktree> <meta> <meta>...  one copy recorded by several state/*.meta
-#   OUT_OF_ISOLATION <task> <pid> <agent> <cwd>  a recorded worker in a primary copy
+#   OUT_OF_ISOLATION <task> <pid> <agent> <cwd>  a recorded worker in this home, a
+#                                                project clone, or its repository's primary checkout
 #   AUDIT_ERROR <pid> <reason>                  an unreadable worker process
 # Exits 0 when clean, 1 when anything is reported.
 #
@@ -26,9 +28,17 @@ STATE=${FM_STATE_OVERRIDE:-$FM_HOME/state}
 LIB_DIR=$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 # shellcheck source=bin/fm-agent-process-lib.sh
 . "$LIB_DIR/fm-agent-process-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$LIB_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-pr-lib.sh
+. "$LIB_DIR/fm-pr-lib.sh"
 
 claims=$(
-  states=("$STATE")
+  collect_local_firstmate_states "$STATE" || {
+    printf 'AUDIT_ERROR local-homes-unreadable\n'
+    exit 1
+  }
+  states=("${TREEHOUSE_OWNER_STATES[@]}")
   seen=$'\n'
   for ((i=0; i<${#states[@]}; i++)); do
     state=$(CDPATH='' cd -- "${states[i]}" 2>/dev/null && pwd -P) || continue
@@ -61,7 +71,7 @@ while [ "$ancestor" -gt 1 ] 2>/dev/null; do
 done
 root=$(CDPATH='' cd -- "$FM_HOME" && pwd -P)
 primaries=("$root")
-for project in "$root"/projects/*; do
+for project in "${FM_PROJECTS_OVERRIDE:-$root/projects}"/*; do
   [ -d "$project" ] || continue
   physical=$(CDPATH='' cd -- "$project" && pwd -P) || continue
   primaries+=("$physical")
@@ -85,7 +95,7 @@ escapes=$(
       continue
     fi
     task=$(printf '%s\n' "$environment" | tr ' ' '\n' | sed -n 's/^FM_TASK_ID=//p' | head -1)
-    case "$task" in ''|*[!a-zA-Z0-9_-]*) continue ;; esac
+    fm_task_id_creation_valid "$task" || continue
     case " $environment " in
       *" FM_TASK_INBOX=$state_real/$task.inbox "*) ;;
       *) continue ;;
@@ -106,13 +116,19 @@ escapes=$(
       printf 'AUDIT_ERROR %s cannot-resolve-cwd task=%s\n' "$pid" "$task"
       continue
     }
+    escaped=0
     for primary in "${primaries[@]}"; do
-      case "$cwd" in "$primary"|"$primary"/*)
-        printf 'OUT_OF_ISOLATION %s %s %s %s\n' "$task" "$pid" "${comm##*/}" "$cwd"
-        break
-        ;;
-      esac
+      case "$cwd" in "$primary"|"$primary"/*) escaped=1; break ;; esac
     done
+    project=$(grep -m1 '^project=' "$meta" | cut -d= -f2-)
+    if [ "$escaped" = 0 ] && [ -n "$project" ]; then
+      git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null) &&
+        git_dir=$(CDPATH='' cd -- "$git_dir" 2>/dev/null && pwd -P) || git_dir=
+      common=$(git -C "$project" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
+        common=$(CDPATH='' cd -- "$common" 2>/dev/null && pwd -P) || common=
+      [ -z "$git_dir" ] || [ "$git_dir" != "$common" ] || escaped=1
+    fi
+    [ "$escaped" = 0 ] || printf 'OUT_OF_ISOLATION %s %s %s %s\n' "$task" "$pid" "${comm##*/}" "$cwd"
   done
 )
 

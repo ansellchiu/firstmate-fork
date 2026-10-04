@@ -63,6 +63,13 @@ add_process pi-app "$home" Pi Pi
 for harness in claude cursor-agent agy codex opencode pi grok kimi devin rovo omp; do
   add_process "$harness" "$home" "$harness" "$harness"
 done
+add_process fix.v2 "$home" codex codex
+git init --quiet "$case_dir/primary"
+mkdir -p "$case_dir/primary/src"
+git -C "$case_dir/primary" -c user.name=t -c user.email=t@example.invalid commit --quiet --allow-empty -m init
+git -C "$case_dir/primary" worktree add --quiet --detach "$case_dir/linked"
+add_process external "$case_dir/primary/src" codex codex
+printf 'project=%s\n' "$case_dir/linked" >> "$home/state/external.meta"
 add_process isolated "$case_dir/isolated" codex codex
 add_process interactive "$home" codex codex
 sleep 0.1
@@ -72,7 +79,7 @@ status=$?
 set -e
 expect_code 1 "$status" 'audit reports ambiguous ownership'
 assert_contains "$out" "DOUBLE_CLAIM $slot $home/state/first.meta $other/state/second.meta" 'canonical cross-home claimants are reported'
-for task in native cursor gemini muse signed launcher pi-app claude cursor-agent agy codex opencode pi grok kimi devin rovo omp; do
+for task in fix.v2 external native cursor gemini muse signed launcher pi-app claude cursor-agent agy codex opencode pi grok kimi devin rovo omp; do
   assert_contains "$out" "OUT_OF_ISOLATION $task " "worker $task is detected"
 done
 if [[ "$out" == *'OUT_OF_ISOLATION interactive '* || "$out" == *'OUT_OF_ISOLATION isolated '* ]]; then

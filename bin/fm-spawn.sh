@@ -4499,6 +4499,21 @@ agy_spawn_fail() {  # <detail>
   rovo_endpoint_cleanup
 }
 
+# A slot another task's record still holds is never launched into, fresh or
+# relaunched: that task's worker may be parked in it, and either cleanup would
+# then be refused.
+spawn_refuse_held_slot() {
+  local held
+  held=$(fm_treehouse_slot_record_claimants "$STATE" "$WT" "$ID") || {
+    echo "error: cannot enumerate local Firstmate homes to prove Treehouse pool slot $WT is free; refusing to launch $ID; inspect window $T" >&2
+    exit 1
+  }
+  [ -z "$held" ] || {
+    echo "error: Treehouse pool slot $WT is still recorded by $(printf '%s' "$held" | paste -sd, -); refusing to launch $ID into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window $T" >&2
+    exit 1
+  }
+}
+
 if [ "$RELAUNCH" -eq 1 ] && [ "$BACKEND" = orca ]; then
   [ "$KIND" = secondmate ] || validate_spawn_worktree "relaunch" "$T"
 elif [ "$RELAUNCH" -eq 1 ]; then
@@ -4609,19 +4624,16 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   # Written under the Treehouse project lock held from before slot allocation
   # through metadata publication, so no other spawn or return sees a half-claim.
   if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
-    # A slot another task's record still holds is never taken over: that task's
-    # worker may be parked in it, and either cleanup would then be refused.
-    SLOT_HELD_BY=$(fm_treehouse_slot_record_claimants "$STATE" "$WT" "$ID" | paste -sd, -)
-    if [ -n "$SLOT_HELD_BY" ]; then
-      echo "error: Treehouse pool slot $WT is still recorded by task $SLOT_HELD_BY; refusing to launch $ID into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window $T" >&2
-      exit 1
-    fi
+    spawn_refuse_held_slot
     if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
       echo "error: could not claim Treehouse pool slot $WT for task $ID; refusing to launch a worker whose slot cannot later be proved to be its own; inspect window $T" >&2
       exit 1
     fi
     SPAWN_SLOT_CLAIMED=1
   fi
+fi
+if [ "$RELAUNCH" -eq 1 ] && [ "$KIND" != secondmate ] && fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
+  spawn_refuse_held_slot
 fi
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
   freshen_spawn_worktree_base "$WT" || exit 1

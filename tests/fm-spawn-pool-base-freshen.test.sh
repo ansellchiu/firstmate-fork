@@ -758,12 +758,35 @@ test_pool_slot_recorded_by_another_task_is_refused() {
   out=$(run_spawn "$id" --scout)
   status=$?
   [ "$status" -ne 0 ] || fail "spawn launched into a slot another task's record holds: $out"
-  assert_contains "$out" "still recorded by task parked-holder-r1" \
+  assert_contains "$out" "/state/parked-holder-r1.meta; refusing" \
     "spawn did not name the task holding the slot"
   [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for a held slot"
   grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" \
     || fail "spawn overwrote the holder's slot claim: $(cat "$SLOT_CLAIM")"
   pass "a slot another task's record still holds is refused without touching its claim"
+}
+
+# Homes may reuse a task id, so a registered home's record of the same id still
+# holds the slot even when the slot carries no claim naming that home.
+test_pool_slot_recorded_by_a_registered_home_is_refused() {
+  local rec id out status mate
+  id='pool-slot-held-elsewhere-r1'
+  rec=$(make_case slot-held-elsewhere "$id")
+  read_case_record "$rec"
+  lay_out_as_pool_slot
+  mate="$CASE_DIR/mate-home"
+  mkdir -p "$mate/state"
+  printf 'kind=ship\nworktree=%s\n' "$POOL_DIR" > "$mate/state/$id.meta"
+  printf -- '- mate - mate home (home: %s; scope: all; projects: project; added 2026-01-01)\n' "$mate" \
+    > "$HOME_DIR/data/secondmates.md"
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  [ "$status" -ne 0 ] || fail "spawn launched into a slot a registered home's same-id record holds: $out"
+  assert_contains "$out" "/mate-home/state/$id.meta; refusing" \
+    "spawn did not name the registered home's record holding the slot"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for a held slot"
+  [ ! -e "$SLOT_CLAIM" ] || fail "spawn claimed a slot another home's record holds: $(cat "$SLOT_CLAIM")"
+  pass "a slot a registered home's same-id record holds is refused"
 }
 
 
@@ -800,6 +823,7 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
+test_pool_slot_recorded_by_a_registered_home_is_refused
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
 test_stale_pool_base_refreshes_before_branching
