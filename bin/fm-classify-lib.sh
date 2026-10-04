@@ -1207,7 +1207,7 @@ _fm_open_decisions_file_ident() {  # <file> -> strongest available identity
   if [ "$_FM_CLASSIFY_UNAME_S" = Darwin ]; then
     fields=$(LC_ALL=C /usr/bin/stat -f '%d:%i%t%B%t%FB' "$f" 2>/dev/null) || return 1
   else
-    fields=$(LC_ALL=C stat -c '%d:%i%t%W%t%w' "$f" 2>/dev/null) || return 1
+    fields=$(LC_ALL=C stat --printf '%d:%i\t%W\t%w' "$f" 2>/dev/null) || return 1
   fi
   IFS=$'\t' read -r ident epoch birth <<< "$fields"
   [ -n "$ident" ] || return 1
