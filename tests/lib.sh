@@ -247,19 +247,209 @@ fm_test_remove_tree() {
   rm -rf "$dir"
 }
 
+# Pi watcher tests launch bin/fm-watch-arm.sh from a fixture and the stub ignores
+# TERM, so the signal sent when the launching process exits does not stop it.
+# The arm is then reparented and keeps running after the fixture is removed.
+# Reaping matches the script path, never a process name alone: an arm is stopped
+# only when that path is under a fixture this process owns, or under the temp
+# directory after that code root is already gone. An arm outside the temp
+# directory is never a candidate, so another home's watcher is out of scope.
+
+fm_test_trim() {
+  local value=$1
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
+  printf '%s\n' "$value"
+}
+
+fm_test_collapse_slashes() {
+  local path=$1 prev=
+  while [ "$path" != "$prev" ]; do
+    prev=$path
+    path=${path//\/\//\/}
+  done
+  printf '%s\n' "$path"
+}
+
+# Echo the code root when <command> invokes bin/fm-watch-arm.sh by absolute path.
+# A temp path is rewritten to the physical temp directory so /var and /private/var
+# listings of the same fixture compare equal.
+fm_test_watch_arm_root() { # <command>
+  local command=$1 tok root raw physical
+  # Intentional split: fixture paths have no spaces, and a spaced token cannot
+  # be the absolute script path this match requires.
+  # shellcheck disable=SC2086
+  for tok in $command; do
+    case "$tok" in
+      /*/bin/fm-watch-arm.sh)
+        tok=$(fm_test_collapse_slashes "$tok")
+        root=${tok%"/bin/fm-watch-arm.sh"}
+        raw=${TMPDIR:-/tmp}
+        raw=${raw%/}
+        if [ -n "$raw" ] && [ -d "$raw" ]; then
+          physical=$(CDPATH='' cd -P -- "$raw" && pwd -P) || physical=
+          case "$root" in
+            "$raw"|"$raw"/*)
+              if [ -n "$physical" ]; then
+                root="$physical${root#"$raw"}"
+              fi
+              ;;
+          esac
+        fi
+        printf '%s\n' "$root"
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+fm_test_pid_command() { # <pid>
+  local value
+  value=$(ps -p "$1" -ww -o command= 2>/dev/null) || return 1
+  fm_test_trim "$value"
+}
+
+fm_test_pid_is_self_or_ancestor() { # <pid>
+  local pid=$1 walk=$$ i=0
+  while [ "$walk" -gt 1 ] && [ "$i" -lt 64 ]; do
+    [ "$walk" != "$pid" ] || return 0
+    walk=$(ps -p "$walk" -o ppid= 2>/dev/null | tr -d '[:space:]') || return 0
+    case "$walk" in ''|*[!0-9]*) return 1 ;; esac
+    i=$((i + 1))
+  done
+  return 1
+}
+
+fm_test_stop_pid() { # <pid>
+  local pid=$1 i=0
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$pid" -gt 1 ] || return 1
+  command kill -TERM "$pid" 2>/dev/null || true
+  while [ "$i" -lt 10 ]; do
+    command kill -0 "$pid" 2>/dev/null || return 0
+    i=$((i + 1))
+    sleep 0.05
+  done
+  command kill -KILL "$pid" 2>/dev/null || true
+  i=0
+  while [ "$i" -lt 10 ]; do
+    command kill -0 "$pid" 2>/dev/null || return 0
+    i=$((i + 1))
+    sleep 0.05
+  done
+  return 1
+}
+
+fm_test_path_under() { # <path> <root>
+  [ -n "$2" ] || return 1
+  case "$1" in
+    "$2"|"$2"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Temp-directory prefixes the pruned-arm sweep treats as fixture space. Both
+# the raw TMPDIR and its physical path are included so a symlink alias cannot
+# hide a fixture arm or reach outside the temp directory.
+fm_test_temp_prefixes() {
+  local raw physical
+  raw=${TMPDIR:-/tmp}
+  raw=${raw%/}
+  printf '%s\n' "$raw"
+  if [ -d "$raw" ]; then
+    physical=$(CDPATH='' cd -P -- "$raw" && pwd -P) || physical=
+    if [ -n "$physical" ] && [ "$physical" != "$raw" ]; then
+      printf '%s\n' "$physical"
+    fi
+  fi
+}
+
+# mode=owned stops arms under the fixture roots named in the remaining args.
+# mode=pruned stops arms whose code root is already gone and lies under the
+# temp directory. Either mode signals one recorded pid, never its process group.
+fm_test_reap_matching_watch_arms() { # <owned|pruned> [root...]
+  local mode=$1
+  shift
+  local uid scan pid command arm_root fixture live matched prefix saved_ifs
+  uid=$(id -u 2>/dev/null || true)
+  case "$uid" in ''|*[!0-9]*) return 0 ;; esac
+  scan=$(ps -u "$uid" -ww -o pid=,command= 2>/dev/null) || return 0
+  while read -r pid command; do
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    [ "$pid" -gt 1 ] || continue
+    [ "$pid" != "$$" ] || continue
+    command=$(fm_test_trim "$command")
+    # Skip the common process before any per-pid lookup. A full account scan
+    # includes long-lived commands, and walking ancestry for each of them is
+    # what made this sweep slower than the tests it serves.
+    case "$command" in
+      */bin/fm-watch-arm.sh|*/bin/fm-watch-arm.sh\ *) ;;
+      *) continue ;;
+    esac
+    arm_root=$(fm_test_watch_arm_root "$command") || continue
+    fm_test_pid_is_self_or_ancestor "$pid" && continue
+    matched=0
+    if [ "$mode" = owned ]; then
+      for fixture in "$@"; do
+        if fm_test_path_under "$arm_root" "$fixture"; then
+          matched=1
+          break
+        fi
+      done
+    elif [ "$mode" = pruned ]; then
+      [ -d "$arm_root" ] && continue
+      prefix=$(fm_test_temp_prefixes)
+      # Newline-separated prefixes, none of which contain whitespace.
+      saved_ifs=$IFS
+      IFS=$'\n'
+      # shellcheck disable=SC2086
+      for prefix in $prefix; do
+        if fm_test_path_under "$arm_root" "$prefix"; then
+          matched=1
+          break
+        fi
+      done
+      IFS=$saved_ifs
+    fi
+    [ "$matched" -eq 1 ] || continue
+    # Re-read the command so a recycled pid is not signalled from a stale scan.
+    # The script path is the identity: spacing around it is not.
+    live=$(fm_test_pid_command "$pid" 2>/dev/null || true)
+    live=$(fm_test_watch_arm_root "$live" 2>/dev/null || true)
+    [ "$live" = "$arm_root" ] || continue
+    fm_test_stop_pid "$pid" || true
+  done <<EOF
+$scan
+EOF
+}
+
+fm_test_cleanup_roots() {
+  local d
+  FM_TEST_CLEANUP_ROOTS=()
+  for d in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
+    [ -n "$d" ] && FM_TEST_CLEANUP_ROOTS+=("$d")
+  done
+  if [ -f "$FM_TEST_CLEANUP_REGISTRY" ]; then
+    while IFS= read -r d; do
+      [ -n "$d" ] && FM_TEST_CLEANUP_ROOTS+=("$d")
+    done < "$FM_TEST_CLEANUP_REGISTRY"
+  fi
+}
+
 fm_test_cleanup() {
   local d
   fm_test_reap_watchers
   fm_test_reap_procevent_homes
-  for d in "${FM_TEST_CLEANUP_DIRS[@]:-}"; do
+  fm_test_cleanup_roots
+  if [ "${#FM_TEST_CLEANUP_ROOTS[@]}" -gt 0 ]; then
+    fm_test_reap_matching_watch_arms owned "${FM_TEST_CLEANUP_ROOTS[@]}"
+  fi
+  for d in "${FM_TEST_CLEANUP_ROOTS[@]:-}"; do
     [ -n "$d" ] && fm_test_remove_tree "$d"
   done
-  if [ -f "$FM_TEST_CLEANUP_REGISTRY" ]; then
-    while IFS= read -r d; do
-      [ -n "$d" ] && fm_test_remove_tree "$d"
-    done < "$FM_TEST_CLEANUP_REGISTRY"
-    rm -f "$FM_TEST_CLEANUP_REGISTRY"
-  fi
+  rm -f "$FM_TEST_CLEANUP_REGISTRY"
+  FM_TEST_CLEANUP_ROOTS=()
 }
 
 fm_test_tmproot() {
@@ -293,6 +483,9 @@ FM_TEST_ORPHAN_MAX_AGE_SECONDS=${FM_TEST_ORPHAN_MAX_AGE_SECONDS:-3600}
 
 fm_test_reap_orphans() {
   local marker dir mtime now owner_pid owner_identity current_identity
+  # Arms whose fixture was already removed have no marker left to find. The
+  # temp-directory scope is what keeps this startup sweep off another home.
+  fm_test_reap_matching_watch_arms pruned
   now=$(date +%s)
   for marker in "${TMPDIR:-/tmp}"/fm-*/.fm-test-fixture; do
     [ -e "$marker" ] || continue
@@ -310,6 +503,7 @@ fm_test_reap_orphans() {
     mtime=$(stat -c %Y "$marker" 2>/dev/null || stat -f %m "$marker" 2>/dev/null) || continue
     [ $((now - mtime)) -ge "$FM_TEST_ORPHAN_MAX_AGE_SECONDS" ] || continue
     dir=$(dirname "$marker")
+    fm_test_reap_matching_watch_arms owned "$dir"
     fm_test_remove_tree "$dir"
   done
 }

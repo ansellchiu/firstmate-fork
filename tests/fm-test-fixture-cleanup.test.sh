@@ -164,9 +164,184 @@ test_orphan_sweep_reaps_read_only_package_tree() {
   pass "the orphan sweep reaps read-only package fixtures"
 }
 
+# An arm the Pi watcher tests leave behind ignores TERM, so removing the fixture
+# directory does not stop it. The owner exiting must stop that arm, and must
+# leave an arm launched from a different fixture running.
+test_cleanup_reaps_owned_watch_arm_only() {
+  local harness holder_hb victim_hb holder_dir release holder_pid victim_status
+  local victim_a victim_b holder_a holder_b
+  harness=$(fm_test_tmproot fm-test-cleanup-arm-harness)
+  holder_hb="$harness/holder-hb"
+  victim_hb="$harness/victim-hb"
+  holder_dir="$harness/holder-dir"
+  release="$harness/release"
+
+  bash -c '
+    set -u
+    # shellcheck source=tests/lib.sh
+    . "$1"
+    d=$(fm_test_tmproot fm-pi-watch-extension)
+    printf "%s\n" "$d" > "$2"
+    mkdir -p "$d/root/bin"
+    cat > "$d/root/bin/fm-watch-arm.sh" <<'"'"'SH'"'"'
+#!/usr/bin/env bash
+trap "" TERM INT
+end=$((SECONDS + 12))
+while [ ! -e "${FM_ARM_STOP:?}" ] && [ "$SECONDS" -lt "$end" ]; do
+  n=$((n + 1))
+  if ! echo "$n" > "${FM_ARM_HEARTBEAT:?}"; then
+    exit 0
+  fi
+  sleep 0.2
+done
+SH
+    chmod +x "$d/root/bin/fm-watch-arm.sh"
+    export FM_ARM_HEARTBEAT="$3" FM_ARM_STOP="$4"
+    "$d/root/bin/fm-watch-arm.sh" --restart >/dev/null 2>&1 &
+    disown "$!" 2>/dev/null || true
+    tries=0
+    while [ ! -s "$FM_ARM_HEARTBEAT" ] && [ "$tries" -lt 50 ]; do
+      sleep 0.05
+      tries=$((tries + 1))
+    done
+    [ -s "$FM_ARM_HEARTBEAT" ] || exit 1
+    end=$((SECONDS + 12))
+    while [ ! -e "$FM_ARM_STOP" ] && [ "$SECONDS" -lt "$end" ]; do sleep 0.05; done
+  ' _ "$LIB" "$holder_dir" "$holder_hb" "$release" &
+  holder_pid=$!
+
+  victim_status=0
+  bash -c '
+    set -u
+    # shellcheck source=tests/lib.sh
+    . "$1"
+    d=$(fm_test_tmproot fm-pi-watch-extension)
+    mkdir -p "$d/root/bin"
+    cat > "$d/root/bin/fm-watch-arm.sh" <<'"'"'SH'"'"'
+#!/usr/bin/env bash
+trap "" TERM INT
+end=$((SECONDS + 12))
+while [ "$SECONDS" -lt "$end" ]; do
+  n=$((n + 1))
+  if ! echo "$n" > "${FM_ARM_HEARTBEAT:?}"; then
+    exit 0
+  fi
+  sleep 0.2
+done
+SH
+    chmod +x "$d/root/bin/fm-watch-arm.sh"
+    export FM_ARM_HEARTBEAT="$2"
+    "$d/root/bin/fm-watch-arm.sh" --restart >/dev/null 2>&1 &
+    disown "$!" 2>/dev/null || true
+    tries=0
+    while [ ! -s "$FM_ARM_HEARTBEAT" ] && [ "$tries" -lt 50 ]; do
+      sleep 0.05
+      tries=$((tries + 1))
+    done
+    [ -s "$FM_ARM_HEARTBEAT" ] || exit 1
+  ' _ "$LIB" "$victim_hb" || victim_status=$?
+  [ "$victim_status" -eq 0 ] || fail "the fixture owner exited before its watch arm published a heartbeat"
+
+  victim_a=$(cat "$victim_hb")
+  sleep 0.6
+  victim_b=$(cat "$victim_hb")
+  [ "$victim_a" = "$victim_b" ] || fail "a watch arm kept running after its fixture owner exited"
+  holder_a=$(cat "$holder_hb" 2>/dev/null || true)
+  [ -n "$holder_a" ] || fail "the other fixture never armed its watch arm"
+  sleep 0.6
+  holder_b=$(cat "$holder_hb")
+  [ "$holder_a" != "$holder_b" ] || fail "fixture cleanup stopped a watch arm owned by a different fixture"
+  printf 'release\n' > "$release"
+  wait "$holder_pid" || fail "the other fixture owner did not exit after release"
+  pass "fixture cleanup stops only the watch arm its own fixture armed"
+}
+
+# A prior run can remove the fixture and leave the arm reparented. The next
+# test process's startup sweep must stop an arm whose code root under the temp
+# directory is already gone, and must leave an arm outside that directory.
+test_orphan_sweep_reaps_pruned_temp_watch_arm_only() {
+  local harness outside hb_temp hb_out stop_out temp_root
+  local temp_a temp_b out_a out_b
+  harness=$(fm_test_tmproot fm-test-cleanup-arm-orphan-harness)
+  outside=$(mktemp -d "$ROOT/.fm-arm-scope.XXXXXX")
+  hb_temp="$harness/temp-hb"
+  hb_out="$harness/out-hb"
+  stop_out="$harness/out-stop"
+  temp_root=$(mktemp -d "${TMPDIR:-/tmp}/fm-pi-watch-extension.XXXXXX")
+
+  launch_bounded_arm() { # <root> <heartbeat> [stop-file]
+    local root=$1 heartbeat=$2 stop=${3:-}
+    mkdir -p "$root/bin"
+    if [ -n "$stop" ]; then
+      cat > "$root/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+trap '' TERM INT
+end=$((SECONDS + 12))
+while [ ! -e "${FM_ARM_STOP:?}" ] && [ "$SECONDS" -lt "$end" ]; do
+  n=$((n + 1))
+  if ! echo "$n" > "${FM_ARM_HEARTBEAT:?}"; then
+    exit 0
+  fi
+  sleep 0.2
+done
+SH
+    else
+      cat > "$root/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+trap '' TERM INT
+end=$((SECONDS + 12))
+while [ "$SECONDS" -lt "$end" ]; do
+  n=$((n + 1))
+  if ! echo "$n" > "${FM_ARM_HEARTBEAT:?}"; then
+    exit 0
+  fi
+  sleep 0.2
+done
+SH
+    fi
+    chmod +x "$root/bin/fm-watch-arm.sh"
+    FM_ARM_HEARTBEAT="$heartbeat" FM_ARM_STOP="$stop" "$root/bin/fm-watch-arm.sh" --restart >/dev/null 2>&1 &
+    disown "$!" 2>/dev/null || true
+  }
+
+  launch_bounded_arm "$temp_root/root" "$hb_temp"
+  launch_bounded_arm "$outside/root" "$hb_out" "$stop_out"
+  local tries=0
+  while [ "$tries" -lt 50 ]; do
+    [ -s "$hb_temp" ] && [ -s "$hb_out" ] && break
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  [ -s "$hb_temp" ] && [ -s "$hb_out" ] || {
+    printf 'release\n' > "$stop_out"
+    rm -rf "$outside" "$temp_root"
+    fail "the pruned-root fixtures never armed"
+  }
+  rm -rf "$temp_root" "$outside/root"
+
+  bash -c '
+    # shellcheck source=tests/lib.sh
+    . "$1"
+  ' _ "$LIB"
+
+  temp_a=$(cat "$hb_temp")
+  sleep 0.6
+  temp_b=$(cat "$hb_temp")
+  out_a=$(cat "$hb_out")
+  sleep 0.6
+  out_b=$(cat "$hb_out")
+  printf 'release\n' > "$stop_out"
+  rm -rf "$outside"
+  [ "$temp_a" = "$temp_b" ] || fail "a watch arm whose temp code root was already gone survived the next test startup"
+  [ "$out_a" != "$out_b" ] || fail "test startup stopped a watch arm whose code root was outside the temp directory"
+  pass "test startup reaps a pruned temp watch arm and leaves one outside the temp directory"
+}
+
 test_fixture_root_gone_after_normal_exit
 test_fixture_root_gone_after_sigterm
 test_cleanup_registry_resists_precreation
 test_fixture_registration_failure_rolls_back_root
 test_orphan_sweep_respects_fixture_ownership
 test_orphan_sweep_reaps_read_only_package_tree
+test_cleanup_reaps_owned_watch_arm_only
+test_orphan_sweep_reaps_pruned_temp_watch_arm_only
