@@ -913,8 +913,8 @@ if [ -n "$ACK_THROUGH" ]; then
   fi
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
   DRAIN_LOCK_HELD=false
-  acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
-    && acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS" || {
+  { acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
+    && acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS"; } || {
     [ "$?" -ne 124 ] || exit 1
     echo "wake drain: inactive outcome receipt could not be recorded safely" >&2
     exit 1
