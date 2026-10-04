@@ -307,6 +307,27 @@ test_failed_instrument_prints_one_line_once_and_rearms() {
   pass "failed instrument prints one line once and re-arms on recovery"
 }
 
+test_invalid_config_reports_once_instead_of_defaults() {
+  local home out
+  home=$(make_home badcfg)
+  printf '{"lanes":{"codex":{"window":"weekly","floor_pct":40},}}\n' > "$home/config/burn-watch.json"
+  set_quota "$home" 80 30 60 95
+  out=$(FM_BURN_NOW=1000 bw "$home" check)
+  assert_equals "burn watch: invalid config - $home/config/burn-watch.json" "$out" "invalid config reported, not defaulted"
+  out=$(FM_BURN_NOW=1300 bw "$home" check)
+  assert_equals "" "$out" "invalid config reported once"
+  if bw "$home" sample >/dev/null 2>&1; then fail "sample rejects invalid config"; fi
+
+  printf '{"lanes":{"codex":{"window":"weekly","floor_pct":40}}}\n' > "$home/config/burn-watch.json"
+  out=$(FM_BURN_NOW=1600 bw "$home" check)
+  assert_equals "burn watch: codex below 40% (30% remaining)" "$out" "fixed config thresholds apply"
+
+  printf 'not json\n' > "$home/config/burn-watch.json"
+  out=$(FM_BURN_NOW=1900 bw "$home" check)
+  assert_equals "burn watch: invalid config - $home/config/burn-watch.json" "$out" "invalid config re-arms after recovery"
+  pass "existing invalid config is reported once instead of silently using defaults"
+}
+
 test_init_writes_default_config_when_absent() {
   local home out out2
   home=$(make_home init)
@@ -335,4 +356,5 @@ test_integer_steps_at_fast_poll_cadence_stay_below_rate_limit
 test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing
 test_exact_fresh_lane_extraction_shared_by_check_and_sample
 test_failed_instrument_prints_one_line_once_and_rearms
+test_invalid_config_reports_once_instead_of_defaults
 test_init_writes_default_config_when_absent

@@ -18,7 +18,8 @@
 #
 # One alert per lane per threshold crossing, re-armed only after recovery,
 # so it never spams.
-# A failed instrument prints one line, once, and re-arms on recovery.
+# A failed instrument or an invalid existing config prints one line, once,
+# and re-arms on recovery; defaults apply only when the config file is absent.
 # FM_BURN_NOW (epoch seconds) overrides the clock for tests.
 set -u
 export LC_ALL=C
@@ -189,13 +190,24 @@ die() { printf 'fm-burn-watch: %s\n' "$*" >&2; exit 1; }
 now_epoch() { printf '%s\n' "${FM_BURN_NOW:-$(date +%s)}"; }
 
 read_config() {
-  if [ -f "$CONFIG_FILE" ]; then
-    if jq -e '.lanes' "$CONFIG_FILE" >/dev/null 2>&1; then
-      cat "$CONFIG_FILE"
-      return 0
-    fi
+  if [ -e "$CONFIG_FILE" ]; then
+    jq -e '.lanes | type == "object"' "$CONFIG_FILE" >/dev/null 2>&1 || return 1
+    cat "$CONFIG_FILE"
+  else
+    printf '%s\n' "$DEFAULT_CONFIG"
   fi
-  printf '%s\n' "$DEFAULT_CONFIG"
+}
+
+alert_once() { # alert_once <key> <line>: print line unless key is already active
+  local active_alerts="[]" tmp_alert
+  if [ -f "$ALERTS_FILE" ]; then
+    active_alerts=$(jq -c '.active // []' "$ALERTS_FILE" 2>/dev/null || echo "[]")
+  fi
+  jq -e --arg k "$1" 'index($k)' >/dev/null 2>&1 <<< "$active_alerts" && return 0
+  tmp_alert=$(umask 077; mktemp "$STATE/.fm-burn-alerts.XXXXXX") || return 1
+  jq -n --argjson active "$active_alerts" --arg k "$1" \
+    '{active: ($active + [$k] | unique)}' > "$tmp_alert" && mv -f -- "$tmp_alert" "$ALERTS_FILE"
+  printf 'burn watch: %s\n' "$2"
 }
 
 action_init() {
@@ -261,23 +273,14 @@ action_check() {
     fi
   fi
 
-  local fail_key="instrument:quota-axi"
   if [ "$rc" -ne 0 ]; then
-    local active_alerts="[]"
-    if [ -f "$ALERTS_FILE" ]; then
-      active_alerts=$(jq -c '.active // []' "$ALERTS_FILE" 2>/dev/null || echo "[]")
-    fi
-    if ! jq -e --arg k "$fail_key" 'index($k)' >/dev/null 2>&1 <<< "$active_alerts"; then
-      local tmp_alert
-      tmp_alert=$(umask 077; mktemp "$STATE/.fm-burn-alerts.XXXXXX") || return 1
-      jq -n --argjson active "$active_alerts" --arg k "$fail_key" \
-        '{active: ($active + [$k] | unique)}' > "$tmp_alert" && mv -f -- "$tmp_alert" "$ALERTS_FILE"
-      printf 'burn watch: instrument failed - quota-axi\n'
-    fi
-    return 0
+    alert_once "instrument:quota-axi" "instrument failed - quota-axi"
+    return
   fi
-
-  config_json=$(read_config)
+  if ! config_json=$(read_config); then
+    alert_once "config:invalid" "invalid config - $CONFIG_FILE"
+    return
+  fi
   local prev_arg alerts_arg
   if [ -f "$PREV_SAMPLE" ]; then
     prev_arg="$PREV_SAMPLE"
@@ -321,7 +324,7 @@ action_sample() {
     die "quota-axi is required"
   fi
   quota_json=$(quota-axi --json 2>/dev/null) || die "quota-axi --json failed"
-  config_json=$(read_config)
+  config_json=$(read_config) || die "invalid config - $CONFIG_FILE"
 
   printf 'timestamp: %s\n' "$now"
   jq -nr --argjson config "$config_json" --argjson quota "$quota_json" "$LANE_EXTRACT_JQ"'
