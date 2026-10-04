@@ -769,13 +769,6 @@ fm_composer_classify_content() {  # <bordered> <content> [idle_re] [idle_case] [
     if _fm_composer_is_prompt_glyph "$plain_content" "$FM_COMPOSER_AGENT_PROMPT_GLYPHS"; then
       printf 'empty'; return 0
     fi
-    if [ "$styled" = 1 ] && fm_composer_leading_agent_glyph_var glyph "$plain_content"; then
-      local idle_body=${plain_content#"$glyph"}
-      fm_composer_normalize_trim_var idle_body
-      if fm_composer_idle_matches "$idle_body" "$idle_re" "$idle_case"; then
-        printf 'empty'; return 0
-      fi
-    fi
     printf 'unknown'; return 0
   fi
   if _fm_composer_is_prompt_glyph "$content" "$FM_COMPOSER_AGENT_PROMPT_GLYPHS"; then
