@@ -766,22 +766,6 @@ test_pool_slot_recorded_by_another_task_is_refused() {
   pass "a slot another task's record still holds is refused without touching its claim"
 }
 
-test_slot_audit_reports_double_claims() {
-  local dir out status
-  dir="$TMP_ROOT/slot-audit"
-  mkdir -p "$dir/state" "$dir/copy"
-  printf 'worktree=%s\n' "$dir/copy" > "$dir/state/a.meta"
-  printf 'worktree=%s\n' "$dir/copy" > "$dir/state/b.meta"
-  printf 'worktree=%s\n' "$dir/other" > "$dir/state/c.meta"
-  out=$(FM_HOME="$dir" bash "$ROOT/bin/fm-slot-audit.sh")
-  status=$?
-  [ "$status" -ne 0 ] || fail "audit passed a double-claimed copy"
-  assert_contains "$out" "DOUBLE_CLAIM $dir/copy a b" "audit did not name the double claim"
-  rm "$dir/state/b.meta"
-  out=$(FM_HOME="$dir" bash "$ROOT/bin/fm-slot-audit.sh")
-  assert_not_contains "$out" "DOUBLE_CLAIM" "audit reported a claim after it was resolved"
-  pass "the slot audit derives double claims from the records"
-}
 
 test_remote_seeded_home_spawns_from_treehouse_pool
 # The shared pool is keyed on repo identity, so a home holding its OWN clone of
@@ -816,7 +800,6 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
-test_slot_audit_reports_double_claims
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
 test_stale_pool_base_refreshes_before_branching

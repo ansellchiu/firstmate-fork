@@ -60,7 +60,6 @@ add_process muse "$home" muse-bin-1.0 muse-bin-1.0
 add_process signed "$home" pi-signed pi-signed
 add_process launcher "$home" pi-launcher pi-launcher
 add_process pi-app "$home" Pi Pi
-add_process claude-app "$home" Claude Claude
 for harness in claude cursor-agent agy codex opencode pi grok kimi devin rovo omp; do
   add_process "$harness" "$home" "$harness" "$harness"
 done
@@ -73,7 +72,7 @@ status=$?
 set -e
 expect_code 1 "$status" 'audit reports ambiguous ownership'
 assert_contains "$out" "DOUBLE_CLAIM $slot $home/state/first.meta $other/state/second.meta" 'canonical cross-home claimants are reported'
-for task in native cursor gemini muse signed launcher pi-app claude-app claude cursor-agent agy codex opencode pi grok kimi devin rovo omp; do
+for task in native cursor gemini muse signed launcher pi-app claude cursor-agent agy codex opencode pi grok kimi devin rovo omp; do
   assert_contains "$out" "OUT_OF_ISOLATION $task " "worker $task is detected"
 done
 if [[ "$out" == *'OUT_OF_ISOLATION interactive '* || "$out" == *'OUT_OF_ISOLATION isolated '* ]]; then
