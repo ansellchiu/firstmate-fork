@@ -2678,9 +2678,9 @@ SH
 # A live-but-stuck presentation lock must not strand the executable drain. The
 # presentation remains retriable on the next pass, while the separate queue
 # mutation lock keeps its blocking all-or-nothing acknowledgement contract.
-test_live_presentation_holder_is_deadlined_without_weakening_ack() {
+test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking() {
   local dir state status queue_out queue_err first_out first_err second_out second_err replay_out replay_err
-  local queue_holder presentation_holder ack_holder i start elapsed rc advisory_count
+  local queue_holder presentation_holder ack_holder i start elapsed rc advisory_count ack_through ack_generation
   dir=$(make_case presentation-lock-deadline)
   state="$dir/state"
   status="$state/task.status"
@@ -2797,17 +2797,20 @@ test_live_presentation_holder_is_deadlined_without_weakening_ack() {
   [ -s "$dir/ack.ready" ] \
     || { kill "$ack_holder" 2>/dev/null || true; fail "acknowledgement holder never acquired the queue lock"; }
 
+  ack_through=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$second_err")
+  ack_generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$second_err")
   rc=0
-  FM_STATE_OVERRIDE="$state" bash -c '
-    . "$1"
-    shift
-    fm_run_timed 1 "$@"
-  ' _ "$ROOT/bin/fm-timeout-lib.sh" "$DRAIN" \
-    --ack-through "$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$second_err")" \
-    --recovery-generation "$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$second_err")" \
+  start=$(date +%s)
+  FM_STATE_OVERRIDE="$state" FM_STATUS_PRESENTATION_LOCK_TIMEOUT=1 \
+    "$DRAIN" --ack-through "$ack_through" --recovery-generation "$ack_generation" \
     > "$dir/ack-held.out" 2> "$dir/ack-held.err" || rc=$?
-  [ "$rc" -eq 124 ] \
-    || { kill "$ack_holder" 2>/dev/null || true; fail "held acknowledgement lock did not retain blocking semantics (rc=$rc)"; }
+  elapsed=$(( $(date +%s) - start ))
+  [ "$rc" -eq 1 ] \
+    || { kill "$ack_holder" 2>/dev/null || true; fail "held acknowledgement lock did not refuse (rc=$rc)"; }
+  [ "$elapsed" -le 4 ] \
+    || { kill "$ack_holder" 2>/dev/null || true; fail "held queue lock delayed the acknowledgement for ${elapsed}s"; }
+  grep -F "ACKNOWLEDGEMENT SKIPPED: queue lock remains held by live pid $ack_holder" "$dir/ack-held.err" >/dev/null \
+    || { kill "$ack_holder" 2>/dev/null || true; fail "bounded acknowledgement did not name the live holder"; }
 
   kill "$ack_holder" 2>/dev/null || true
   wait "$ack_holder" 2>/dev/null || true
@@ -2818,7 +2821,114 @@ test_live_presentation_holder_is_deadlined_without_weakening_ack() {
   ack_drain_err "$state" "$replay_err" \
     || fail "the intact wake could not be acknowledged after contention cleared"
   [ ! -s "$state/.wake-queue" ] || fail "acknowledged presentation fixture remained queued"
-  pass "presentation lock waits are bounded and retriable without weakening acknowledgement atomicity"
+  pass "presentation and acknowledgement lock waits are bounded, retriable, and consume nothing when skipped"
+}
+
+test_inactive_receipt_lock_timeout_is_reported_and_retriable() {
+  local mode prefix dir state record holder i direct_rc drain_rc start elapsed
+  for mode in acknowledge acknowledge-notice; do
+    case "$mode" in
+      acknowledge) prefix=inactive-outcome ;;
+      acknowledge-notice) prefix=inactive-reconcile ;;
+    esac
+    dir=$(make_case "receipt-lock-$mode")
+    state="$dir/state"
+    mkdir -p "$state/terminal-outcomes"
+    record="$state/terminal-outcomes/abcdef.pending"
+    printf 'phase=presentation\nnotice_emitted=0\n' > "$record"
+    cp "$record" "$dir/receipt.before"
+    append_wake "$state" check "$prefix:abcdef" 'check: receipt fixture' \
+      || fail "could not seed the receipt wake"
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/drain.out" 2> "$dir/drain.err" \
+      || fail "receipt wake could not be presented"
+    cp "$state/.wake-queue" "$dir/queue.before"
+
+    FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1"
+      fm_lock_acquire_wait "$2"
+      printf "ready\n" > "$3"
+      exec sleep 30
+    ' _ "$ROOT/bin/fm-wake-lib.sh" "$state/.inactive-outcome-reconcile.lock" "$dir/ready" &
+    holder=$!
+    i=0
+    while [ "$i" -lt 100 ] && [ ! -s "$dir/ready" ]; do
+      sleep 0.05
+      i=$((i + 1))
+    done
+    [ -s "$dir/ready" ] \
+      || { kill "$holder" 2>/dev/null || true; fail "receipt holder never acquired its lock"; }
+
+    direct_rc=0
+    FM_STATE_OVERRIDE="$state" FM_INACTIVE_ACK_LOCK_TIMEOUT=1 \
+      "$ROOT/bin/fm-inactive-reconcile.sh" "$mode" abcdef \
+      > "$dir/direct.out" 2> "$dir/direct.err" || direct_rc=$?
+    drain_rc=0
+    start=$(date +%s)
+    FM_STATUS_PRESENTATION_LOCK_TIMEOUT=1 ack_drain_err "$state" "$dir/drain.err" \
+      > "$dir/ack.out" 2> "$dir/ack.err" || drain_rc=$?
+    elapsed=$(( $(date +%s) - start ))
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+
+    [ "$direct_rc" -eq 124 ] || fail "$mode lost the receipt timeout status ($direct_rc)"
+    [ "$drain_rc" -eq 1 ] || fail "$mode drain did not refuse receipt contention ($drain_rc)"
+    [ "$elapsed" -le 4 ] || fail "$mode receipt contention delayed the drain for ${elapsed}s"
+    for prefix in direct ack; do
+      [ "$(wc -l < "$dir/$prefix.err" | tr -d ' ')" -eq 1 ] \
+        || fail "$mode $prefix did not emit exactly one advisory"
+      grep -F "ACKNOWLEDGEMENT SKIPPED: inactive-outcome receipt lock remains held by live pid $holder after 1s" "$dir/$prefix.err" >/dev/null \
+        || fail "$mode $prefix did not name the receipt lock holder"
+      grep -F 're-run the same --ack-through command' "$dir/$prefix.err" >/dev/null \
+        || fail "$mode $prefix omitted the retry instruction"
+    done
+    cmp -s "$dir/queue.before" "$state/.wake-queue" || fail "$mode timeout consumed queue rows"
+    cmp -s "$dir/receipt.before" "$record" || fail "$mode timeout changed the receipt"
+    ack_drain_err "$state" "$dir/drain.err" || fail "$mode retry failed after contention cleared"
+    [ ! -s "$state/.wake-queue" ] || fail "$mode retry left the wake queued"
+    case "$mode" in
+      acknowledge)
+        [ -f "$state/terminal-outcomes/abcdef.presented" ] && [ ! -e "$record" ] \
+          || fail "receipt retry did not commit presentation"
+        ;;
+      acknowledge-notice)
+        grep -qxF 'notice_emitted=1' "$record" || fail "receipt retry did not commit the notice"
+        ;;
+    esac
+    ack_drain_err "$state" "$dir/drain.err" || fail "$mode repeated retry was not idempotent"
+  done
+  pass "both receipt acknowledgement modes preserve holder advisories and retriable wakes"
+}
+
+# The backlog tool behind RECORD DIVERGENCE can take seconds under load; it must
+# run after the status-presentation lock is released so it never holds up the
+# other drain (conversation vs supervision branch) contending for that lock.
+test_record_divergence_runs_outside_the_presentation_lock() {
+  local dir state status bin f
+  dir=$(make_case divergence-outside-lock)
+  state="$dir/state"
+  status="$state/task.status"
+  bin="$dir/bin"
+  mkdir -p "$bin"
+  for f in "$ROOT"/bin/*; do ln -s "$f" "$bin/${f##*/}"; done
+  rm -f "$bin/fm-captain-hold.sh"
+  cat > "$bin/fm-captain-hold.sh" <<'STUB'
+#!/usr/bin/env bash
+if [ -e "$FM_STATE_OVERRIDE/.status-presentation-lock" ]; then
+  echo held > "$FM_STATE_OVERRIDE/divergence.lock-state"
+else
+  echo free > "$FM_STATE_OVERRIDE/divergence.lock-state"
+fi
+STUB
+  chmod +x "$bin/fm-captain-hold.sh"
+
+  printf 'needs-decision [key=fixture]: divergence check\n' > "$status"
+  append_wake "$state" signal task.status "signal: $status" \
+    || fail "could not seed the divergence wake"
+  FM_STATE_OVERRIDE="$state" "$bin/fm-wake-drain.sh" > "$dir/out" 2> "$dir/err" \
+    || fail "drain with stubbed divergence check failed"
+  [ "$(cat "$state/divergence.lock-state" 2>/dev/null)" = free ] \
+    || fail "the divergence check ran while the status-presentation lock was held"
+  pass "record divergence runs outside the status-presentation lock"
 }
 
 test_malformed_presentation_lock_reports_acquire_failure() {
@@ -3552,7 +3662,9 @@ SH
 test_self_held_lock_reclaims_instead_of_deadlocking
 test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention
-test_live_presentation_holder_is_deadlined_without_weakening_ack
+test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking
+test_inactive_receipt_lock_timeout_is_reported_and_retriable
+test_record_divergence_runs_outside_the_presentation_lock
 test_malformed_presentation_lock_reports_acquire_failure
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once
 test_secondmate_declared_pause_rows_do_not_feed_stall_escalation
