@@ -1,0 +1,15 @@
+== fresh spawn of relaunch-a into $TMP/relaunch/slots/1/project
+exit=0 
+warning: the portfolio attention limit could not be checked for project (fm-fleet-snapshot: portfolio classification failed: the project registry data/projects.md is absent; register this home's projects before trusting the portfolio); dispatching anyway - confirm the captain is not already carrying too many projects
+spawned relaunch-a harness=codex kind=scout window=firstmate:fm-relaunch-a worktree=$TMP/relaunch/slots/1/project
+worktree=$TMP/relaunch/slots/1/project
+kind=scout
+== baseline relaunch of relaunch-a with no other record
+exit=0
+$TMP/relaunch/fake/fakebin/timeout: line 3: exec: 1: not found
+$TMP/relaunch/fake/fakebin/timeout: line 3: exec: 1: not found
+spawned relaunch-a harness=codex kind=scout window=firstmate:fm-relaunch-a worktree=$TMP/relaunch/slots/1/project
+== relaunch of relaunch-a after state/other-b.meta also records worktree=$TMP/relaunch/slots/1/project
+exit=1
+warning: $TMP/relaunch/home/data/relaunch-a/brief.md records no Packet line in its header field block above the first '#' heading (scaffolded before briefs recorded the dispatch packet class); dispatching as ordinary - if this packet is conflict-level or prohibited, classify it at intake by adding the Packet line to the top of the brief above the first '#' heading, which is the only region read at dispatch
+error: Treehouse pool slot $TMP/relaunch/slots/1/project is still recorded by $TMP/relaunch/home/state/other-b.meta; refusing to launch relaunch-a into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window firstmate:fm-relaunch-a

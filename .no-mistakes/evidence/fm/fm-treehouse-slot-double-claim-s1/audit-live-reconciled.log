@@ -1,0 +1,7 @@
+# reconciliation: stale claimant beta record removed; escaped workers beta, fix.v2 and delta (real claude) stopped; alpha re-running in its own slot
+$LAB/state/fix.v2.meta:worktree=$LAB/elsewhere
+$LAB/state/delta.meta:worktree=$POOL/2
+$LAB/state/alpha.meta:worktree=$POOL/1/demo
+live worker pid=67401 cwd=$POOL/1/demo
+$ FM_HOME=$LAB bin/fm-slot-audit.sh
+exit=0

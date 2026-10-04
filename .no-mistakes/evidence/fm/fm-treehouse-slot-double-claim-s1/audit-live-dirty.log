@@ -1,0 +1,18 @@
+# lab home: $LAB (disposable, bin/fm-lab-home.sh create); Treehouse-style pool: $POOL (outside the home); every worker runs in a window on the lab's private tmux socket
+# state/*.meta worktree= values:
+$LAB/state/alpha.meta:worktree=$POOL/1/demo
+$LAB/state/fix.v2.meta:worktree=$LAB/elsewhere
+$LAB/state/beta.meta:worktree=$POOL/slot-alias/
+$LAB/state/delta.meta:worktree=$POOL/2
+# live workers (pid comm cwd):
+7508 $LAB/fakebin/codex $POOL/1/demo FM_TASK_ID=alpha
+70334 $LAB/fakebin/cursor-agent $LAB/projects/demo FM_TASK_ID=beta
+70343 $LAB/fakebin/codex $LAB FM_TASK_ID=fix.v2
+17268 claude $LAB FM_TASK_ID=delta
+# alpha=codex in its pool slot (isolated; must NOT be reported), beta=cursor-agent in the project clone, fix.v2=codex in the home root (dotted id), delta=real claude CLI (v2.1.289 (Claude Code)) in the home root
+$ FM_HOME=$LAB bin/fm-slot-audit.sh
+DOUBLE_CLAIM $POOL/1/demo $LAB/state/alpha.meta $LAB/state/beta.meta
+OUT_OF_ISOLATION delta 17268 claude $LAB
+OUT_OF_ISOLATION beta 70334 fol $LAB/projects/demo
+OUT_OF_ISOLATION fix.v2 70343 fol $LAB
+exit=1
