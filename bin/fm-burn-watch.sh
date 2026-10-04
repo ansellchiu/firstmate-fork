@@ -20,6 +20,7 @@
 # so it never spams.
 # A failed instrument or an invalid existing config prints one line, once,
 # and re-arms on recovery; defaults apply only when the config file is absent.
+# A failed state write prints a storage diagnostic and the check exits non-zero.
 # FM_BURN_NOW (epoch seconds) overrides the clock for tests.
 set -u
 export LC_ALL=C
@@ -191,22 +192,36 @@ now_epoch() { printf '%s\n' "${FM_BURN_NOW:-$(date +%s)}"; }
 
 read_config() {
   if [ -e "$CONFIG_FILE" ]; then
-    jq -e '.lanes | type == "object"' "$CONFIG_FILE" >/dev/null 2>&1 || return 1
+    jq -e '
+      def optnum($k): (has($k) | not) or (.[$k] | type) == "number";
+      def optstr($k): (has($k) | not) or (.[$k] | type) == "string";
+      type == "object" and optnum("drop_threshold_pp") and (.lanes | type) == "object"
+      and all(.lanes[]; type == "object" and optstr("provider") and optstr("window")
+        and optnum("drop_threshold_pp") and optnum("floor_pct") and optnum("rate_pct_day"))
+    ' "$CONFIG_FILE" >/dev/null 2>&1 || return 1
     cat "$CONFIG_FILE"
   else
     printf '%s\n' "$DEFAULT_CONFIG"
   fi
 }
 
+publish() { # publish <dest> <jq-filter> <json>: atomically write the filter output to dest
+  local tmp
+  tmp=$(umask 077; mktemp "$STATE/.fm-burn-publish.XXXXXX" 2>/dev/null) || return 1
+  jq -c "$2" <<< "$3" > "$tmp" 2>/dev/null && mv -f -- "$tmp" "$1" 2>/dev/null && return 0
+  rm -f -- "$tmp"
+  return 1
+}
+
+state_write_failed() { printf 'burn watch: state write failed - %s\n' "$STATE"; return 1; }
+
 alert_once() { # alert_once <key> <line>: print line unless key is already active
-  local active_alerts="[]" tmp_alert
+  local active_alerts="[]"
   if [ -f "$ALERTS_FILE" ]; then
     active_alerts=$(jq -c '.active // []' "$ALERTS_FILE" 2>/dev/null || echo "[]")
   fi
   jq -e --arg k "$1" 'index($k)' >/dev/null 2>&1 <<< "$active_alerts" && return 0
-  tmp_alert=$(umask 077; mktemp "$STATE/.fm-burn-alerts.XXXXXX") || return 1
-  jq -n --argjson active "$active_alerts" --arg k "$1" \
-    '{active: ($active + [$k] | unique)}' > "$tmp_alert" && mv -f -- "$tmp_alert" "$ALERTS_FILE"
+  publish "$ALERTS_FILE" . "$(jq -c --arg k "$1" '{active: (. + [$k] | unique)}' <<< "$active_alerts")" || { state_write_failed; return; }
   printf 'burn watch: %s\n' "$2"
 }
 
@@ -302,12 +317,10 @@ action_check() {
     --argjson now "$now" \
     "$LANE_EXTRACT_JQ$BURN_EVAL_JQ" 2>/dev/null) || die "burn evaluation failed"
 
-  local tmp_sample tmp_alerts
-  tmp_sample=$(umask 077; mktemp "$STATE/.fm-burn-sample.XXXXXX") || return 1
-  tmp_alerts=$(umask 077; mktemp "$STATE/.fm-burn-alerts.XXXXXX") || { rm -f -- "$tmp_sample"; return 1; }
-
-  jq -c '.new_sample' <<< "$eval_out" > "$tmp_sample" && mv -f -- "$tmp_sample" "$PREV_SAMPLE"
-  jq -c '{active: .active}' <<< "$eval_out" > "$tmp_alerts" && mv -f -- "$tmp_alerts" "$ALERTS_FILE"
+  if ! { publish "$PREV_SAMPLE" '.new_sample' "$eval_out" \
+    && publish "$ALERTS_FILE" '{active: .active}' "$eval_out"; }; then
+    state_write_failed; return
+  fi
 
   local alert_line
   alert_line=$(jq -r '.new_alerts | join("; ")' <<< "$eval_out")

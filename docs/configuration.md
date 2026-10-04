@@ -1548,6 +1548,8 @@ Starting thresholds include:
 If an instrument fails or a lane is unmeasured, the check prints one diagnostic line once, staying silent on subsequent failed polls until measurement recovers and re-arms.
 Thresholds and monitored windows are configurable in `config/burn-watch.json`.
 Defaults apply only when that file is absent; an existing unreadable or invalid file prints `burn watch: invalid config - <path>` once and skips evaluation until it is fixed.
+A file is invalid when `lanes` is not an object, a lane entry is not an object, `provider` or `window` is not a string, or `drop_threshold_pp`, `floor_pct`, or `rate_pct_day` is present but not a number.
+If writing watch state fails, the check prints `burn watch: state write failed - <state dir>` and exits non-zero instead of reporting threshold alerts.
 
 ## Mail plane (.env)
 

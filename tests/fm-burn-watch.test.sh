@@ -328,6 +328,54 @@ test_invalid_config_reports_once_instead_of_defaults() {
   pass "existing invalid config is reported once instead of silently using defaults"
 }
 
+test_mistyped_config_fields_are_invalid() {
+  local home out bad
+  home=$(make_home typedcfg)
+  set_quota "$home" 80 70 60 95
+  for bad in '{"drop_threshold_pp":"10","lanes":{}}' \
+    '{"lanes":[]}' \
+    '{"lanes":{"claude":"seven_day"}}' \
+    '{"lanes":{"claude":{"provider":1}}}' \
+    '{"lanes":{"claude":{"window":["seven_day"]}}}' \
+    '{"lanes":{"claude":{"floor_pct":"20"}}}' \
+    '{"lanes":{"claude":{"drop_threshold_pp":"5"}}}' \
+    '{"lanes":{"alibaba":{"rate_pct_day":"1.5"}}}'; do
+    rm -f "$home/state/.burn-watch-alerts"
+    printf '%s\n' "$bad" > "$home/config/burn-watch.json"
+    out=$(FM_BURN_NOW=1000 bw "$home" check)
+    assert_equals "burn watch: invalid config - $home/config/burn-watch.json" "$out" "mistyped config rejected: $bad"
+    if bw "$home" sample >/dev/null 2>&1; then fail "sample rejects mistyped config: $bad"; fi
+  done
+  pass "mistyped config fields are reported as invalid config"
+}
+
+test_state_write_failure_is_reported_not_silent() {
+  local home out rc=0
+  home=$(make_home rostate)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  chmod 555 "$home/state"
+  if touch "$home/state/.probe" 2>/dev/null; then
+    rm -f "$home/state/.probe"; chmod 755 "$home/state"
+    pass "state write failure (skipped: state directory stays writable)"
+    return
+  fi
+  set_quota "$home" 68 70 60 95
+  out=$(FM_BURN_NOW=1300 bw "$home" check) || rc=$?
+  assert_equals "burn watch: state write failed - $home/state" "$out" "sample publication failure reported"
+  assert_equals 1 "$rc" "sample publication failure exits non-zero"
+  rc=0
+  touch "$home/stub/quota-fail"
+  out=$(FM_BURN_NOW=1600 bw "$home" check) || rc=$?
+  assert_equals "burn watch: state write failed - $home/state" "$out" "diagnostic marker failure reported"
+  assert_equals 1 "$rc" "diagnostic marker failure exits non-zero"
+  chmod 755 "$home/state"
+  rm -f "$home/stub/quota-fail"
+  out=$(FM_BURN_NOW=1900 bw "$home" check)
+  assert_equals "burn watch: claude dropped 12 points (80% -> 68%)" "$out" "baseline kept after failed write"
+  pass "state write failures are reported instead of reporting success"
+}
+
 test_init_writes_default_config_when_absent() {
   local home out out2
   home=$(make_home init)
@@ -357,4 +405,6 @@ test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing
 test_exact_fresh_lane_extraction_shared_by_check_and_sample
 test_failed_instrument_prints_one_line_once_and_rearms
 test_invalid_config_reports_once_instead_of_defaults
+test_mistyped_config_fields_are_invalid
+test_state_write_failure_is_reported_not_silent
 test_init_writes_default_config_when_absent
