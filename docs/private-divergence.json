@@ -28,7 +28,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "automic-vault-injection",
@@ -54,7 +54,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "token-spend-view",
@@ -104,7 +104,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "rate-limit-classification",
@@ -147,7 +147,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "pi-branch-rotation",
@@ -169,7 +169,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "wake-batch-coalescing",
@@ -191,7 +191,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "spawn-launch-postcondition",
@@ -211,7 +211,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "upstream-reconciliation",
@@ -240,7 +240,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "stale-repeat-suppression",
@@ -264,7 +264,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "auto-standdown",
@@ -295,7 +295,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "daemon-lock-liveness",
@@ -316,7 +316,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "claims-audit",
@@ -338,7 +338,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "batched-captain-answers",
@@ -356,7 +356,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "scout-research-standards",
@@ -394,7 +394,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "pi-primary-growth",
@@ -431,7 +431,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "portfolio-attention-limit",
@@ -461,7 +461,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "herdr-native-submit-proof",
@@ -480,7 +480,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "pr-forge-state-classification",
@@ -538,7 +538,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "changed-selection-deletions",
@@ -555,7 +555,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "away-escalation-delivery",
@@ -577,7 +577,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "catch-all-marker-crosscheck",
@@ -615,7 +615,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "herdr-native-idle-unknown",
@@ -634,7 +634,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "session-lock-harness-case",
@@ -658,7 +658,8 @@
       "area": "Watcher continuity",
       "paths": [
         "bin/fm-claude-stop-autoarm.sh",
-        "tests/fm-claude-stop-autoarm.test.sh"
+        "tests/fm-claude-stop-autoarm.test.sh",
+        "tests/fm-supervision-host.test.sh"
       ],
       "intent": "An actionable Claude Stop wake always forces its continuation. The rewake commit accepts a handling recovery marker, and commits UNBOUND when the marker is acked or absent, instead of refusing into a silent exit 0 that would discard the banner already printed and stop the session on an unhandled supervision wake; an unbound entry names no recovery generation, so it still never claims mid-turn health.",
       "provenance": {
@@ -669,7 +670,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "mail-plane-input-hardening",
@@ -788,7 +789,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "unreadable-posture-refusal",
@@ -831,7 +832,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "secondmate-same-origin-worktree",
@@ -849,7 +850,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "bearings-board-private",
@@ -938,7 +939,24 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+    },
+    {
+      "id": "lint-root-memory-cap",
+      "area": "Repo checks",
+      "paths": [
+        "bin/fm-lint.sh",
+        "tests/fm-lint.test.sh"
+      ],
+      "intent": "Each source-following ShellCheck root runs under a 16 GiB address-space cap instead of 12 GiB, because this fork's heaviest roots peak near 8.4 GiB resident and exhaust the smaller cap; the larger cap keeps them on full source-aware analysis rather than relying on upstream's narrower no-external-sources memory retry.",
+      "provenance": {
+        "commits": [
+          "55b57bec"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
       "id": "residual-private-drift",
