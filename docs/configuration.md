@@ -1536,7 +1536,7 @@ While plan payback samples hourly for retrospective accounting, burn watch sampl
 **Steering thresholds and alerts**
 
 The check accepts only the configured window ID from a fresh provider and stores readings in `state/.burn-watch-prev` to compute per-lane deltas.
-The same file keeps each lane's rate anchor value and timestamp, resetting when its provider, window, or reset period changes or remaining quota rises, and rates are evaluated only after six hours.
+The same file keeps each lane's rate anchor value and timestamp, resetting when its provider, window, or reset period changes (reset times within one hour count as the same period) or remaining quota rises; rates are evaluated only after six hours and discount one point for whole-percent quantization.
 It prints exactly one line when a steering threshold is crossed, and stays silent otherwise.
 Alerts fire once per threshold crossing and re-arm only after recovery, preventing repetitive notifications.
 Starting thresholds include:
