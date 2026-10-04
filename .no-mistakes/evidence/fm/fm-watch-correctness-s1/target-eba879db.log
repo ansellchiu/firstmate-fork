@@ -1,0 +1,9 @@
+=== tree: /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M44CKMAJSM7N3WKX4SEFVT7A (eba879db)
+absorbed-heartbeat streak=1\ 2   -> streak=1 watcher_alive=yes errors=0
+absorbed-heartbeat streak=abc    -> streak=1 watcher_alive=yes errors=0
+absorbed-heartbeat streak=''     -> streak=1 watcher_alive=yes errors=0
+absorbed-heartbeat streak=-3     -> streak=1 watcher_alive=yes errors=0
+absorbed-heartbeat streak=4      -> streak=5 watcher_alive=yes errors=0
+afk-heartbeat streak=1\ 2   -> exit=0 streak=1 queued_heartbeat=1 stdout_heartbeat=1 errors=0
+afk-heartbeat streak=junk   -> exit=0 streak=1 queued_heartbeat=1 stdout_heartbeat=1 errors=0
+parked-churn: .stale-sig-test_fm-parked present_after=no executed_as_command=no stale_sig_errors=0

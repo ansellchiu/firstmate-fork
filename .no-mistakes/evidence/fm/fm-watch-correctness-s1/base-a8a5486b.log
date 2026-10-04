@@ -1,0 +1,12 @@
+=== tree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-base.XBTxoV (a8a5486b)
+absorbed-heartbeat streak=1\ 2   -> streak=1 2 watcher_alive=no errors=1
+    stderr: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-base.XBTxoV/bin/fm-watch.sh: line 3745: 1 2: arithmetic syntax error in expression (error token is "2")
+absorbed-heartbeat streak=abc    -> streak=abc watcher_alive=no errors=0
+absorbed-heartbeat streak=''     -> streak=1 watcher_alive=yes errors=0
+absorbed-heartbeat streak=-3     -> streak=-2 watcher_alive=yes errors=0
+absorbed-heartbeat streak=4      -> streak=5 watcher_alive=yes errors=0
+afk-heartbeat streak=1\ 2   -> exit=1 streak=1 2 queued_heartbeat= stdout_heartbeat=0 errors=1
+    stderr: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-base.XBTxoV/bin/fm-watch.sh: line 3745: 1 2: arithmetic syntax error in expression (error token is "2")
+afk-heartbeat streak=junk   -> exit=1 streak=junk queued_heartbeat= stdout_heartbeat=0 errors=0
+parked-churn: .stale-sig-test_fm-parked present_after=no executed_as_command=no stale_sig_errors=1
+    stderr: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-base.XBTxoV/bin/fm-watch.sh: line 2051: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-gate-drive.wVfkTI/parked-churn/state/.stale-sig-test_fm-parked: No such file or directory
