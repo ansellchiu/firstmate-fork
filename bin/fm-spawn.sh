@@ -2017,7 +2017,7 @@ omp_model_validate() { # <omp-bin> <model>
 # unreachable listing establishes nothing (harness-adapters
 # model-and-effort.md) and launches unvalidated with a notice.
 agy_model_validate() {  # <agy-bin> <model>
-  local bin=$1 model=$2 listing rc=0 bound=${FM_AGY_MODELS_TIMEOUT:-15}
+  local bin=$1 model=$2 effort=${3:-} listing rc=0 bound=${FM_AGY_MODELS_TIMEOUT:-15}
   case "$bound" in ''|*[!0-9]*|0*) bound=15 ;; esac
   [ -n "$model" ] && [ "$model" != default ] || return 0
   listing=$(fm_run_timed "$bound" "$bin" models 2>/dev/null < /dev/null) || rc=$?
@@ -2032,6 +2032,13 @@ agy_model_validate() {  # <agy-bin> <model>
   if printf '%s\n' "$listing" | awk '{print $1}' | grep -qxF -- "$model"; then
     return 0
   fi
+  case "$effort" in
+  low | medium | high)
+    if printf '%s\n' "$listing" | awk '{print $1}' | grep -qxF -- "$model-$effort"; then
+      return 0
+    fi
+    ;;
+  esac
   echo "error: agy model '$model' is not listed by 'agy models'; choose a listed id or omit --model" >&2
   return 1
 }
@@ -2491,7 +2498,7 @@ if [ "$HARNESS" = omp ]; then
   omp_model_validate "$OMP_BIN" "$MODEL" || exit 1
 fi
 if [ "$HARNESS" = agy ]; then
-  agy_model_validate "$AGY_BIN" "$MODEL" || exit 1
+  agy_model_validate "$AGY_BIN" "$MODEL" "$EFFORT" || exit 1
 fi
 # Worker account pin (header above): resolved before any endpoint, worktree, or
 # record exists. An absent pin selects nothing and leaves every later launch

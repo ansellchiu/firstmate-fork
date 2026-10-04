@@ -641,6 +641,32 @@ test_agy_launch_carries_the_brief_with_model_effort_and_autonomy() {
   pass "fm-spawn: agy launch carries brief, model, effort, and autonomy with cleared markers"
 }
 
+test_agy_base_model_with_effort_matches_the_suffixed_catalog() {
+  local effort id rec out rc launch
+  for effort in low medium high; do
+    id="agy-base-$effort-$$"
+    rec=$(make_agy_spawn_case "base-$effort" "$id")
+    read_agy_spawn_record "$rec"
+    rc=0
+    out=$(run_agy_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" \
+      --model gemini-3.8-flash --effort "$effort") || rc=$?
+    expect_code 0 "$rc" "agy base model with listed $effort suffix should succeed: $out"
+    launch=$(cat "$CASE_DIR/launch.log")
+    assert_contains "$launch" "--model 'gemini-3.8-flash'" "agy launch lost the base model"
+    assert_contains "$launch" "--effort '$effort'" "agy launch lost the selected effort"
+  done
+  id="agy-base-missing-$$"
+  rec=$(make_agy_spawn_case base-missing "$id")
+  read_agy_spawn_record "$rec"
+  rc=0
+  out=$(run_agy_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" \
+    --model gemini-3.8-pro --effort medium) || rc=$?
+  [ "$rc" -ne 0 ] || fail "agy accepted an unlisted base plus effort"
+  assert_contains "$out" "not listed by 'agy models'" "unlisted combination lacked its refusal reason"
+  [ ! -s "$CASE_DIR/launch.log" ] || fail "unlisted combination reached launch"
+  pass "fm-spawn: agy accepts base plus effort only when the suffixed catalog id exists"
+}
+
 test_agy_effort_xhigh_is_recorded_but_omitted() {
   local id rec out rc launch meta
   id="agy-xhigh-z2-$$"
@@ -908,6 +934,7 @@ test_herdr_shell_first_with_live_registry_stays_live
 test_herdr_lone_unregistered_pane_is_agent_free
 test_herdr_malformed_and_failed_reads_stay_unknown
 test_agy_launch_carries_the_brief_with_model_effort_and_autonomy
+test_agy_base_model_with_effort_matches_the_suffixed_catalog
 test_agy_effort_xhigh_is_recorded_but_omitted
 test_agy_unlisted_model_refuses_before_pane_creation
 test_agy_unreachable_listing_refuses_before_any_endpoint
