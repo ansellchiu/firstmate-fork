@@ -1698,6 +1698,27 @@ fm_treehouse_slot_owner_state() {  # <worktree> <task-id>
   fi
 }
 
+# Name every OTHER task whose durable record still holds a pool slot.
+# A record exists until teardown deletes it, so any record - running, parked,
+# held for the captain or superseded - keeps its slot; only teardown frees one.
+# Looks at this home's records plus the home named by the slot's own claim, so a
+# slot a different home took is seen too. Prints one task id per line.
+fm_treehouse_slot_record_claimants() {  # <state-dir> <worktree> <task-id>
+  local state=$1 worktree=$2 id=$3 slot meta other wt owner_home
+  slot=$(CDPATH='' cd -- "$worktree" 2>/dev/null && pwd -P) || return 0
+  fm_treehouse_slot_owner_state "$worktree" "$id"
+  owner_home=$FM_TREEHOUSE_SLOT_OWNER_HOME
+  for meta in "$state"/*.meta ${owner_home:+"$owner_home"/state/*.meta}; do
+    [ -f "$meta" ] || continue
+    other=$(basename "$meta" .meta)
+    [ "$other" != "$id" ] || continue
+    wt=$(fm_meta_get "$meta" worktree)
+    [ -n "$wt" ] || continue
+    wt=$(CDPATH='' cd -- "$wt" 2>/dev/null && pwd -P) || continue
+    [ "$wt" = "$slot" ] && printf '%s\n' "$other"
+  done | sort -u
+}
+
 # Drop a task's own claim once its slot is back in the pool. Never removes
 # another task's claim, so a misdirected release cannot strip the evidence that
 # protects the slot's real owner.

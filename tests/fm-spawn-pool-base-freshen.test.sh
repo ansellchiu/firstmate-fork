@@ -745,6 +745,44 @@ test_pool_slot_claim_follows_the_spawn_outcome() {
   pass "a Treehouse slot claim names the launched task, refuses when unclaimable, and is dropped by a locked abort"
 }
 
+# A slot another task's record still holds is refused, whatever state that task
+# is in, and the refusal leaves its claim and the slot untouched.
+test_pool_slot_recorded_by_another_task_is_refused() {
+  local rec id out status
+  id='pool-slot-held-r1'
+  rec=$(make_case slot-held "$id")
+  read_case_record "$rec"
+  lay_out_as_pool_slot
+  printf 'kind=ship\nworktree=%s\n' "$POOL_DIR" > "$HOME_DIR/state/parked-holder-r1.meta"
+  printf 'task=parked-holder-r1\nhome=%s\n' "$HOME_DIR" > "$SLOT_CLAIM"
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  [ "$status" -ne 0 ] || fail "spawn launched into a slot another task's record holds: $out"
+  assert_contains "$out" "still recorded by task parked-holder-r1" \
+    "spawn did not name the task holding the slot"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for a held slot"
+  grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" \
+    || fail "spawn overwrote the holder's slot claim: $(cat "$SLOT_CLAIM")"
+  pass "a slot another task's record still holds is refused without touching its claim"
+}
+
+test_slot_audit_reports_double_claims() {
+  local dir out status
+  dir="$TMP_ROOT/slot-audit"
+  mkdir -p "$dir/state" "$dir/copy"
+  printf 'worktree=%s\n' "$dir/copy" > "$dir/state/a.meta"
+  printf 'worktree=%s\n' "$dir/copy" > "$dir/state/b.meta"
+  printf 'worktree=%s\n' "$dir/other" > "$dir/state/c.meta"
+  out=$(FM_HOME="$dir" bash "$ROOT/bin/fm-slot-audit.sh")
+  status=$?
+  [ "$status" -ne 0 ] || fail "audit passed a double-claimed copy"
+  assert_contains "$out" "DOUBLE_CLAIM $dir/copy a b" "audit did not name the double claim"
+  rm "$dir/state/b.meta"
+  out=$(FM_HOME="$dir" bash "$ROOT/bin/fm-slot-audit.sh")
+  assert_not_contains "$out" "DOUBLE_CLAIM" "audit reported a claim after it was resolved"
+  pass "the slot audit derives double claims from the records"
+}
+
 test_remote_seeded_home_spawns_from_treehouse_pool
 # The shared pool is keyed on repo identity, so a home holding its OWN clone of
 # a project is handed a linked worktree of a DIFFERENT clone of the same origin.
@@ -777,6 +815,8 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 }
 
 test_pool_slot_claim_follows_the_spawn_outcome
+test_pool_slot_recorded_by_another_task_is_refused
+test_slot_audit_reports_double_claims
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
 test_stale_pool_base_refreshes_before_branching

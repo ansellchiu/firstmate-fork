@@ -4609,6 +4609,13 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   # Written under the Treehouse project lock held from before slot allocation
   # through metadata publication, so no other spawn or return sees a half-claim.
   if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
+    # A slot another task's record still holds is never taken over: that task's
+    # worker may be parked in it, and either cleanup would then be refused.
+    SLOT_HELD_BY=$(fm_treehouse_slot_record_claimants "$STATE" "$WT" "$ID" | paste -sd, -)
+    if [ -n "$SLOT_HELD_BY" ]; then
+      echo "error: Treehouse pool slot $WT is still recorded by task $SLOT_HELD_BY; refusing to launch $ID into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window $T" >&2
+      exit 1
+    fi
     if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
       echo "error: could not claim Treehouse pool slot $WT for task $ID; refusing to launch a worker whose slot cannot later be proved to be its own; inspect window $T" >&2
       exit 1
