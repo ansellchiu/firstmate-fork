@@ -25,10 +25,10 @@ SH
 set_quota() { # set_quota <home> <claude-pp> <codex-pp> <agy-pp> <alibaba-pp>
   cat > "$1/stub/quota.json" <<JSON
 {"providers":[
-  {"provider":"claude","windows":[{"id":"seven_day","percentRemaining":$2}]},
-  {"provider":"codex","windows":[{"id":"weekly","percentRemaining":$3}]},
-  {"provider":"agy","windows":[{"id":"gemini_weekly","percentRemaining":$4}]},
-  {"provider":"alibaba","windows":[{"id":"monthly","percentRemaining":$5}]}
+  {"provider":"claude","state":{"status":"fresh"},"windows":[{"id":"seven_day","percentRemaining":$2}]},
+  {"provider":"codex","state":{"status":"fresh"},"windows":[{"id":"weekly","percentRemaining":$3}]},
+  {"provider":"agy","state":{"status":"fresh"},"windows":[{"id":"gemini_weekly","percentRemaining":$4}]},
+  {"provider":"alibaba","state":{"status":"fresh"},"windows":[{"id":"monthly","percentRemaining":$5}]}
 ]}
 JSON
 }
@@ -128,30 +128,129 @@ test_floor_threshold_crossing_no_repeat_recovery_and_rearm() {
 test_alibaba_rate_threshold_crossing_no_repeat_recovery_and_rearm() {
   local home out
   home=$(make_home alibaba)
-  set_quota "$home" 80 70 60 95.0
+  set_quota "$home" 80 70 60 95
   FM_BURN_NOW=1000 bw "$home" check >/dev/null
 
-  # 1. 1 hour later (3600s), alibaba drops to 94.9 (0.1% burned -> 2.4%/day > 1.5%/day)
-  set_quota "$home" 80 70 60 94.9
-  out=$(FM_BURN_NOW=4600 bw "$home" check)
-  assert_contains "$out" "alibaba monthly burning faster than 1.5%/day (2.4%/day)" "alibaba rate alert"
+  set_quota "$home" 80 70 60 94
+  out=$(FM_BURN_NOW=22300 bw "$home" check)
+  assert_equals "" "$out" "rate waits until anchor is six hours old"
+  out=$(FM_BURN_NOW=22600 bw "$home" check)
+  assert_contains "$out" "alibaba monthly burning faster than 1.5%/day (4%/day)" "alibaba rate alert"
   assert_equals 1 "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "rate alert is exactly one line"
 
-  # 2. No-repeat: 1 hour later (8200s), alibaba drops to 94.8 (2.4%/day again)
-  set_quota "$home" 80 70 60 94.8
-  out=$(FM_BURN_NOW=8200 bw "$home" check)
+  out=$(FM_BURN_NOW=22900 bw "$home" check)
+  assert_equals "" "$out" "flat tick does not re-arm the anchored rate"
+  set_quota "$home" 80 70 60 93
+  out=$(FM_BURN_NOW=23200 bw "$home" check)
   assert_equals "" "$out" "rate alert does not repeat"
 
-  # 3. Recovery: 1 hour later (11800s), alibaba stays at 94.8 (0% burn <= 1.5%/day)
-  set_quota "$home" 80 70 60 94.8
-  out=$(FM_BURN_NOW=11800 bw "$home" check)
-  assert_equals "" "$out" "rate recovery is silent"
-
-  # 4. Re-arm: 1 hour later (15400s), alibaba drops to 94.7 (2.4%/day again)
-  set_quota "$home" 80 70 60 94.7
-  out=$(FM_BURN_NOW=15400 bw "$home" check)
+  out=$(FM_BURN_NOW=173800 bw "$home" check)
+  assert_equals "" "$out" "anchor average below limit recovers silently"
+  set_quota "$home" 80 70 60 91
+  out=$(FM_BURN_NOW=174100 bw "$home" check)
   assert_contains "$out" "alibaba monthly burning faster than 1.5%/day" "rate alert re-arms"
-  pass "alibaba rate threshold crossing, no-repeat, recovery, and re-arm"
+  assert_equals 1000 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "ordinary ticks preserve anchor"
+  pass "anchored rate warmup, crossing, no-repeat, recovery, and re-arm"
+}
+
+test_integer_steps_at_fast_poll_cadence_stay_below_rate_limit() {
+  local home out day tick remaining
+  home=$(make_home integer-rate)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  for day in 2 4 6; do
+    for tick in 0 300 600; do
+      remaining=$((95 - day / 2))
+      if [ "$tick" -eq 0 ]; then remaining=$((remaining + 1)); fi
+      set_quota "$home" 80 70 60 "$remaining"
+      out=$(FM_BURN_NOW=$((1000 + day * 86400 + tick)) bw "$home" check)
+      assert_equals "" "$out" "one integer point every two days stays below limit at 300s cadence"
+    done
+  done
+  assert_equals 95 "$(jq -r '.anchors.alibaba.remaining' "$home/state/.burn-watch-prev")" "integer drops retain baseline value"
+  assert_equals 1000 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "integer drops retain baseline time"
+  pass "integer one-point steps do not produce fast-poll rate spikes"
+}
+
+test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing() {
+  local home out
+  home=$(make_home rate-reset)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  set_quota "$home" 80 70 60 94
+  FM_BURN_NOW=22600 bw "$home" check >/dev/null
+  jq '(.providers[] | select(.provider == "alibaba").state.status) = "stale"' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  out=$(FM_BURN_NOW=22900 bw "$home" check)
+  assert_contains "$out" "alibaba unmeasured" "missing lane reports"
+  assert_equals 1000 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "missing lane retains rate anchor"
+  set_quota "$home" 80 70 60 94
+  out=$(FM_BURN_NOW=23200 bw "$home" check)
+  assert_equals "" "$out" "measurement recovery preserves active rate"
+  set_quota "$home" 80 70 60 94.5
+  out=$(FM_BURN_NOW=23500 bw "$home" check)
+  assert_equals "" "$out" "rise resets anchor even below original value"
+  assert_equals 23500 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "rise starts new anchor"
+  jq '(.providers[] | select(.provider == "alibaba").windows[0]) |= (.percentRemaining = 70 | .resetsAt = "2030-02-01T00:00:00Z")' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  out=$(FM_BURN_NOW=45100 bw "$home" check)
+  assert_equals "" "$out" "changed reset period skips both drop and rate comparisons"
+  assert_equals 45100 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "changed reset starts new anchor"
+  set_quota "$home" 80 70 60 90
+  jq '(.providers[] | select(.provider == "alibaba").windows[0]) |= (.id = "weekly" | .percentRemaining = 50)' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  printf '%s\n' '{"lanes":{"alibaba":{"provider":"alibaba","window":"weekly","rate_pct_day":1.5}}}' > "$home/config/burn-watch.json"
+  out=$(FM_BURN_NOW=45400 bw "$home" check)
+  assert_equals "" "$out" "configured window change starts a new baseline"
+  jq '(.providers[] | select(.provider == "alibaba").windows[0].percentRemaining) = 49' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  out=$(FM_BURN_NOW=67000 bw "$home" check)
+  assert_contains "$out" "alibaba weekly burning faster than 1.5%/day" "rate names actual configured window"
+  pass "rate anchors survive missing measurements and reset on rise or period change"
+}
+
+test_exact_fresh_lane_extraction_shared_by_check_and_sample() {
+  local home out status
+  home=$(make_home extraction)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  for status in stale error fresh; do
+    cat > "$home/stub/quota.json" <<JSON
+{"providers":[{"provider":"claude","state":{"status":"$status"},
+"windows":[{"id":"five_hour","kind":"seven_day","label":"seven_day","percentRemaining":10}],
+"quotaSemantics":{"effectiveAvailability":[{"scope":"all_models","effectivePercentRemaining":5}]}}]}
+JSON
+    out=$(FM_BURN_NOW=1300 bw "$home" check)
+    if [ "$status" = stale ]; then
+      assert_contains "$out" "claude unmeasured" "unmeasured lane alerts once"
+    else
+      assert_equals "" "$out" "unmeasured lane does not repeat"
+    fi
+    assert_not_contains "$out" "dropped" "different window never causes drop"
+    assert_not_contains "$out" "below" "different window never causes floor"
+    out=$(bw "$home" sample)
+    assert_contains "$out" "claude: unmeasured" "sample rejects window aliases and fallback"
+    assert_equals null "$(jq -r '.lanes.claude' "$home/state/.burn-watch-prev")" "unmeasured persisted as null"
+  done
+  for status in stale error; do
+    set_quota "$home" 10 70 60 95
+    jq --arg status "$status" '(.providers[] | select(.provider == "claude").state.status) = $status' "$home/stub/quota.json" > "$home/stub/next.json"
+    mv "$home/stub/next.json" "$home/stub/quota.json"
+    out=$(FM_BURN_NOW=1600 bw "$home" check)
+    assert_equals "" "$out" "exact stale or errored window stays unmeasured"
+    out=$(bw "$home" sample)
+    assert_contains "$out" "claude: unmeasured" "sample rejects stale and error providers"
+  done
+  set_quota "$home" 70 70 60 95
+  out=$(FM_BURN_NOW=1900 bw "$home" check)
+  assert_equals "" "$out" "fresh recovery skips comparison across missing measurements"
+  out=$(bw "$home" sample)
+  assert_contains "$out" "claude: 70% (seven_day)" "sample accepts fresh configured window"
+  jq '(.providers[] | select(.provider == "claude").state.status) = "error"' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  out=$(FM_BURN_NOW=2200 bw "$home" check)
+  assert_contains "$out" "claude unmeasured" "unmeasured diagnostic re-arms on recovery"
+  pass "check and sample accept only exact fresh windows and report missing lanes once"
 }
 
 test_failed_instrument_prints_one_line_once_and_rearms() {
@@ -201,5 +300,8 @@ test_healthy_check_is_silent
 test_drop_threshold_crossing_no_repeat_recovery_and_rearm
 test_floor_threshold_crossing_no_repeat_recovery_and_rearm
 test_alibaba_rate_threshold_crossing_no_repeat_recovery_and_rearm
+test_integer_steps_at_fast_poll_cadence_stay_below_rate_limit
+test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing
+test_exact_fresh_lane_extraction_shared_by_check_and_sample
 test_failed_instrument_prints_one_line_once_and_rearms
 test_init_writes_default_config_when_absent

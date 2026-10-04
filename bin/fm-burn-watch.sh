@@ -66,46 +66,55 @@ DEFAULT_CONFIG='{
 
 # Shared JQ program for extracting lane quota and evaluating threshold crossings.
 # shellcheck disable=SC2016
-BURN_EVAL_JQ='
+LANE_EXTRACT_JQ='
 def extract_lane($quota; $prov; $target_win):
-  ([$quota.providers[]? | select(.provider == $prov)] | first) as $p
-  | if $p == null then null
-    else
-      ([$p.windows[]? | select((.id == $target_win) or (.kind == $target_win) or (.label == $target_win))] | first) as $w
-      | if $w != null and $w.percentRemaining != null then
-          {remaining: $w.percentRemaining, window: $w.id}
-        else
-          ([$p.quotaSemantics.effectiveAvailability[]? | select((.scope == $target_win) or (.scope == "all_models") or (.scope == "all_products"))] | first) as $ea
-          | if $ea != null and $ea.effectivePercentRemaining != null then
-              {remaining: $ea.effectivePercentRemaining, window: ($ea.scope // "effective")}
-            else
-              ([$p.windows[]? | select(.percentRemaining != null)] | first) as $any_w
-              | if $any_w != null then
-                  {remaining: $any_w.percentRemaining, window: $any_w.id}
-                else null
-                end
-            end
-        end
+  ([$quota.providers[]? | select(.provider == $prov and .state.status == "fresh")
+    | .windows[]? | select(.id == $target_win and (.percentRemaining | type) == "number")] | first) as $w
+  | if $w == null then null
+    else {remaining: $w.percentRemaining, provider: $prov, window: $w.id, resets_at: $w.resetsAt}
     end;
 
+def extract_lanes($quota; $config):
+  ($config.lanes // {}) | to_entries | map(
+    .key as $id
+    | {key: $id, value: extract_lane($quota; (.value.provider // $id); (.value.window // "all_models"))}
+  ) | from_entries;
+'
+
+# shellcheck disable=SC2016
+BURN_EVAL_JQ='
 ($prev[0] // {}) as $p
 | ($alerts[0] // {active: []}) as $a
 | ($config.lanes // {}) as $lanes_cfg
 | ($config.drop_threshold_pp // 10) as $default_drop
+| extract_lanes($quota; $config) as $cur_lanes
 | ($lanes_cfg | to_entries | map(
     .key as $id
-    | (.value.provider // $id) as $prov
-    | (.value.window // (if $id == "claude" then "seven_day" elif $id == "codex" then "weekly" elif $id == "agy" then "gemini_weekly" elif $id == "alibaba" then "monthly" else "all_models" end)) as $win
-    | {key: $id, value: extract_lane($quota; $prov; $win)}
-  ) | from_entries) as $cur_lanes
+    | $cur_lanes[$id] as $curr
+    | $p.anchors[$id] as $anchor
+    | {key: $id, value:
+        (if $curr == null then $anchor
+         elif $anchor == null or $anchor.provider != $curr.provider or $anchor.window != $curr.window
+           or $anchor.resets_at != $curr.resets_at or $curr.remaining > $anchor.last_remaining then
+           ($curr + {timestamp: $now, last_remaining: $curr.remaining})
+         else ($anchor + {last_remaining: $curr.remaining}) end)}
+  ) | from_entries) as $anchors
 | reduce ($lanes_cfg | to_entries[]) as $entry (
     {new_alerts: [], active: []};
     $entry.key as $id
     | $entry.value as $cfg
     | ($cur_lanes[$id]) as $curr
     | ($p.lanes[$id]) as $prev_lane
-    | (if $prev_lane | type == "object" then $prev_lane.remaining elif $prev_lane | type == "number" then $prev_lane else null end) as $prev_rem
+    | (if $prev_lane != null and $prev_lane.provider == $curr.provider and $prev_lane.window == $curr.window
+          and $prev_lane.resets_at == $curr.resets_at then $prev_lane.remaining else null end) as $prev_rem
     | ($curr.remaining) as $curr_rem
+    | ("unmeasured:" + $id) as $missing_key
+    | (if $curr == null then
+        .active += [$missing_key]
+        | if ($a.active | index($missing_key)) == null then
+            .new_alerts += ["\($id) unmeasured"]
+          else . end
+      else . end)
     |
     # 1. Floor check
     ($cfg.floor_pct) as $floor
@@ -139,19 +148,18 @@ def extract_lane($quota; $prov; $target_win):
     # 3. Rate check
     ($cfg.rate_pct_day) as $rate_limit
     | ("rate:" + $id) as $rate_key
-    | (if $rate_limit != null and $curr_rem != null and $prev_rem != null and $p.timestamp != null then
-        ($now - $p.timestamp) as $dt
-        | if $dt > 0 then
-            (($prev_rem - $curr_rem) * 86400 / $dt) as $rate
+    | (if $rate_limit != null and $curr_rem != null then
+        $anchors[$id] as $anchor
+        | ($now - $anchor.timestamp) as $dt
+        | if $dt >= 21600 then
+            (($anchor.remaining - $curr_rem) * 86400 / $dt) as $rate
             | if $rate > $rate_limit then
                 .active += [$rate_key]
                 | if ($a.active | index($rate_key)) == null then
                     ((($rate * 10 | round) / 10) | tostring) as $rate_disp
-                    | .new_alerts += ["\($id) monthly burning faster than \($rate_limit)%/day (\($rate_disp)%/day)"]
+                    | .new_alerts += ["\($id) \($curr.window) burning faster than \($rate_limit)%/day (\($rate_disp)%/day)"]
                   else . end
               else . end
-          elif ($a.active | index($rate_key)) != null then
-            .active += [$rate_key]
           else . end
       elif ($a.active | index($rate_key)) != null then
         .active += [$rate_key]
@@ -160,7 +168,7 @@ def extract_lane($quota; $prov; $target_win):
 | {
     new_alerts: .new_alerts,
     active: (.active | unique),
-    new_sample: {timestamp: $now, lanes: $cur_lanes}
+    new_sample: {timestamp: $now, lanes: $cur_lanes, anchors: $anchors}
   }
 '
 
@@ -277,7 +285,7 @@ action_check() {
     --slurpfile prev "$prev_arg" \
     --slurpfile alerts "$alerts_arg" \
     --argjson now "$now" \
-    "$BURN_EVAL_JQ" 2>/dev/null) || die "burn evaluation failed"
+    "$LANE_EXTRACT_JQ$BURN_EVAL_JQ" 2>/dev/null) || die "burn evaluation failed"
 
   local tmp_sample tmp_alerts
   tmp_sample=$(umask 077; mktemp "$STATE/.fm-burn-sample.XXXXXX") || return 1
@@ -295,7 +303,7 @@ action_check() {
 }
 
 action_sample() {
-  local quota_json rc=0 now config_json
+  local quota_json now config_json
   now=$(now_epoch)
   if ! command -v quota-axi >/dev/null 2>&1; then
     die "quota-axi is required"
@@ -304,33 +312,9 @@ action_sample() {
   config_json=$(read_config)
 
   printf 'timestamp: %s\n' "$now"
-  jq -r --argjson config "$config_json" --argjson quota "$quota_json" '
-def extract_lane($quota; $prov; $target_win):
-  ([$quota.providers[]? | select(.provider == $prov)] | first) as $p
-  | if $p == null then null
-    else
-      ([$p.windows[]? | select((.id == $target_win) or (.kind == $target_win) or (.label == $target_win))] | first) as $w
-      | if $w != null and $w.percentRemaining != null then
-          {remaining: $w.percentRemaining, window: $w.id}
-        else
-          ([$p.quotaSemantics.effectiveAvailability[]? | select((.scope == $target_win) or (.scope == "all_models") or (.scope == "all_products"))] | first) as $ea
-          | if $ea != null and $ea.effectivePercentRemaining != null then
-              {remaining: $ea.effectivePercentRemaining, window: ($ea.scope // "effective")}
-            else
-              ([$p.windows[]? | select(.percentRemaining != null)] | first) as $any_w
-              | if $any_w != null then
-                  {remaining: $any_w.percentRemaining, window: $any_w.id}
-                else null
-                end
-            end
-        end
-    end;
-
-($config.lanes // {}) | to_entries[] |
-  .key as $id |
-  (.value.provider // $id) as $prov |
-  (.value.window // (if $id == "claude" then "seven_day" elif $id == "codex" then "weekly" elif $id == "agy" then "gemini_weekly" elif $id == "alibaba" then "monthly" else "all_models" end)) as $win |
-  (extract_lane($quota; $prov; $win)) as $res |
+  jq -nr --argjson config "$config_json" --argjson quota "$quota_json" "$LANE_EXTRACT_JQ"'
+extract_lanes($quota; $config) | to_entries[] |
+  .key as $id | .value as $res |
   "\($id): \(if $res != null then "\($res.remaining)% (\($res.window))" else "unmeasured" end)"
 '
 }
