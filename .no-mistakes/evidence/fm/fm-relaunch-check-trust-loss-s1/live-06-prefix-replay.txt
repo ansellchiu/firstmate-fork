@@ -1,0 +1,11 @@
+$ fm-control.sh livepr relaunch --note "pre-fix replay"   (bin/fm-spawn.sh from base fd03ca89)
+relaunched livepr harness=claude from=claude model=default effort=default backend=tmux endpoint=primary:fm-livepr worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.qqQPg5/wt
+--- state/livepr.meta tail
+busy_gen=g1791124570.66003.3513
+spawn_gen=s1791124570.64433.12489
+pr=https://github.com/ansellchiu/firstmate-fork/pull/33
+pr_head=3550b46a567de97a33f102ef91dc30bb8170d561
+control_relaunch_tx=58955.20261004T143609Z.9754
+--- watcher predicates
+artifacts_valid: NO (watcher would reject livepr.check.sh as unauthenticated)
+watcher snapshot_capture: NO

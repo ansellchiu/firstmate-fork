@@ -1,0 +1,9 @@
+$ fm-control.sh livepr relaunch --note "continuing work after PR"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qqQPg5
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qqQPg5
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qqQPg5/data/livepr/brief.md records no Packet line in its header field block above the first '#' heading (scaffolded before briefs recorded the dispatch packet class); dispatching as ordinary - if this packet is conflict-level or prohibited, classify it at intake by adding the Packet line to the top of the brief above the first '#' heading, which is the only region read at dispatch
+warning: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qqQPg5/data/livepr/launch-brief.md records no ship branch; defaulting to legacy branch fm/livepr
+warning: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qqQPg5/data/livepr/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+relaunched livepr harness=claude from=claude model=default effort=default backend=tmux endpoint=primary:fm-livepr worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.qqQPg5/wt
+rc=0

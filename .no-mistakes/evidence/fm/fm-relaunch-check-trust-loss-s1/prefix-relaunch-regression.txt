@@ -1,0 +1,1 @@
+not ok - relaunch invalidated PR poll authentication by writing task metadata after the pr block

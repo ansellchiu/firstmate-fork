@@ -1,0 +1,2 @@
+ok - fm-control relaunch: armed PR poll authentication survives replacement launch publication (trace off)
+not ok - relaunch invalidated PR poll authentication by writing task metadata after the pr block

@@ -1,0 +1,2 @@
+artifacts_valid: yes
+watcher snapshot_capture: yes (merge poll armed)

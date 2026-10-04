@@ -1,0 +1,3 @@
+ok - fm-control relaunch: armed PR poll authentication survives replacement launch publication (trace off)
+ok - fm-control relaunch: armed PR poll authentication survives replacement launch publication (trace on)
+ok - fm-control relaunch: durable task metadata survives replacement launch publication

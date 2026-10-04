@@ -1,0 +1,35 @@
+--- state/livepr.meta after relaunch
+window=primary:fm-livepr
+endpoint_task_id=livepr
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.qqQPg5/wt
+project=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.qqQPg5/projects/demo
+harness=claude
+kind=ship
+mode=no-mistakes
+yolo=off
+packet=ordinary
+branch=fm/livepr
+tasktmp=/tmp/fm-livepr
+model=default
+effort=default
+busy_gen=g1791124484.27785.5240
+spawn_gen=s1791124485.25335.19422
+control_relaunch_tx=19657.20261004T143442Z.16478
+pr=https://github.com/ansellchiu/firstmate-fork/pull/33
+pr_head=3550b46a567de97a33f102ef91dc30bb8170d561
+--- watcher predicates (bin/fm-pr-lib.sh)
+artifacts_valid: yes
+watcher snapshot_capture: yes (merge poll armed)
+--- worker pane
+⏺ Reading Firstmate operational inbox message
+  ⎿  $ ls -la /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qqQPg5/st
+     ate/livepr.inbox/ /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.
+     qqQPg5/state/livepr.inbox/handled 2>&1
+· Fluttering… (9s · ↓ 348 tokens · thinking)
+                                                            ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Opus-5-5:medium:thinking  5h: 20%  7d: 37%  ██░░░░░░  (50.2k/1.0M)
+  /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.qqQPg5/wt:t…
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent
