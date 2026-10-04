@@ -1,0 +1,4 @@
+== BASE fd03ca89 under /usr/bin/python3
+constructed Credentials outside loop OK on 3.9.6
+== TARGET d634b17a under /usr/bin/python3
+constructed Credentials outside loop OK on 3.9.6
