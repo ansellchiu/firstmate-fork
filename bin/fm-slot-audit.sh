@@ -11,6 +11,11 @@
 #   AUDIT_ERROR <pid> <reason>                  an unreadable worker process
 # Exits 0 when clean, 1 when anything is reported.
 #
+# Covered layouts: this home, its projects/ clones (FM_PROJECTS_OVERRIDE when set), and
+# the shared Treehouse pools reached through the .fm-slot-owner claims of registered local
+# homes. Not covered: a worker in a linked project's external primary checkout or in a
+# clone this home does not hold, which is follow-up work.
+#
 # Reconciliation (firstmate drives it; this script never repairs):
 #   1. For each DOUBLE_CLAIM, decide the real occupant: the task named by the
 #      slot's .fm-slot-owner claim, confirmed by its live endpoint's cwd. Every
