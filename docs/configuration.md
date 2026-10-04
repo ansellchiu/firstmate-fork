@@ -85,7 +85,7 @@ Each effective `FM_HOME` contains private operational directories.
 - Task metadata, append-only status events, and endpoint signals.
 - Watcher and wake-queue coordination, away-mode state, and generated Relay artifacts.
 - Inactive terminal-outcome receipts under `state/terminal-outcomes/`.
-- Enabled extension working namespaces under `state/extensions/`.
+- Enabled extension working namespaces and opt-in Pi extension records under `state/extensions/`.
 - Parent-side remote ledger copies under `state/secondmate-summary-cache/`.
 - One-shot Bearings reconcile requests under `state/reconcile-notify/`.
 - Private secondmate config-reread generations with their retry and quarantine state.

@@ -1545,6 +1545,10 @@ families_for_changed_path() {
       printf '%s\n' pr-forge
       printf '%s\n' "__script__:fm-dispatch-resolve.test.sh"
     ;;
+    .pi/extensions/fm-headroom.ts)
+      printf '%s\n' "__script__:fm-pi-headroom-extension.test.sh"
+      printf '%s\n' "__script__:fm-pi-primary-types.test.sh"
+      ;;
     .pi/extensions/fm-primary-growth.ts|.pi/extensions/lib/fm-primary-growth.ts)
       # The policy and the boundary machine are pinned portably; that a real
       # Pi still delivers the settled boundary these breakers hang off is a
