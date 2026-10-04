@@ -769,6 +769,13 @@ fm_composer_classify_content() {  # <bordered> <content> [idle_re] [idle_case] [
     if _fm_composer_is_prompt_glyph "$plain_content" "$FM_COMPOSER_AGENT_PROMPT_GLYPHS"; then
       printf 'empty'; return 0
     fi
+    if [ "$styled" = 1 ] && fm_composer_leading_agent_glyph_var glyph "$plain_content"; then
+      local idle_body=${plain_content#"$glyph"}
+      fm_composer_normalize_trim_var idle_body
+      if fm_composer_idle_matches "$idle_body" "$idle_re" "$idle_case"; then
+        printf 'empty'; return 0
+      fi
+    fi
     printf 'unknown'; return 0
   fi
   if _fm_composer_is_prompt_glyph "$content" "$FM_COMPOSER_AGENT_PROMPT_GLYPHS"; then
@@ -1382,15 +1389,6 @@ _fm_composer_classify_bare_row() {  # <screen> <styled> <row>
   plain=$(_fm_composer_row_content "$raw" 0)
   _fm_composer_bare_row_strip_furniture_var content
   _fm_composer_bare_row_strip_furniture_var plain
-  # Cursor keeps its completed-turn placeholder at normal intensity in some
-  # Grok-backed releases, so ghost stripping cannot distinguish it from a
-  # draft.  The real Cursor glyph plus the exact captured placeholder is the
-  # structural proof for this one known shape.
-  if [ "$styled" = 1 ] && [ -z "$content" ] \
-    && [[ "$plain" == '→ Add a follow-up' ]]; then
-    printf 'empty'
-    return 0
-  fi
   state=$(fm_composer_classify_content 0 "$content" \
     "${FM_COMPOSER_IDLE_RE:-$FM_COMPOSER_IDLE_RE_DEFAULT}" insensitive "$plain" 0 "$styled")
   if [ "$styled" != 1 ] && [ "$state" = pending ]; then

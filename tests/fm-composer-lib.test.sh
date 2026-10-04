@@ -120,14 +120,34 @@ test_idle_placeholder_case_mode_is_explicit() {
   pass "fm_composer_classify_content: idle matching preserves the caller's case mode"
 }
 
-test_cursor_follow_up_placeholder_fixture_is_empty() {
-  local frame out esc
-  esc=$(printf '\033')
-  frame=$(cat "$ROOT/tests/assets/cursor-grok-4.7-composer/follow-up-empty.ansi")
-  frame=${frame//PLACEHOLDER_ESC/$esc}
-  out=$(fm_composer_classify_screen "styled=1" "$frame")
-  [ "$out" = empty ] || fail "the captured Cursor follow-up placeholder must read empty, got '$out'"
-  pass "matrix: captured Cursor Grok 4.7 follow-up placeholder reads empty"
+test_fully_stripped_idle_placeholders_use_shared_rules() {
+  local glyph out plain frame
+  while IFS= read -r glyph; do
+    [ -n "$glyph" ] || continue
+    plain="$glyph Add a follow-up"
+    out=$(classify 0 '' "$FM_COMPOSER_IDLE_RE_DEFAULT" sensitive "$plain" 0 1)
+    [ "$out" = empty ] || fail "fully stripped '$plain' should read empty, got '$out'"
+    frame=$'transcript\n'"${ESC}[2m${plain}${ESC}[0m"
+    out=$(fm_composer_classify_screen 'styled=1' "$frame")
+    [ "$out" = empty ] || fail "dim screen '$plain' should read empty, got '$out'"
+    out=$(classify 0 "$plain" "$FM_COMPOSER_IDLE_RE_DEFAULT" sensitive "$plain" 0 1)
+    [ "$out" = pending ] || fail "bright '$plain' must stay pending, got '$out'"
+    out=$(classify 0 '' "$FM_COMPOSER_IDLE_RE_DEFAULT" sensitive "$plain" 0 0)
+    [ "$out" = unknown ] || fail "unstyled '$plain' must stay unknown, got '$out'"
+  done <<< "$FM_COMPOSER_AGENT_PROMPT_GLYPHS"
+  out=$(classify 0 '' '^Custom hint$' insensitive '→ custom hint' 0 1)
+  [ "$out" = empty ] || fail "custom insensitive idle rule should apply, got '$out'"
+  out=$(classify 0 '' '^Custom hint$' sensitive '→ custom hint' 0 1)
+  [ "$out" = unknown ] || fail "custom sensitive idle rule must reject case mismatch, got '$out'"
+  out=$(classify 0 '' '' sensitive '→ Add a follow-up' 0 1)
+  [ "$out" = unknown ] || fail "disabled idle matching must stay unknown, got '$out'"
+  out=$(FM_COMPOSER_IDLE_RE='^Custom hint$' fm_composer_classify_screen 'styled=1' "${ESC}[2m→ Add a follow-up${ESC}[0m")
+  [ "$out" = unknown ] || fail "screen must honor overridden idle rules, got '$out'"
+  for plain in '$ Add a follow-up' 'Add a follow-up' '→ human draft'; do
+    out=$(classify 0 '' "$FM_COMPOSER_IDLE_RE_DEFAULT" sensitive "$plain" 0 1)
+    [ "$out" = unknown ] || fail "unproven stripped '$plain' must stay unknown, got '$out'"
+  done
+  pass "fully stripped idle placeholders use shared glyph, styling, and configured idle rules"
 }
 
 # --- Real text is pending ---------------------------------------------------
@@ -1029,7 +1049,7 @@ test_agent_glyphs_are_empty_bordered_and_bare
 test_empty_content_is_empty
 test_idle_placeholder_is_empty
 test_idle_placeholder_case_mode_is_explicit
-test_cursor_follow_up_placeholder_fixture_is_empty
+test_fully_stripped_idle_placeholders_use_shared_rules
 test_real_text_is_pending
 test_matrix_claude_bare_nbsp_row
 test_matrix_claude_arrow_statusline_footer
