@@ -652,7 +652,8 @@ test_agy_base_model_with_effort_matches_the_suffixed_catalog() {
       --model gemini-3.8-flash --effort "$effort") || rc=$?
     expect_code 0 "$rc" "agy base model with listed $effort suffix should succeed: $out"
     launch=$(cat "$CASE_DIR/launch.log")
-    assert_contains "$launch" "--model 'gemini-3.8-flash'" "agy launch lost the base model"
+    assert_contains "$launch" "--model 'gemini-3.8-flash-$effort'" "agy launch did not normalize the base model to the listed suffixed id"
+    assert_grep "model=gemini-3.8-flash-$effort" "$HOME_DIR/state/$id.meta" "agy meta did not record the listed suffixed id"
     assert_contains "$launch" "--effort '$effort'" "agy launch lost the selected effort"
   done
   id="agy-base-missing-$$"

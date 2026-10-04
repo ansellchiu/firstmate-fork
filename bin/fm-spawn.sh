@@ -2035,6 +2035,7 @@ agy_model_validate() {  # <agy-bin> <model>
   case "$effort" in
   low | medium | high)
     if printf '%s\n' "$listing" | awk '{print $1}' | grep -qxF -- "$model-$effort"; then
+      MODEL=$model-$effort
       return 0
     fi
     ;;
