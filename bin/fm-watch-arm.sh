@@ -658,8 +658,9 @@ finish_child_stderr() {
         ;;
     esac
   fi
-  cat "$child_err" >&2 2>/dev/null || true
-  rm -f "$child_out" "$child_err" 2>/dev/null || true
+  [ -z "$child_err" ] || cat "$child_err" >&2 2>/dev/null || true
+  rm -f "$child_out" ${child_err:+"$child_err"} 2>/dev/null || true
+  child_err=
 }
 
 # shellcheck disable=SC2329 # Invoked indirectly by the signal traps below.
@@ -697,15 +698,17 @@ child_out=$(mktemp "$STATE/.watch-arm-output.XXXXXX") || {
   echo "watcher: FAILED - no live watcher with a fresh beacon"
   exit 1
 }
+child_err=$(mktemp "${TMPDIR:-/tmp}/fm-watch-arm-err.XXXXXX") || child_err=
 # date(1) exposes whole seconds. Keep the configured confirmation budget from
 # collapsing when startup begins just before the next second boundary.
-child_err=$(mktemp "${TMPDIR:-/tmp}/fm-watch-arm-err.XXXXXX") || child_err=/dev/null
 deadline=$(( $(date +%s) + CONFIRM_TIMEOUT + 1 ))
+if [ -n "$child_err" ]; then exec 3>"$child_err"; else exec 3>&2; fi
 if [ -n "${FM_WATCH_PREDECESSOR_ARM_PID:-}" ]; then
-  FM_WATCH_HANDLING_SUCCESSOR=1 "$WATCH" >"$child_out" 2>"$child_err" &
+  FM_WATCH_HANDLING_SUCCESSOR=1 "$WATCH" >"$child_out" 2>&3 3>&- &
 else
-  "$WATCH" >"$child_out" 2>"$child_err" &
+  "$WATCH" >"$child_out" 2>&3 3>&- &
 fi
+exec 3>&-
 child=$!
 cycle_begin "$child" started "$(fm_pid_identity "$child" 2>/dev/null || true)"
 child_done=0
