@@ -1,0 +1,4 @@
+not ok - teardown left the status file behind
+not ok - a decision open at cleanup resurfaced in the wake drain: OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):
+task-x1 [key=left-open] needs-decision: pick A or B
+OPEN DECISIONS: close one by answering it: bin/fm-send.sh <task> --resolve-key <key> '<answer>'

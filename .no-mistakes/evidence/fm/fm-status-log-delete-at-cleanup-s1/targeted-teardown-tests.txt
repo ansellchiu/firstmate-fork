@@ -1,0 +1,4 @@
+ok - teardown erases the status log and stale timers, so no echo wakes follow
+ok - a decision left open at cleanup does not resurface in the wake drain
+ok - herdr flat teardown refuses before returning the isolated copy under lock contention and the retry completes cleanly
+ok - a secondmate home's teardown delivers the child's final line or refuses until it can

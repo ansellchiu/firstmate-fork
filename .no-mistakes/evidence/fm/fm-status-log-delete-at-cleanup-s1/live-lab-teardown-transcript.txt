@@ -1,0 +1,24 @@
+== FM_HOME=$LAB  TMUX=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.3NwM0x/tmux/tmux-501/fm-lab,57378,0
+== BEFORE teardown: state/task-x1.status
+note: working on it
+needs-decision [key=left-open]: pick A or B
+done: shipped
+== wake drain BEFORE teardown
+== tmux windows before: bash fm-task-x1 
+== RUN bin/fm-teardown.sh task-x1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+teardown task-x1 complete (window primary:fm-task-x1, worktree $LAB/projects/wt)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.3NwM0x/data/backlog.md). Update /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.3NwM0x/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+teardown rc=0
+== tmux windows after: bash 
+== AFTER: state files matching task-x1
+(no task-x1 state files)
+== wake drain AFTER teardown (1st)
+(no task-x1 / OPEN DECISIONS / old note lines)
+== wake drain AFTER teardown (2nd)
+(no task-x1 / OPEN DECISIONS / old note lines)
+== reuse id: fresh status log for task-x1
+note: fresh start
+== wake drain with reused id
+(old decision/notes not inherited)
+DRIVE-DONE

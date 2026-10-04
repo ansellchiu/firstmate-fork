@@ -1,0 +1,17 @@
+== BASE ce05defb: RUN bin/fm-teardown.sh task-x1
+teardown rc=0
+== AFTER: state files matching task-x1
+.hb-surfaced-task-x1
+.seen-task-x1_status
+task-x1.status
+== wake drain AFTER teardown (1st)
+task-x1 note: working on it
+task-x1 done: shipped
+OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):
+task-x1 [key=left-open] needs-decision: pick A or B
+OPEN DECISIONS: close one by answering it: bin/fm-send.sh <task> --resolve-key <key> '<answer>'
+== wake drain AFTER teardown (2nd)
+OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):
+task-x1 [key=left-open] needs-decision: pick A or B
+OPEN DECISIONS: close one by answering it: bin/fm-send.sh <task> --resolve-key <key> '<answer>'
+DRIVE-DONE
