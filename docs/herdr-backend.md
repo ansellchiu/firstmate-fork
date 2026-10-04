@@ -588,7 +588,7 @@ Cursor is one such harness:
 
 - Herdr reports a Cursor pane `blocked` in every state.
 - Cursor's mid-turn composer renders its placeholder beside a right-aligned busy token.
-  That token is composer content, and therefore `pending` on a composer that holds no user text.
+  `bin/fm-composer-lib.sh` drops that token before matching the placeholder, so the row reads `empty`; typed text beside it stays `pending`.
 
 That fallback alone reported every delivered steer as unconfirmed.
 So it is paired with an idle-to-busy transition across our Enter, read once before the first Enter and again after it.

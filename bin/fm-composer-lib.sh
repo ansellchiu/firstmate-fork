@@ -801,11 +801,18 @@ fm_composer_classify_content() {  # <bordered> <content> [idle_re] [idle_case] [
   # leaves it EQUAL to the plain row and it falls through to `pending` below.
   # Typing a strict substring of a placeholder is equally safe - the plain row
   # is then that substring, which the anchored placeholder pattern cannot match.
+  # While a turn runs, cursor-agent right-aligns its dim busy token on the SAME
+  # row (`→ Add a follow-up ... ctrl+c to stop`, verified live on Grok 4.7
+  # mates), so the plain row drops that trailing token before the placeholder
+  # match. Only the plain side is trimmed: typed text that ends in the token
+  # still survives in the stripped content and stays pending.
   if [ "$idle_collision" != 1 ] && [ "$styled" = 1 ] && [ -n "$plain_content" ]; then
     local plain_body=$plain_content plain_glyph=''
     if fm_composer_leading_prompt_glyph_var plain_glyph "$plain_body"; then
       plain_body=${plain_body#*"$plain_glyph"}
     fi
+    plain_body=$(printf '%s' "$plain_body" \
+      | sed -E "s/[[:space:]]+(${FM_DELIVERY_CURSOR_BUSY_REGEX_DEFAULT})\$//")
     fm_composer_normalize_trim_var plain_body
     if [ "${#content}" -lt "${#plain_body}" ] \
        && fm_composer_idle_matches "$plain_body" "$idle_re" "$idle_case"; then
