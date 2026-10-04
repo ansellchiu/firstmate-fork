@@ -493,9 +493,16 @@ test_relaunch_preserves_durable_task_metadata() {
 }
 
 test_relaunch_preserves_armed_pr_poll_binding() {
-  local dir out rc url
-  dir=$(new_case pr-poll-relaunch rl_pr)
+  local dir out rc url trace_mode=${1:-off} carrier
+  dir=$(new_case "pr-poll-relaunch-$trace_mode" rl_pr)
   add_ship_task "$dir" rl_pr claude
+  carrier=00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01
+  printf '%s\n' "$$" > "$dir/home/state/.lock"
+  FM_TRACE_CONTEXT="$trace_mode" fm_trace_context_session_start "$dir/home/config" "$dir/home/state/.trace-context-effective" \
+    || fail "could not freeze trace context for PR poll fixture"
+  if [ "$trace_mode" = on ]; then
+    printf 'traceparent=%s\n' "$carrier" >> "$dir/home/state/rl_pr.meta"
+  fi
 
   url="https://github.com/example/repo/pull/42"
   printf 'pr=%s\npr_head=0123456789abcdef0123456789abcdef01234567\n' "$url" >> "$dir/home/state/rl_pr.meta"
@@ -506,13 +513,18 @@ test_relaunch_preserves_armed_pr_poll_binding() {
   fm_pr_poll_artifacts_valid "$dir/home/state" rl_pr "$ROOT/bin/fm-pr-poll.sh" \
     || fail "PR poll fixture invalid before relaunch"
 
-  out=$(run_control "$dir" rl_pr relaunch --note "continuing work after PR"); rc=$?
+  out=$(FM_TRACE_CONTEXT="$trace_mode" run_control "$dir" rl_pr relaunch --note "continuing work after PR"); rc=$?
   expect_code 0 "$rc" "relaunch should succeed"$'\n'"$out"
+  if [ "$trace_mode" = on ]; then
+    [ "$(meta_field "$dir" rl_pr traceparent)" = "$carrier" ] \
+      || fail "traced relaunch did not preserve the recorded carrier"
+    assert_grep "export TRACEPARENT=$carrier" "$dir/fake/keys" "traced relaunch did not deliver the recorded carrier"
+  fi
   fm_pr_poll_artifacts_valid "$dir/home/state" rl_pr "$ROOT/bin/fm-pr-poll.sh" \
-    || fail "relaunch invalidated PR poll authentication by writing control metadata after the pr block"
+    || fail "relaunch invalidated PR poll authentication by writing task metadata after the pr block"
   fm_pr_poll_snapshot_capture "$dir/home/state" rl_pr "$ROOT/bin/fm-pr-poll.sh" \
     || fail "relaunch prevented watcher from capturing armed PR poll check"
-  pass "fm-control relaunch: armed PR poll authentication survives replacement launch publication"
+  pass "fm-control relaunch: armed PR poll authentication survives replacement launch publication (trace $trace_mode)"
 }
 
 test_relaunch_serializes_concurrent_durable_metadata_publication() {
@@ -2420,6 +2432,7 @@ test_relaunch_refuses_before_exit_when_the_composer_state_is_unproven
 test_relaunch_from_linked_home_preserves_recorded_worktree
 test_relaunch_preserves_durable_task_metadata
 test_relaunch_preserves_armed_pr_poll_binding
+test_relaunch_preserves_armed_pr_poll_binding on
 test_relaunch_serializes_concurrent_durable_metadata_publication
 test_disabled_relaunch_clears_prior_trace_context
 test_relaunch_appends_the_progress_note_to_the_instructions
