@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -eu
+# shellcheck source=tests/lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 case_dir=$(fm_test_tmproot fm-slot-audit)
 home="$case_dir/home"

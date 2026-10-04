@@ -44,11 +44,12 @@ claims=$(
     exit 1
   }
   states=("${TREEHOUSE_OWNER_STATES[@]}")
-  seen=$'\n'
+  nl=$'\n'
+  seen=$nl
   for ((i=0; i<${#states[@]}; i++)); do
     state=$(CDPATH='' cd -- "${states[i]}" 2>/dev/null && pwd -P) || continue
-    case "$seen" in *$'\n'"$state"$'\n'*) continue ;; esac
-    seen="$seen$state"$'\n'
+    case "$seen" in (*"$nl$state$nl"*) continue ;; esac
+    seen="$seen$state$nl"
     for meta in "$state"/*.meta; do
       [ -f "$meta" ] || continue
       wt=$(grep -m1 '^worktree=' "$meta" | cut -d= -f2-)
@@ -87,7 +88,7 @@ escapes=$(
     exit 1
   }
   printf '%s\n' "$processes" | while read -r pid comm args; do
-    case "$ancestors" in *" $pid "*) continue ;; esac
+    case "$ancestors" in (*" $pid "*) continue ;; esac
     argv0=${args%% *}
     [ "$(fm_agent_process_classify "$comm" "$argv0" "$args" "$pid")" = agent ] || continue
     if [ -r "/proc/$pid/environ" ]; then
@@ -102,8 +103,8 @@ escapes=$(
     task=$(printf '%s\n' "$environment" | tr ' ' '\n' | sed -n 's/^FM_TASK_ID=//p' | head -1)
     fm_task_id_creation_valid "$task" || continue
     case " $environment " in
-      *" FM_TASK_INBOX=$state_real/$task.inbox "*) ;;
-      *) continue ;;
+      (*" FM_TASK_INBOX=$state_real/$task.inbox "*) ;;
+      (*) continue ;;
     esac
     meta="$STATE/$task.meta"
     [ -f "$meta" ] || continue
@@ -123,7 +124,7 @@ escapes=$(
     }
     escaped=0
     for primary in "${primaries[@]}"; do
-      case "$cwd" in "$primary"|"$primary"/*) escaped=1; break ;; esac
+      case "$cwd" in ("$primary"|"$primary"/*) escaped=1; break ;; esac
     done
     project=$(grep -m1 '^project=' "$meta" | cut -d= -f2-)
     if [ "$escaped" = 0 ] && [ -n "$project" ]; then
