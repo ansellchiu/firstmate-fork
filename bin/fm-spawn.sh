@@ -2015,8 +2015,9 @@ omp_model_validate() { # <omp-bin> <model>
 # bound (bin/fm-timeout-lib.sh) with stdin detached: a stalled fetch or a
 # sign-in prompt can never block the spawn before any pane exists. An
 # unreachable listing establishes nothing (harness-adapters
-# model-and-effort.md) and launches unvalidated with a notice.
-agy_model_validate() {  # <agy-bin> <model>
+# model-and-effort.md) and launches unvalidated with a notice. A base id whose
+# <model>-<effort> suffix is listed is rewritten to that id (sets MODEL).
+agy_model_validate() {  # <agy-bin> <model> [effort]
   local bin=$1 model=$2 effort=${3:-} listing rc=0 bound=${FM_AGY_MODELS_TIMEOUT:-15}
   case "$bound" in ''|*[!0-9]*|0*) bound=15 ;; esac
   [ -n "$model" ] && [ "$model" != default ] || return 0
