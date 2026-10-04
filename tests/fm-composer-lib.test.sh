@@ -399,6 +399,33 @@ test_matrix_cursor_reverse_video_placeholder_remnant() {
   pass "matrix: cursor's reverse-video placeholder remnant reads empty; real typed text stays pending"
 }
 
+test_matrix_cursor_busy_placeholder_row_reads_empty() {
+  # Real Grok 4.7 cursor-agent rows from the fm-restart-cursor-placeholder-s1
+  # captures, trimmed to the composer and its footer (rules shortened, the
+  # right-alignment gap shortened). A running turn draws its dim
+  # `ctrl+c to stop` token on the composer row itself; that row read `pending`
+  # and fm-secondmate-restart refused the mates with "composer visibly holds
+  # pending text".
+  local bg composer_idle composer_busy rules footer idle busy typed
+  bg="${ESC}[48;2;21;21;21m"
+  composer_idle=" ${ESC}[0m${bg} ${ESC}[0m${ESC}[2m${bg}→ ${ESC}[0m${ESC}[7m${bg}A${ESC}[0m${ESC}[2m${bg}dd a follow-up${ESC}[0m${bg}        ${ESC}[0m"
+  composer_busy="${composer_idle}${ESC}[2m${bg}ctrl+c to stop${ESC}[0m${bg} ${ESC}[0m"
+  rules=" ${ESC}[0m${ESC}[38;2;21;21;21m▄▄▄▄▄▄▄▄${ESC}[0m"
+  footer=$'\n'" ${ESC}[0m${ESC}[38;2;21;21;21m▀▀▀▀▀▀▀▀${ESC}[0m"$'\n'"  ${ESC}[0m${ESC}[2mGrok 4.7 256K Medium${ESC}[0m ${ESC}[0m${ESC}[2m·${ESC}[0m ${ESC}[0m${ESC}[2m86.5%${ESC}[0m        ${ESC}[0m${ESC}[38;5;5mRun Everything${ESC}[0m"$'\n'"  ${ESC}[0m${ESC}[2m~/wt · fm/s1${ESC}[0m"
+  idle=$'transcript\n\n'"${rules}"$'\n'"${composer_idle}${footer}"
+  busy=$'transcript\n\n'"${rules}"$'\n'"${composer_busy}${footer}"
+  assert_screen "cursor grok idle placeholder" empty "$CAPS_STYLED" "$idle"
+  assert_screen "cursor grok busy placeholder with ctrl+c to stop" empty "$CAPS_STYLED" "$busy"
+  assert_screen "cursor grok busy placeholder on zellij" empty "$CAPS_STYLED_NOID" "$busy"
+  # A genuinely typed follow-up is bright, so it survives stripping and stays
+  # pending beside the busy token, including text that ends in the token.
+  for typed in 'Add a follow-up' 'stop now ctrl+c to stop'; do
+    assert_screen "cursor grok typed '$typed' while busy" pending "$CAPS_STYLED" \
+      $'transcript\n\n'"${rules}"$'\n'" ${ESC}[0m${bg} ${ESC}[0m${ESC}[2m${bg}→ ${ESC}[0m${ESC}[38;2;224;222;244m${typed}${ESC}[0m${bg}        ${ESC}[0m${ESC}[2m${bg}ctrl+c to stop${ESC}[0m${footer}"
+  done
+  pass "matrix: cursor's placeholder row reads empty idle and busy; typed follow-ups stay pending"
+}
+
 test_matrix_herdr_halfblock_rule_bounds_bare_wrap() {
   # Herdr draws a composer's rules with half-block glyphs (▄ above, ▀ below)
   # rather than the box-drawing family. Without treating those as edges, a bare
@@ -1028,6 +1055,7 @@ test_composer_footer_zone_refuses_rather_than_allows
 test_matrix_codex_dim_hint_row
 test_matrix_muse_truecolor_glyph_survives_signal_loss
 test_matrix_cursor_reverse_video_placeholder_remnant
+test_matrix_cursor_busy_placeholder_row_reads_empty
 test_matrix_herdr_halfblock_rule_bounds_bare_wrap
 test_matrix_omp_status_row_bounds_bare_composer
 test_matrix_codex_idle_starfield_furniture
