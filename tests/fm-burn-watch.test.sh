@@ -131,26 +131,55 @@ test_alibaba_rate_threshold_crossing_no_repeat_recovery_and_rearm() {
   set_quota "$home" 80 70 60 95
   FM_BURN_NOW=1000 bw "$home" check >/dev/null
 
-  set_quota "$home" 80 70 60 94
+  set_quota "$home" 80 70 60 92
   out=$(FM_BURN_NOW=22300 bw "$home" check)
   assert_equals "" "$out" "rate waits until anchor is six hours old"
   out=$(FM_BURN_NOW=22600 bw "$home" check)
-  assert_contains "$out" "alibaba monthly burning faster than 1.5%/day (4%/day)" "alibaba rate alert"
+  assert_contains "$out" "alibaba monthly burning faster than 1.5%/day (8%/day)" "alibaba rate alert"
   assert_equals 1 "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" "rate alert is exactly one line"
 
   out=$(FM_BURN_NOW=22900 bw "$home" check)
   assert_equals "" "$out" "flat tick does not re-arm the anchored rate"
-  set_quota "$home" 80 70 60 93
+  set_quota "$home" 80 70 60 91
   out=$(FM_BURN_NOW=23200 bw "$home" check)
   assert_equals "" "$out" "rate alert does not repeat"
 
   out=$(FM_BURN_NOW=173800 bw "$home" check)
   assert_equals "" "$out" "anchor average below limit recovers silently"
-  set_quota "$home" 80 70 60 91
+  set_quota "$home" 80 70 60 89
   out=$(FM_BURN_NOW=174100 bw "$home" check)
   assert_contains "$out" "alibaba monthly burning faster than 1.5%/day" "rate alert re-arms"
   assert_equals 1000 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "ordinary ticks preserve anchor"
   pass "anchored rate warmup, crossing, no-repeat, recovery, and re-arm"
+}
+
+test_single_integer_step_after_anchor_never_alerts_rate() {
+  local home out
+  home=$(make_home single-step)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  set_quota "$home" 80 70 60 94
+  out=$(FM_BURN_NOW=4600 bw "$home" check)
+  assert_equals "" "$out" "one-point step an hour after anchor is silent"
+  out=$(FM_BURN_NOW=22600 bw "$home" check)
+  assert_equals "" "$out" "one-point step does not alert at six hours"
+  pass "a single integer step never alerts the rate by itself"
+}
+
+test_sub_second_reset_jitter_keeps_drop_baseline_and_anchor() {
+  local home out
+  home=$(make_home jitter)
+  set_quota "$home" 64 70 60 95
+  jq '(.providers[] | select(.provider == "claude").windows[0].resetsAt) = "2026-10-08T00:00:00.172970+00:00"' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  set_quota "$home" 50 70 60 95
+  jq '(.providers[] | select(.provider == "claude").windows[0].resetsAt) = "2026-10-07T23:59:59.967221+00:00"' "$home/stub/quota.json" > "$home/stub/next.json"
+  mv "$home/stub/next.json" "$home/stub/quota.json"
+  out=$(FM_BURN_NOW=1300 bw "$home" check)
+  assert_contains "$out" "claude dropped 14 points (64% -> 50%)" "jittered reset time keeps drop baseline"
+  assert_equals 1000 "$(jq -r '.anchors.claude.timestamp' "$home/state/.burn-watch-prev")" "jittered reset time keeps rate anchor"
+  pass "sub-second reset jitter does not start a new period"
 }
 
 test_integer_steps_at_fast_poll_cadence_stay_below_rate_limit() {
@@ -177,14 +206,14 @@ test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing() {
   home=$(make_home rate-reset)
   set_quota "$home" 80 70 60 95
   FM_BURN_NOW=1000 bw "$home" check >/dev/null
-  set_quota "$home" 80 70 60 94
+  set_quota "$home" 80 70 60 92
   FM_BURN_NOW=22600 bw "$home" check >/dev/null
   jq '(.providers[] | select(.provider == "alibaba").state.status) = "stale"' "$home/stub/quota.json" > "$home/stub/next.json"
   mv "$home/stub/next.json" "$home/stub/quota.json"
   out=$(FM_BURN_NOW=22900 bw "$home" check)
   assert_contains "$out" "alibaba unmeasured" "missing lane reports"
   assert_equals 1000 "$(jq -r '.anchors.alibaba.timestamp' "$home/state/.burn-watch-prev")" "missing lane retains rate anchor"
-  set_quota "$home" 80 70 60 94
+  set_quota "$home" 80 70 60 92
   out=$(FM_BURN_NOW=23200 bw "$home" check)
   assert_equals "" "$out" "measurement recovery preserves active rate"
   set_quota "$home" 80 70 60 94.5
@@ -202,7 +231,7 @@ test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing() {
   printf '%s\n' '{"lanes":{"alibaba":{"provider":"alibaba","window":"weekly","rate_pct_day":1.5}}}' > "$home/config/burn-watch.json"
   out=$(FM_BURN_NOW=45400 bw "$home" check)
   assert_equals "" "$out" "configured window change starts a new baseline"
-  jq '(.providers[] | select(.provider == "alibaba").windows[0].percentRemaining) = 49' "$home/stub/quota.json" > "$home/stub/next.json"
+  jq '(.providers[] | select(.provider == "alibaba").windows[0].percentRemaining) = 48' "$home/stub/quota.json" > "$home/stub/next.json"
   mv "$home/stub/next.json" "$home/stub/quota.json"
   out=$(FM_BURN_NOW=67000 bw "$home" check)
   assert_contains "$out" "alibaba weekly burning faster than 1.5%/day" "rate names actual configured window"
@@ -300,6 +329,8 @@ test_healthy_check_is_silent
 test_drop_threshold_crossing_no_repeat_recovery_and_rearm
 test_floor_threshold_crossing_no_repeat_recovery_and_rearm
 test_alibaba_rate_threshold_crossing_no_repeat_recovery_and_rearm
+test_single_integer_step_after_anchor_never_alerts_rate
+test_sub_second_reset_jitter_keeps_drop_baseline_and_anchor
 test_integer_steps_at_fast_poll_cadence_stay_below_rate_limit
 test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing
 test_exact_fresh_lane_extraction_shared_by_check_and_sample

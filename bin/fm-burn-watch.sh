@@ -74,6 +74,18 @@ def extract_lane($quota; $prov; $target_win):
     else {remaining: $w.percentRemaining, provider: $prov, window: $w.id, resets_at: $w.resetsAt}
     end;
 
+def reset_epoch:
+  [if type == "string" then
+     capture("^(?<d>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.[0-9]+)?(?<z>Z|[+-][0-9]{2}:?[0-9]{2})?$")
+     | (.d + "Z" | fromdateiso8601)
+       - (if (.z // "Z") == "Z" then 0
+          else (if .z[0:1] == "-" then -1 else 1 end) * ((.z[1:3] | tonumber) * 3600 + (.z[-2:] | tonumber) * 60) end)
+   else empty end] | first;
+
+def same_period($a; $b):
+  ($a | reset_epoch) as $x | ($b | reset_epoch) as $y
+  | if $x != null and $y != null then (($x - $y) | fabs) <= 3600 else $a == $b end;
+
 def extract_lanes($quota; $config):
   ($config.lanes // {}) | to_entries | map(
     .key as $id
@@ -95,7 +107,7 @@ BURN_EVAL_JQ='
     | {key: $id, value:
         (if $curr == null then $anchor
          elif $anchor == null or $anchor.provider != $curr.provider or $anchor.window != $curr.window
-           or $anchor.resets_at != $curr.resets_at or $curr.remaining > $anchor.last_remaining then
+           or (same_period($anchor.resets_at; $curr.resets_at) | not) or $curr.remaining > $anchor.last_remaining then
            ($curr + {timestamp: $now, last_remaining: $curr.remaining})
          else ($anchor + {last_remaining: $curr.remaining}) end)}
   ) | from_entries) as $anchors
@@ -106,7 +118,7 @@ BURN_EVAL_JQ='
     | ($cur_lanes[$id]) as $curr
     | ($p.lanes[$id]) as $prev_lane
     | (if $prev_lane != null and $prev_lane.provider == $curr.provider and $prev_lane.window == $curr.window
-          and $prev_lane.resets_at == $curr.resets_at then $prev_lane.remaining else null end) as $prev_rem
+          and same_period($prev_lane.resets_at; $curr.resets_at) then $prev_lane.remaining else null end) as $prev_rem
     | ($curr.remaining) as $curr_rem
     | ("unmeasured:" + $id) as $missing_key
     | (if $curr == null then
@@ -152,7 +164,7 @@ BURN_EVAL_JQ='
         $anchors[$id] as $anchor
         | ($now - $anchor.timestamp) as $dt
         | if $dt >= 21600 then
-            (($anchor.remaining - $curr_rem) * 86400 / $dt) as $rate
+            (($anchor.remaining - $curr_rem - 1) * 86400 / $dt) as $rate
             | if $rate > $rate_limit then
                 .active += [$rate_key]
                 | if ($a.active | index($rate_key)) == null then
