@@ -9,7 +9,7 @@ It also records the portable proofs for disabled and failed pass-through behavio
 
 | date | Pi version | platform |
 | --- | --- | --- |
-| 2026-09-19 | 0.85.1 | macOS 26.6 |
+| 2026-10-04 | 1.0.0 | macOS 26.7 |
 
 ## Command
 
