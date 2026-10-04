@@ -146,6 +146,7 @@ CYCLE_LOG_MAX_BYTES=${FM_WATCH_CYCLE_LOG_MAX_BYTES:-262144}
 CYCLE_LOG_KEEP_LINES=${FM_WATCH_CYCLE_LOG_KEEP_LINES:-1000}
 ARM_PID=${BASHPID:-$$}
 STDERR_LOG="$STATE/.watch-cycle-stderr.log"
+STDERR_LOG_LOCK="$STATE/.watch-cycle-stderr.lock"
 STDERR_TAIL_LINES=20
 case "$CYCLE_LOG_MAX_BYTES" in ''|*[!0-9]*|0) CYCLE_LOG_MAX_BYTES=262144 ;; esac
 case "$CYCLE_LOG_KEEP_LINES" in ''|*[!0-9]*|0) CYCLE_LOG_KEEP_LINES=1000 ;; esac
@@ -641,8 +642,15 @@ cleanup_child() {
 # Pass the watcher's captured stderr through as it was before the capture, and
 # on a nonzero exit keep a bounded tail so a silent exit stays diagnosable.
 finish_child_stderr() {
-  local rc=${1:-0} size tmp
+  local rc=${1:-0} size tmp i=0 locked=0
   if [ "$rc" -ne 0 ] && [ -s "$child_err" ]; then
+    until fm_lock_try_acquire "$STDERR_LOG_LOCK" && locked=1; do
+      [ "$i" -lt 20 ] || break
+      sleep 0.02
+      i=$((i + 1))
+    done
+  fi
+  if [ "$locked" -eq 1 ]; then
     { printf 'watcher_pid=%s ended_at=%s rc=%s\n' "$child" "$(date +%s)" "$rc"
       tail -n "$STDERR_TAIL_LINES" "$child_err" 2>/dev/null; } >> "$STDERR_LOG" 2>/dev/null || true
     size=$(wc -c < "$STDERR_LOG" 2>/dev/null | tr -d '[:space:]')
@@ -657,6 +665,7 @@ finish_child_stderr() {
         fi
         ;;
     esac
+    fm_lock_release "$STDERR_LOG_LOCK"
   fi
   [ -z "$child_err" ] || cat "$child_err" >&2 2>/dev/null || true
   rm -f "$child_out" ${child_err:+"$child_err"} 2>/dev/null || true
