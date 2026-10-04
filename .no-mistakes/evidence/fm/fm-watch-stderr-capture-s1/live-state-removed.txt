@@ -1,0 +1,13 @@
+== mode=state-removed lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sAXrf2
+arm=33181 watcher=33233 live=yes
+captures during run: fm-watch-arm-err.S0I9Tk
+arm exit=1
+--- arm stdout
+watcher: started pid=33233 (beacon fresh)
+watcher: FAILED - watcher cycle exited 1 without an actionable reason
+--- arm stderr
+watcher: exiting - state directory no longer exists: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sAXrf2/state
+--- state/.watch-cycle-stderr.log
+cat: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sAXrf2/state/.watch-cycle-stderr.log: No such file or directory
+--- leftover captures in TMPDIR: [] in state: []
+crw-rw-rw-  1 root  wheel  0x3000002 Oct  5 05:37 /dev/null

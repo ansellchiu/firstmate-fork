@@ -1,0 +1,14 @@
+== mode=lock-removed lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.OaHB2E
+arm=21990 watcher=22012 live=yes
+captures during run: fm-watch-arm-err.tSMbE5
+arm exit=1
+--- arm stdout
+watcher: started pid=22012 (beacon fresh)
+watcher: FAILED - watcher cycle exited 1 without an actionable reason
+--- arm stderr
+watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.OaHB2E/state
+--- state/.watch-cycle-stderr.log
+watcher_pid=22012 ended_at=1791149826 rc=1
+watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.OaHB2E/state
+--- leftover captures in TMPDIR: [] in state: []
+crw-rw-rw-  1 root  wheel  0x3000002 Oct  5 05:37 /dev/null

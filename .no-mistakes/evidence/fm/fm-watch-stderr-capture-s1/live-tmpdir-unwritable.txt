@@ -1,0 +1,14 @@
+== mode=tmpdir-unwritable lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.KFDTEs
+arm=60400 watcher=60468 live=yes
+captures during run: 
+arm exit=1
+--- arm stdout
+watcher: started pid=60468 (beacon fresh)
+watcher: FAILED - watcher cycle exited 1 without an actionable reason
+--- arm stderr
+mktemp: mkstemp failed on /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-cap.wnTWZZ/fm-watch-arm-err.zXnTtw: Permission denied
+watcher: exiting - state directory was torn down (singleton lock removed): /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.KFDTEs/state
+--- state/.watch-cycle-stderr.log
+cat: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.KFDTEs/state/.watch-cycle-stderr.log: No such file or directory
+--- leftover captures in TMPDIR: [] in state: []
+crw-rw-rw-  1 root  wheel  0x3000002 Oct  5 05:37 /dev/null

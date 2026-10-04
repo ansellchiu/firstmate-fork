@@ -1,0 +1,11 @@
+== mode=arm-term lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.gDhkGH
+arm=56007 watcher=56059 live=yes
+captures during run: fm-watch-arm-err.PkuH8M
+arm exit=143
+--- arm stdout
+watcher: started pid=56059 (beacon fresh)
+--- arm stderr
+--- state/.watch-cycle-stderr.log
+cat: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.gDhkGH/state/.watch-cycle-stderr.log: No such file or directory
+--- leftover captures in TMPDIR: [] in state: []
+crw-rw-rw-  1 root  wheel  0x3000002 Oct  5 05:37 /dev/null
