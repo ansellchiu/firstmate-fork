@@ -392,6 +392,7 @@ fm_test_reap_matching_watch_arms() { # <owned|pruned> [root...]
     matched=0
     if [ "$mode" = owned ]; then
       for fixture in "$@"; do
+        fixture=$(CDPATH='' cd -P -- "$fixture" && pwd -P) || continue
         if fm_test_path_under "$arm_root" "$fixture"; then
           matched=1
           break

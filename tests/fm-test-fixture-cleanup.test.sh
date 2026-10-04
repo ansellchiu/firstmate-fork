@@ -337,6 +337,53 @@ SH
   pass "test startup reaps a pruned temp watch arm and leaves one outside the temp directory"
 }
 
+test_orphan_sweep_reaps_watch_arm_through_temp_alias() {
+  local harness physical alias stale hb pid tries before after
+  harness=$(fm_test_tmproot fm-test-cleanup-arm-alias)
+  physical="$harness/physical"
+  alias="$harness/alias"
+  hb="$harness/heartbeat"
+  mkdir -p "$physical"
+  ln -s "$physical" "$alias"
+  stale=$(mktemp -d "$alias/fm-pi-watch-extension.XXXXXX")
+  mkdir -p "$stale/root/bin"
+  printf '%s\n%s\n' "$$" reused-process-identity > "$stale/.fm-test-fixture"
+  touch -t 202001010000 "$stale/.fm-test-fixture"
+  cat > "$stale/root/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+trap '' TERM INT
+n=0
+end=$((SECONDS + 12))
+while [ "$SECONDS" -lt "$end" ]; do
+  n=$((n + 1))
+  printf '%s\n' "$n" > "$FM_ARM_HEARTBEAT" || exit 0
+  sleep 0.2
+done
+SH
+  chmod +x "$stale/root/bin/fm-watch-arm.sh"
+  FM_ARM_HEARTBEAT="$hb" "$stale/root/bin/fm-watch-arm.sh" --restart >/dev/null 2>&1 &
+  pid=$!
+  tries=0
+  while [ ! -s "$hb" ] && [ "$tries" -lt 50 ]; do
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  if [ ! -s "$hb" ]; then
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    fail "the aliased fixture arm never published a heartbeat"
+  fi
+  TMPDIR="$alias" bash -c '. "$1"' _ "$LIB"
+  before=$(cat "$hb")
+  sleep 0.6
+  after=$(cat "$hb")
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  assert_absent "$stale" "the stale aliased fixture was not removed"
+  [ "$before" = "$after" ] || fail "the stale fixture arm survived the first sweep through a temp alias"
+  pass "the first stale-fixture sweep stops watch arms through a temp alias"
+}
+
 test_fixture_root_gone_after_normal_exit
 test_fixture_root_gone_after_sigterm
 test_cleanup_registry_resists_precreation
@@ -345,3 +392,4 @@ test_orphan_sweep_respects_fixture_ownership
 test_orphan_sweep_reaps_read_only_package_tree
 test_cleanup_reaps_owned_watch_arm_only
 test_orphan_sweep_reaps_pruned_temp_watch_arm_only
+test_orphan_sweep_reaps_watch_arm_through_temp_alias
