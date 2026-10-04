@@ -120,6 +120,16 @@ test_idle_placeholder_case_mode_is_explicit() {
   pass "fm_composer_classify_content: idle matching preserves the caller's case mode"
 }
 
+test_cursor_follow_up_placeholder_fixture_is_empty() {
+  local frame out esc
+  esc=$(printf '\033')
+  frame=$(cat "$ROOT/tests/assets/cursor-grok-4.7-composer/follow-up-empty.ansi")
+  frame=${frame//PLACEHOLDER_ESC/$esc}
+  out=$(fm_composer_classify_screen "styled=1" "$frame")
+  [ "$out" = empty ] || fail "the captured Cursor follow-up placeholder must read empty, got '$out'"
+  pass "matrix: captured Cursor Grok 4.7 follow-up placeholder reads empty"
+}
+
 # --- Real text is pending ---------------------------------------------------
 
 test_real_text_is_pending() {
@@ -1019,6 +1029,7 @@ test_agent_glyphs_are_empty_bordered_and_bare
 test_empty_content_is_empty
 test_idle_placeholder_is_empty
 test_idle_placeholder_case_mode_is_explicit
+test_cursor_follow_up_placeholder_fixture_is_empty
 test_real_text_is_pending
 test_matrix_claude_bare_nbsp_row
 test_matrix_claude_arrow_statusline_footer

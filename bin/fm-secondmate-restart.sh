@@ -94,6 +94,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-secondmate-nudge-lib.sh"
 # shellcheck source=bin/fm-pending-reply-lib.sh
 . "$SCRIPT_DIR/fm-pending-reply-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
 
 PERSIST_WAIT=${FM_SECONDMATE_PERSIST_WAIT:-900}
 PERSIST_POLL=${FM_SECONDMATE_PERSIST_POLL:-5}
@@ -165,6 +167,13 @@ report_unreached() {  # <id> <reason>
 restart_mate() {  # <array-index>
   local i=$1 id restart_out restart_rc restart_reason ran_on
   id=${IDS[$i]}
+  # The watcher uses this same lock around probe/kill/relaunch.  Holding it for
+  # the whole restart transaction prevents the watcher from seeing the
+  # intentional stop as a missing endpoint and racing a second spawn.
+  fm_lock_acquire_wait "$STATE/.secondmate-liveness-$id.lock" || {
+    printf 'unreached: %s: another restart is already in progress\n' "$id"
+    return 1
+  }
   if [ "${PLACEMENT[i]}" = remote ]; then
     restart_out=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
       "$SCRIPT_DIR/fm-remote-secondmate-relaunch.sh" \
@@ -175,6 +184,7 @@ restart_mate() {  # <array-index>
       "$SCRIPT_DIR/fm-control.sh" "$id" relaunch 2>&1)
     restart_rc=$?
   fi
+  fm_lock_release "$STATE/.secondmate-liveness-$id.lock" 2>/dev/null || true
   if [ "$restart_rc" -eq 0 ]; then
     ran_on=$(printf '%s\n' "$restart_out" | sed -n 's/^relaunched .* harness=\([^ ]*\).*/\1/p' | tail -1)
     [ -n "$ran_on" ] || ran_on=${HARNESS[i]}
