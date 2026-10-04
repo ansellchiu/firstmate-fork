@@ -1,0 +1,12 @@
+== arms under TMPDIR fixtures BEFORE
+== run tests/fm-pi-watch-extension.test.sh
+ok - OpenCode watcher plugin coordinates with the turn-end guard
+ok - OpenCode healthy arm output does not suppress the turn-end guard
+ok - a catch-up burst delivers one follow-up and leaves every durable row queued
+ok - an accepted but unconsumed follow-up cannot mute the captain
+ok - a wake is delivered without its burst count when the count wedges or cannot be taken
+bash tests/fm-pi-watch-extension.test.sh 2>&1  21.06s user 11.65s system 29% cpu 1:52.19 total
+tail -5  0.00s user 0.00s system 0% cpu 1:52.19 total
+== arms under TMPDIR fixtures AFTER (expect none)
+== leftover fm-pi-watch-extension dirs
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-pi-watch-extension.6Tp5v8

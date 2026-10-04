@@ -1,0 +1,22 @@
+== tests/fm-test-fixture-cleanup.test.sh
+ok - fm_test_tmproot cleans up its fixture root on normal exit
+ok - fm_test_tmproot cleans up its fixture root on SIGTERM
+ok - the cleanup registry cannot be injected through path precreation
+ok - failed fixture registration rolls back the new root
+ok - the orphan sweep reaps only old fixtures without a live owner
+ok - the orphan sweep reaps read-only package fixtures
+ok - fixture cleanup stops only the watch arm its own fixture armed
+ok - test startup reaps a pruned temp watch arm and leaves one outside the temp directory
+tests/fm-test-fixture-cleanup.test.sh: line 378: 71439 Killed: 9                  FM_ARM_HEARTBEAT="$hb" "$stale/root/bin/fm-watch-arm.sh" --restart > /dev/null 2>&1
+ok - the first stale-fixture sweep stops watch arms through a temp alias
+exit=
+== tests/fm-remote-job-orphan-reap.test.sh
+ok - the Linux start path puts the whole worker tree in its own process group
+ok - removing the state root and killing the recorded worker pid leaves the tree running, orphaned
+ok - a worker whose code root still exists is never reaped
+ok - a worker stops its whole tree once its code root is pruned
+ok - a dry run reports the abandoned worker and signals nothing
+ok - the reaper stops an abandoned worker's whole tree
+ok - the reaper is idempotent
+ok - the reaper stops this home's abandoned watch arm and leaves another home's arm and a live root
+exit=

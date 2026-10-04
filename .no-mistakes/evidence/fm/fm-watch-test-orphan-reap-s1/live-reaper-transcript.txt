@@ -1,0 +1,35 @@
+lab home      : /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.i16NrG
+sibling home  : /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-sibling-home.wqWqf6 (exists)
+gone home     : /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-gone-home.itklWV (never exists)
+before prune: 97324:alive 97326:alive 97329:alive 97334:alive 97336:alive 97338:alive 
+arms launched (code root pruned unless noted):
+  A pid=97324 FM_HOME=lab        root under TMPDIR            -> expect REAPED
+  B pid=97326 FM_HOME=sibling    root under TMPDIR            -> expect kept (sibling home)
+  C pid=97329 FM_HOME=lab        root STILL EXISTS            -> expect kept
+  D pid=97334 no FM_HOME         root under TMPDIR            -> expect kept (unattributable)
+  F pid=97336 FM_HOME=gone dir   root under TMPDIR            -> expect REAPED (fixture space)
+  G pid=97338 FM_HOME=gone dir   root outside TMPDIR and lab  -> expect kept
+
+== 1. reaper --dry-run with FM_HOME=lab
+would reap abandoned watcher arm 97324 (pruned code root /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-pi-watch-extension.live.0OpLUT, home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.i16NrG)
+would reap abandoned watcher arm 97336 (pruned code root /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-pi-watch-extension.live.AMoKJx, home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-gone-home.itklWV)
+rc=0
+after dry-run: 97324:alive 97326:alive 97329:alive 97334:alive 97336:alive 97338:alive 
+
+== 2. reaper with FM_HOME unset (arm pass must do nothing)
+rc=0
+after unset run: 97324:alive 97326:alive 97329:alive 97334:alive 97336:alive 97338:alive 
+
+== 3. real fm-teardown.sh task-x1 --force in the lab home (FM_HOME=lab)
+teardown rc=0
+-- teardown stderr lines from the sweep:
+reaped abandoned watcher arm 97324 (pruned code root /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-pi-watch-extension.live.0OpLUT, home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.i16NrG)
+reaped abandoned watcher arm 97336 (pruned code root /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-pi-watch-extension.live.AMoKJx, home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-gone-home.itklWV)
+-- teardown stdout tail:
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.i16NrG/wt)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.i16NrG/data/backlog.md). Update /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.i16NrG/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+after teardown: 97324:gone 97326:alive 97329:alive 97334:alive 97336:gone 97338:alive 
+
+== 4. cleanup of kept fixture arms
+after cleanup: 97324:gone 97326:gone 97329:gone 97334:gone 97336:gone 97338:gone 
+remaining live fixture arms: 0
