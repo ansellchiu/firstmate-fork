@@ -5243,11 +5243,15 @@ preserve_relaunch_meta() {
     echo "home=$PROJ_ABS"
     echo "projects=$SECONDMATE_PROJECTS"
   fi
-  if [ "$RELAUNCH" -eq 1 ]; then
-    preserve_relaunch_meta
-  fi
+  # control_relaunch_tx is a task-record field owned by fm-control, so write
+  # it before preserve_relaunch_meta; preserved metadata (pr=, pr_head=, and
+  # any trailing x_* lines) must remain last in the record for PR poll
+  # identity verification to authenticate.
   if [ "$SPAWN_CONTROL_PARENT" = 1 ] && [ -n "${FM_CONTROL_RELAUNCH_TX:-}" ]; then
     echo "control_relaunch_tx=$FM_CONTROL_RELAUNCH_TX"
+  fi
+  if [ "$RELAUNCH" -eq 1 ]; then
+    preserve_relaunch_meta
   fi
 } >"$SPAWN_META_PATH" || {
   echo "error: task record for $ID could not be prepared at $SPAWN_META_PATH" >&2
@@ -5537,8 +5541,12 @@ spawn_record_traceparent() {
   fi
   SPAWN_META_TMP="$STATE/.$ID.meta.trace.${BASHPID:-$$}"
   if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
-    ! awk -F= '$1 != "traceparent"' "$meta" >"$SPAWN_META_TMP" ||
-    ! printf 'traceparent=%s\n' "$SPAWN_TRACEPARENT" >>"$SPAWN_META_TMP" ||
+    ! awk -F= -v traceparent="$SPAWN_TRACEPARENT" '
+      $1 == "traceparent" { next }
+      $1 == "pr" && !inserted { print "traceparent=" traceparent; inserted = 1 }
+      { print }
+      END { if (!inserted) print "traceparent=" traceparent }
+    ' "$meta" >"$SPAWN_META_TMP" ||
     ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$meta" "task record" "$STATE"; then
     status=1
     rm -f "$SPAWN_META_TMP" 2>/dev/null || true
