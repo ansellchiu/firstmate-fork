@@ -18,7 +18,8 @@
 #   - startup backlog composition: done rows dropped, every in-flight/held/
 #     blocked row kept whole, the dispatchable queued listing bounded with an
 #     exact disclosed remainder
-#   - orphan status logs whose task meta has already disappeared
+#   - orphan status logs summarized as a count plus recent ids
+#   - hold_reason, registry-row, and whole-digest byte budgets
 #   - per-task endpoint-liveness lines for a live and a dead recorded target,
 #     tmux and herdr both
 #   - composition: the script invokes the real fm-lock.sh/fm-bootstrap.sh/
@@ -127,6 +128,7 @@ set -u
 log=${FM_FAKE_TASKS_AXI_LOG:-}
 [ -n "$log" ] && printf '%s\n' "$*" >> "$log"
 ready_count=${FM_FAKE_TASKS_AXI_READY:-2}
+long_hold=${FM_FAKE_TASKS_AXI_LONG_HOLD:-}
 require_file() {
   case "$*" in *'--file '*) return 0 ;; esac
   printf '%s\n' 'missing explicit backlog file' >&2
@@ -135,6 +137,16 @@ require_file() {
 task_header() {
   printf 'count: %s\n' "$1"
   printf 'tasks[%s]{id,state,kind,repo,title,blocked_by,hold_kind,hold_reason}:\n' "$1"
+}
+held_reason() {
+  if [ -n "$long_hold" ]; then
+    # Emit a quoted hold_reason longer than the 220-character line cap.
+    printf '"'
+    awk 'BEGIN { while (i++ < 80) printf "padding-word " }'
+    printf '"'
+  else
+    printf 'captain choice pending'
+  fi
 }
 list_help() {
   printf 'help[1]:\n'
@@ -190,7 +202,7 @@ case "${1:-}" in
         ;;
       *'--state held'*)
         task_header 1
-        printf '%s\n' '  held-queued,queued,ship,firstmate,Held queued work,none,captain,captain choice pending'
+        printf '  held-queued,queued,ship,firstmate,Held queued work,none,captain,%s\n' "$(held_reason)"
         ;;
       *'--state queued'*'--blocked'*)
         task_header 1
@@ -563,18 +575,24 @@ SH
 # Drop every harness env marker from bin/fm-harness.sh detect_own so the
 # surrounding interactive shell cannot leak past the suite's fake ps harness.
 # Markers today: CLAUDECODE (claude), PI_CODING_AGENT plus FM_PI_HARNESS
-# (Pi family), GROK_AGENT (grok).
-# codex and opencode have no env markers (ancestry only). Without this, a local
-# claude/pi/grok session fails cases that pin a different fake harness while CI
-# (no ambient markers) still passes.
+# (Pi family), GROK_AGENT (grok), CURSOR_AGENT / CURSOR_INVOKED_AS (cursor),
+# GEMINI_CLI, and the rovo markers. Without this, a local cursor/claude/pi/grok
+# session fails cases that pin a different fake harness while CI (no ambient
+# markers) still passes. Cursor is especially load-bearing here: an inherited
+# CURSOR_AGENT outranks PI_CODING_AGENT in harness_marker, then a fake pi
+# ancestor collapses the family to plain pi and drops pi-signed.
 run_session_start() {
   local home=$1 root=$2 path=$3 pi_harness=${4:-}
   if [ -n "$pi_harness" ]; then
-    env -u CLAUDECODE -u GROK_AGENT PI_CODING_AGENT=true FM_PI_HARNESS="$pi_harness" \
+    env -u CLAUDECODE -u GROK_AGENT -u CURSOR_AGENT -u CURSOR_INVOKED_AS \
+      -u GEMINI_CLI -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI \
+      PI_CODING_AGENT=true FM_PI_HARNESS="$pi_harness" \
       FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
       "$SESSION_START"
   else
     env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+      -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI \
+      -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI \
       FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
       "$SESSION_START"
   fi
@@ -583,7 +601,9 @@ run_session_start() {
 run_pi_session_start() {  # <home> <root> <path> [fm-session-start args...]
   local home=$1 root=$2 path=$3
   shift 3
-  env -u CLAUDECODE -u GROK_AGENT PI_CODING_AGENT=true FM_PI_HARNESS=pi \
+  env -u CLAUDECODE -u GROK_AGENT -u CURSOR_AGENT -u CURSOR_INVOKED_AS \
+    -u GEMINI_CLI -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI \
+    PI_CODING_AGENT=true FM_PI_HARNESS=pi \
     FM_FAKE_HARNESS_PID="$SESSION_START_TEST_HARNESS_PID" \
     FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
     "$SESSION_START" "$@"
@@ -593,6 +613,8 @@ run_named_harness_session_start() {  # <harness> <home> <root> <path> [fm-sessio
   local harness=$1 home=$2 root=$3 path=$4
   shift 4
   env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI \
+    -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI \
     FM_FAKE_HARNESS="$harness" FM_FAKE_HARNESS_PID="$SESSION_START_TEST_HARNESS_PID" \
     FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
     "$SESSION_START" "$@"
@@ -1161,16 +1183,17 @@ EOF
 
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "working: step 7" "default status tail missing the most recent line"
-  assert_contains "$out" "working: step 3" "default status tail (5 lines) missing an expected recent line"
-  assert_not_contains "$out" "working: step 1" "default status tail (5 lines) leaked an older line"
-  assert_contains "$out" "$home/state/task-a.status" "digest did not print the full status log path for a deeper read"
-  assert_contains "$out" "a bounded tail of every state/*.status" "read-once contract does not distinguish bounded status tails"
+  assert_contains "$out" "working: step 6" "default status tail (2 lines) missing the prior line"
+  assert_not_contains "$out" "working: step 5" "default status tail (2 lines) leaked an older line"
+  assert_contains "$out" "state/<id>.status" "digest did not name the status log path pattern"
+  assert_contains "$out" "orphan status-log count" "read-once contract does not describe the orphan bound"
 
-  out=$(FM_SESSION_START_STATUS_TAIL=2 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_contains "$out" "working: step 7" "FM_SESSION_START_STATUS_TAIL=2 tail missing the most recent line"
-  assert_not_contains "$out" "working: step 5" "FM_SESSION_START_STATUS_TAIL=2 did not bound the tail to 2 lines"
+  out=$(FM_SESSION_START_STATUS_TAIL=3 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "working: step 7" "FM_SESSION_START_STATUS_TAIL=3 tail missing the most recent line"
+  assert_contains "$out" "working: step 5" "FM_SESSION_START_STATUS_TAIL=3 missing the third line"
+  assert_not_contains "$out" "working: step 4" "FM_SESSION_START_STATUS_TAIL=3 did not bound the tail to 3 lines"
 
-  pass "status tail is bounded to the configured line count, with the full log path always printed"
+  pass "status tail is bounded to the configured line count, with the full log path pattern printed"
 }
 
 # A crewmate writes its own status lines, so nothing upstream bounds their
@@ -1202,11 +1225,11 @@ EOF
   assert_contains "$out" " [truncated]" "an over-long status line was not marked as truncated"
   assert_contains "$out" "working: short line kept whole" "the cap mangled a status line already under it"
   assert_contains "$out" "each capped at 220 characters" "the status tail header does not disclose its per-line cap"
-  assert_contains "$out" "$home/state/task-cap.status" "a capped tail dropped the full log path that recovers the rest"
+  assert_contains "$out" "state/<id>.status" "a capped tail dropped the full log path pattern that recovers the rest"
 
-  # Nothing the tail emits may exceed the cap, and the padded line really was
-  # long enough to exercise it.
-  tail_section=$(printf '%s\n' "$out" | awk '/^status tail \(/ { flag = 1; next } flag && /^$/ { flag = 0 } flag')
+  # Nothing the live-task tail emits may exceed the cap, and the padded line
+  # really was long enough to exercise it.
+  tail_section=$(printf '%s\n' "$out" | awk '/^--- task-cap ---$/ { flag = 1; next } flag && /^--- / { flag = 0 } flag')
   longest=$(printf '%s\n' "$tail_section" | awk '{ if (length($0) > max) max = length($0) } END { print max + 0 }')
   [ "$longest" -le 220 ] || fail "a status tail line ran $longest characters past the 220-character cap"
   capped=$(printf '%s\n' "$tail_section" | grep -c ' \[truncated\]$')
@@ -1215,8 +1238,8 @@ EOF
   pass "status tail lines are capped with a truncation marker while the full log stays reachable"
 }
 
-test_orphan_status_logs_are_printed() {
-  local rec root home fakebin out matched_count orphan_count
+test_orphan_status_logs_are_summarized() {
+  local rec root home fakebin out matched_count
   rec=$(new_world orphan-status)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -1232,17 +1255,300 @@ EOF
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
 
   assert_contains "$out" "Orphan status logs (state/*.status without matching .meta)" "digest did not label orphan status logs"
-  assert_contains "$out" "--- task-orphan ---" "digest did not print the orphan status id"
-  assert_contains "$out" "working: orphan step 6" "orphan status tail missing the newest line"
-  assert_not_contains "$out" "working: orphan step 1" "orphan status tail was not bounded"
-  assert_contains "$out" "$home/state/task-orphan.status" "orphan status tail did not print the full log path"
+  assert_contains "$out" "1 orphan status log(s)" "digest did not print the orphan count"
+  assert_contains "$out" "task-orphan" "digest did not name the recent orphan id"
+  assert_not_contains "$out" "working: orphan step 6" "orphan status tails must not be inlined"
+  assert_contains "$out" "ls $(printf '%q' "$home/state")/*.status" "orphan summary did not name the follow-up listing command"
 
   matched_count=$(printf '%s\n' "$out" | grep -F -c 'working: surfaced once')
-  orphan_count=$(printf '%s\n' "$out" | grep -F -c 'working: orphan step 6')
   [ "$matched_count" -eq 1 ] || fail "matched status log was printed $matched_count times: $out"
-  [ "$orphan_count" -eq 1 ] || fail "orphan status log was printed $orphan_count times: $out"
 
-  pass "orphan status logs are printed once with bounded tails"
+  pass "orphan status logs are summarized as a count plus recent ids"
+}
+
+test_hold_reason_capped_on_tasks_axi_and_manual_paths() {
+  local rec root home fakebin out line long_hold id reason
+  rec=$(new_world hold-reason-cap)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_tasks_axi_compact "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  write_long_body_backlog "$home/data/backlog.md"
+
+  out=$(FM_FAKE_TASKS_AXI_LONG_HOLD=1 FM_FAKE_TASKS_AXI_READY=1 \
+    run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" " [truncated]" "tasks-axi hold_reason was not capped"
+  line=$(printf '%s\n' "$out" | grep -F 'held-queued,' | head -1)
+  [ -n "$line" ] || fail "held-queued row missing from tasks-axi digest"
+  # The whole CSV row may exceed 220 when earlier fields are present; the
+  # hold_reason field itself must carry the truncation marker.
+  case "$line" in
+    *' [truncated]'*) ;;
+    *) fail "tasks-axi hold_reason lacked the truncation marker: $line" ;;
+  esac
+
+  # Manual-path hold essay longer than 220 characters, inside the Queued section.
+  long_hold=$(awk 'BEGIN { printf "essay"; while (i++ < 80) printf " padding-word" }')
+  {
+    printf '# Backlog\n\n## Queued\n'
+    printf -- '- [ ] essay-hold - Essay hold (repo: firstmate) (kind: ship) (hold: waiting on PR (#12) %s) (hold-kind: captain)\n' \
+      "$long_hold"
+    printf -- '- [ ] nested-held - Held (hold: waiting on PR (#12) %s)\n' "$long_hold"
+    printf '\n## In flight\n'
+    printf -- '- [ ] nested-flight - Flight (hold: waiting on PR (#12) %s)\n' "$long_hold"
+    printf '\n## Queued\n'
+    printf -- '- [ ] nested-blocked - Blocked (blocked-by: dependency) (hold: waiting on PR (#12) %s)\n' "$long_hold"
+  } > "$home/data/backlog.md"
+  printf '%s\n' manual > "$home/config/backlog-backend"
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "(hold: waiting on PR (#12)" "manual path dropped the hold marker"
+  assert_contains "$out" " [truncated]" "manual hold_reason was not capped"
+  line=$(printf '%s\n' "$out" | grep -F 'essay-hold' | head -1)
+  case "$line" in
+    *'(hold: '*'[truncated]'*) ;;
+    *) fail "manual hold_reason was not capped inside (hold: ...): $line" ;;
+  esac
+
+  for id in nested-held nested-flight nested-blocked; do
+    line=$(printf '%s\n' "$out" | grep -F "$id" | head -1)
+    assert_contains "$line" "[truncated])" "nested-parenthesis hold cap missing for $id"
+    reason=${line#*'(hold: '}
+    reason=${reason%')'}
+    [ "${#reason}" -le 220 ] || fail "$id hold reason exceeded 220 characters"
+  done
+  pass "hold_reason is capped at 220 characters on tasks-axi and manual backlog paths"
+}
+
+test_digest_section_budgets_and_complete_stdout_accounting() {
+  local rec root home fakebin out expected prefix measured reported i
+  rec=$(new_world digest-budget-accounting)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_harness "$fakebin" pi
+  printf 'manual\n' > "$home/config/backlog-backend"
+  {
+    printf '# Backlog\n\n## Queued\n'
+    for i in $(seq 1 200); do
+      printf -- '- [ ] budget-task-%s - Held fixture row (hold: waiting on captain review %s)\n' "$i" "$i"
+    done
+  } > "$home/data/backlog.md"
+  for i in $(seq 1 1000); do printf '界界\n'; done > "$home/data/projects.md"
+  printf 'secondmate-row\n' > "$home/data/secondmates.md"
+  for i in $(seq 1000 1999); do printf 'memory-line-%s mmmmmmmmmmmmmmmmmmmm\n' "$i"; done > "$home/data/captain.md"
+  for i in $(seq 1 200); do
+    append_wake "$home/state" signal "budget-task-$i" "check: budget overflow fixture $i $(head -c 200 /dev/zero | tr '\0' 'w')" \
+      || fail "seed wake failed"
+  done
+  out=$(FM_FAKE_HARNESS=pi LC_ALL=en_US.UTF-8 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  [ "$(printf '%s\n' "$out" | grep -c '^界界$')" -eq 585 ] \
+    || fail "registry budget did not stop at 4096 bytes"
+  assert_contains "$out" "415 more omitted - cat $home/data/projects.md" "project overflow missing"
+  assert_contains "$out" "1 more omitted - cat $home/data/secondmates.md" "registry spend was lost between files"
+  assert_not_contains "$out" "secondmate-row" "secondmate registry exceeded shared budget"
+  assert_contains "$out" "check: budget overflow fixture 200" "wake queue was truncated after the drain presented it"
+  assert_not_contains "$out" "more omitted - bin/fm-wake-drain.sh" "wake queue was post-hoc truncated"
+  assert_contains "$out" "Do NOT re-read any of them after reading this digest" "read-once body missing"
+  assert_contains "$out" "more omitted - cat $home/data/backlog.md" "backlog overflow missing"
+  assert_contains "$out" "memory-line-1000 " "captain memory head missing"
+  assert_contains "$out" "more omitted - cat $home/data/captain.md" "memory overflow missing"
+  assert_not_contains "$out" "memory-line-1999" "captain memory exceeded its budget"
+  expected=$(FM_ROOT_OVERRIDE="$root" FM_HOME="$home" \
+    "$ROOT/bin/fm-supervision-instructions.sh" --harness pi --read-only 0 --afk 0 --afk-mode away --x-mode 0)
+  assert_contains "$out" "$expected" "supervision operating block was truncated or changed"
+  assert_contains "$out" "DIGEST OVERSIZE:" "digest over 64 KB did not trigger banner"
+  prefix=${out%$'\nDIGEST OVERSIZE:'*}
+  measured=$(printf '%s' "$prefix" | wc -c | tr -d ' ')
+  reported=$(printf '%s\n' "$out" | sed -n 's/^DIGEST OVERSIZE: composed digest is \([0-9]*\) bytes.*/\1/p')
+  [ "$reported" -eq "$measured" ] \
+    || fail "whole-digest count $reported differs from emitted stdout $measured"
+  [ "$measured" -gt 65536 ] || fail "banner fired for a $measured-byte digest under the ceiling"
+  pass "byte budgets share spending, disclose overflow, and preserve supervision"
+}
+
+test_registry_rows_capped_at_line_cap() {
+  local rec root home fakebin out line
+  rec=$(new_world registry-row-cap)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  printf -- '- demo [no-mistakes] - a demo project\n' > "$home/data/projects.md"
+  {
+    printf -- '- quartermaster — scope: '
+    awk 'BEGIN { while (i++ < 200) printf "charter-word " }'
+    printf '\n'
+  } > "$home/data/secondmates.md"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "data/secondmates.md (full file: $home/data/secondmates.md)" \
+    "registry subsection did not name the full file path"
+  line=$(printf '%s\n' "$out" | grep -F 'quartermaster' | head -1)
+  [ "${#line}" -le 220 ] || fail "secondmates row ran ${#line} characters past the 220-character cap: $line"
+  assert_contains "$line" " [truncated]" "over-long secondmates row was not marked truncated"
+  assert_not_contains "$out" "charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word charter-word" \
+    "uncapped charter text leaked into the digest"
+
+  pass "projects.md and secondmates.md rows are capped at 220 characters with the full path named"
+}
+
+test_work_under_way_prints_compact_identity() {
+  local rec root home fakebin out header_count
+  rec=$(new_world compact-meta)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_tmux "$fakebin" "fm-sess:live"
+
+  printf 'window=fm-sess:live\nkind=ship\nharness=claude\nmodel=test-model\nbackend=tmux\nworktree=%s\npr=https://example.com/pull/9\n' \
+    "$home/projects/firstmate" > "$home/state/task-a.meta"
+  mkdir -p "$home/projects/firstmate"
+  printf 'working: older\nworking: mid\nworking: newest\n' > "$home/state/task-a.status"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "status tails (last 2 line(s) each" "shared status-tail header missing"
+  assert_contains "$out" "id=task-a kind=ship harness=claude model=test-model backend=tmux window=fm-sess:live worktree=$home/projects/firstmate pr=https://example.com/pull/9" \
+    "compact meta identity keys missing"
+  assert_contains "$out" "endpoint: alive" "endpoint verdict missing from compact meta"
+  assert_contains "$out" "working: newest" "compact meta missing latest status line"
+  assert_contains "$out" "working: mid" "compact meta missing second status line"
+  assert_not_contains "$out" "working: older" "compact meta printed more than two status lines"
+  assert_not_contains "$out" "spawn_gen=" "compact meta leaked non-identity meta keys"
+  header_count=$(printf '%s\n' "$out" | grep -c '^status tails (last ')
+  [ "$header_count" -eq 1 ] || fail "expected one shared status-tail header, got $header_count"
+
+  pass "work under way prints identity keys, endpoint verdict, and a shared two-line status tail"
+}
+
+test_work_under_way_budget_bounds_first_record() {
+  local rec root home fakebin out
+  rec=$(new_world work-first-record-budget)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_tmux "$fakebin" "fm-sess:live"
+  printf 'window=fm-sess:live\nkind=ship\n' > "$home/state/task-a.meta"
+  printf 'working: first-record-tail\n' > "$home/state/task-a.status"
+
+  out=$(FM_SESSION_START_BUDGET_WORK=100 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_not_contains "$out" "id=task-a" "first work record bypassed the work-under-way budget"
+  assert_contains "$out" "1 more omitted - cat $home/state/*.meta" "first-record overflow was not disclosed"
+
+  pass "work-under-way budget bounds the first record, header included"
+}
+
+test_recovery_paths_follow_split_home_overrides() {
+  local rec root home fakebin data state quoted_data quoted_state out i command recovered
+  rec=$(new_world recovery-paths)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  data="$home/separate data"
+  state="$home/separate state"
+  mkdir -p "$data" "$state"
+  quoted_data=$(printf '%q' "$data")
+  quoted_state=$(printf '%q' "$state")
+  printf 'manual\n' > "$home/config/backlog-backend"
+  {
+    printf '# Backlog\n\n## Queued\n'
+    for i in $(seq 1 200); do
+      printf -- '- [ ] held-%s - Held fixture (hold: waiting on review %s)\n' "$i" "$i"
+    done
+  } > "$data/backlog.md"
+  printf 'kind=ship\n' > "$state/live.meta"
+  printf 'working: split-home tail\n' > "$state/live.status"
+  printf 'done: retired\n' > "$state/retired.status"
+
+  out=$(FM_DATA_OVERRIDE="$data" FM_STATE_OVERRIDE="$state" \
+    FM_SESSION_START_BUDGET_WORK=100 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "more omitted - cat $quoted_data/backlog.md" "backlog recovery ignored data override"
+  assert_contains "$out" "full log: $quoted_state/<id>.status" "work status header ignored state override"
+  assert_contains "$out" "1 more omitted - cat $quoted_state/*.meta" "work recovery ignored state override"
+  assert_contains "$out" "Full logs: $quoted_state/<id>.status. List: ls $quoted_state/*.status" "orphan recovery ignored state override"
+  command=$(printf '%s\n' "$out" | sed -n 's/^[0-9][0-9]* more omitted - \(cat .*backlog.md\)$/\1/p')
+  recovered=$(bash -c "$command")
+  assert_contains "$recovered" "held-200" "backlog command did not recover omitted records"
+  command=$(printf '%s\n' "$out" | sed -n 's/^1 more omitted - \(cat .*\.meta\)$/\1/p')
+  recovered=$(bash -c "$command")
+  assert_contains "$recovered" "kind=ship" "metadata command did not recover omitted records"
+
+  {
+    printf '# Backlog\n\n## Queued\n'
+    for i in $(seq 1 30); do printf -- '- [ ] ready-%s - Ready task\n' "$i"; done
+  } > "$data/backlog.md"
+  for i in $(seq 1 100); do
+    printf 'done: retired\n' > "$state/long-orphan-identity-$i.status"
+  done
+  out=$(FM_DATA_OVERRIDE="$data" FM_STATE_OVERRIDE="$state" \
+    run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "or $quoted_data/backlog.md." "ordinary backlog pointer ignored data override"
+  assert_contains "$out" "read the full file named below for the rest" "queued overflow lost its recovery pointer"
+  assert_contains "$out" "id=live kind=ship" "ordinary compact work path lost override records"
+  assert_contains "$out" "working: split-home tail" "ordinary compact work path lost status tail"
+  assert_contains "$out" "101 more omitted - ls $quoted_state/*.status" "orphan overflow ignored state override"
+  command=$(printf '%s\n' "$out" | sed -n 's/^101 more omitted - \(ls .*\.status\)$/\1/p')
+  recovered=$(bash -c "$command")
+  assert_contains "$recovered" "$state/long-orphan-identity-100.status" "orphan command did not recover omitted records"
+  pass "recovery commands follow split-home overrides and quote paths with spaces"
+}
+
+test_many_orphans_keep_digest_under_ceiling() {
+  local rec root home fakebin out bytes i
+  rec=$(new_world many-orphans-ceiling)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  make_fake_tmux "$fakebin" "fm-sess:live"
+
+  printf 'window=fm-sess:live\nkind=ship\nharness=claude\nbackend=tmux\n' > "$home/state/live.meta"
+  printf 'working: live\n' > "$home/state/live.status"
+  i=1
+  while [ "$i" -le 150 ]; do
+    {
+      printf 'working: orphan %s step 1 with padding to look like a real status line\n' "$i"
+      printf 'working: orphan %s step 2 with padding to look like a real status line\n' "$i"
+      printf 'working: orphan %s step 3 with padding to look like a real status line\n' "$i"
+      printf 'working: orphan %s step 4 with padding to look like a real status line\n' "$i"
+      printf 'done: orphan %s finished after five lines of wake-event history\n' "$i"
+    } > "$home/state/orphan-$i.status"
+    # Age most orphans outside the 48h recent window.
+    if [ "$i" -gt 3 ]; then
+      touch -t 202601010000 "$home/state/orphan-$i.status"
+    fi
+    i=$((i + 1))
+  done
+  # One long registry row that would have been 11 KB before the cap.
+  {
+    printf -- '- quartermaster — '
+    awk 'BEGIN { while (i++ < 400) printf "scope-word " }'
+    printf '\n'
+  } > "$home/data/secondmates.md"
+
+  # The wake drain's fleet-wide scan over 150 status logs alone can take about
+  # a minute on a loaded host; widen the 120s startup bound so a slow drain
+  # cannot truncate the digest before the fleet-state sections this test checks.
+  out=$(FM_SESSION_START_TIMEOUT=600 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  bytes=$(printf '%s' "$out" | wc -c | tr -d ' ')
+  [ "$bytes" -le 65536 ] || fail "digest with 150 orphans was $bytes bytes, over the 64 KB ceiling"
+  assert_contains "$out" "150 orphan status log(s)" "many-orphan fixture lost the orphan count"
+  assert_contains "$out" "orphan-1" "recent orphan id missing from the summary"
+  assert_not_contains "$out" "working: orphan 50 step" "aged orphan tails leaked into the digest"
+  assert_not_contains "$out" "DIGEST OVERSIZE:" \
+    "digest under the ceiling still raised the oversize banner ($bytes bytes)"
+
+  pass "a fixture with many orphan status logs keeps the digest under the 64 KB ceiling"
 }
 
 test_pending_findings_surface_and_stay_silent() {
@@ -2081,7 +2387,7 @@ EOF
   out=$(FM_FAKE_TASKS_AXI_LOG="$log" FM_FAKE_TASKS_AXI_READY=3 \
     run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
 
-  assert_contains "$out" "compact backlog listing (tasks-axi; done rows omitted; every in-flight, held, and blocked row shown in full; ready queued bounded to 20; task bodies omitted)" \
+  assert_contains "$out" "compact backlog listing (tasks-axi; done rows omitted; every in-flight, held, and blocked row shown; hold_reason capped at 220 characters; ready queued bounded to 20; task bodies omitted)" \
     "compatible tasks-axi backend did not render the compact backlog listing"
   assert_contains "$out" "tasks[1]{id,state,kind,repo,title,blocked_by,hold_kind,hold_reason}:" \
     "tasks-axi compact listing omitted the expected structured field header"
@@ -2169,7 +2475,7 @@ EOF
 
   out=$(FM_SESSION_START_QUEUED_LIMIT=4 run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
 
-  assert_contains "$out" "compact backlog listing (manual backend; done rows omitted; every in-flight, held, and blocked title line kept; other queued bounded to 4; indented task bodies omitted)" \
+  assert_contains "$out" "compact backlog listing (manual backend; done rows omitted; every in-flight, held, and blocked title line kept; other queued bounded to 4; indented task bodies omitted; hold_reason capped at 220 characters)" \
     "manual backend did not use compact title-line rendering"
   assert_contains "$out" "## In flight" "manual compact rendering omitted the in-flight section heading"
   assert_contains "$out" "- [ ] compact-startup - Compact startup digest" \
@@ -2190,9 +2496,9 @@ EOF
     "manual compact rendering did not bound its plain queued listing"
   assert_contains "$out" "(shown 1 in-flight, 2 held or blocked queued, 4 of 25 other queued title line(s); 1 done row(s) omitted)" \
     "manual compact rendering did not report its bound accounting"
-  assert_contains "$out" "(21 more queued - raise FM_SESSION_START_QUEUED_LIMIT or read data/backlog.md for the rest)" \
+  assert_contains "$out" "(21 more queued - raise FM_SESSION_START_QUEUED_LIMIT or read the full file named below for the rest)" \
     "manual compact rendering did not disclose an exact queued remainder"
-  assert_contains "$out" "or data/backlog.md" "manual compact digest omitted the data/backlog.md full-body pointer"
+  assert_contains "$out" "or $(printf '%q' "$home/data")/backlog.md" "manual compact digest omitted the data/backlog.md full-body pointer"
 
   pass "manual backlog rendering drops done rows, keeps every held or blocked title line, and bounds the rest"
 }
@@ -2372,6 +2678,33 @@ EOF
   assert_absent "${TMPDIR:-/tmp}/fm-session-start-stage" "the stage breadcrumb leaked a fixed-name file"
 
   pass "a session start inside its budget prints no truncation banner"
+}
+
+test_byte_counter_mktemp_failure_still_emits_the_digest() {
+  local rec root home fakebin out real_mktemp
+  rec=$(new_world counter-mktemp-fails)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+  # Fail only the digest byte counter's mktemp: an unwritable TMPDIR would also
+  # stop the shared timeout runner on hosts with GNU timeout, which is not the
+  # fallback under test.
+  real_mktemp=$(PATH="$BASE_PATH" command -v mktemp)
+  cat > "$fakebin/mktemp" <<SH
+#!/usr/bin/env bash
+case "\$*" in *fm-session-start-output.*) exit 1 ;; esac
+exec "$real_mktemp" "\$@"
+SH
+  chmod +x "$fakebin/mktemp"
+
+  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+
+  assert_not_contains "$out" "STARTUP TRUNCATED - " "a failed byte-counter mktemp truncated the digest"
+  assert_contains "$out" "NEXT STEP" "a failed byte-counter mktemp dropped the digest body"
+
+  pass "a failed byte-counter mktemp still emits the full digest"
 }
 
 test_runtime_bound_leaves_harness_ancestry_headroom() {
@@ -3089,7 +3422,14 @@ test_session_start_preserves_proven_bare_shell_recovery
 test_session_start_relaunches_herdr_husk_secondmate
 test_status_tail_bounding
 test_status_tail_line_cap
-test_orphan_status_logs_are_printed
+test_orphan_status_logs_are_summarized
+test_hold_reason_capped_on_tasks_axi_and_manual_paths
+test_registry_rows_capped_at_line_cap
+test_work_under_way_prints_compact_identity
+test_work_under_way_budget_bounds_first_record
+test_recovery_paths_follow_split_home_overrides
+test_many_orphans_keep_digest_under_ceiling
+test_digest_section_budgets_and_complete_stdout_accounting
 test_pending_findings_surface_and_stay_silent
 test_endpoint_liveness_tmux
 test_endpoint_liveness_herdr
@@ -3240,6 +3580,7 @@ test_pi_diagnostic_rejects_previous_session_loaded_marker
 test_runtime_bound_truncates_loudly_and_exits_zero
 test_portable_timeout_escalates_term_resistant_process
 test_runtime_bound_leaves_a_healthy_digest_untouched
+test_byte_counter_mktemp_failure_still_emits_the_digest
 test_runtime_bound_leaves_harness_ancestry_headroom
 test_reemit_skips_startup_sweeps_but_keeps_the_wake_drain
 test_agents_baseline_stays_at_true_start_and_reemits_on_every_drifted_pi_compact

@@ -468,7 +468,7 @@ EOF
 # common case.
 print_open_decisions_section() {
   local snapshot=${1:-} open task key verb note line item_bytes=220 global_bytes=4000
-  local output='' used=0 shown=0 omitted=0 bytes
+  local output='' used=0 shown=0 omitted=0 bytes omitted_keys='' key_label
 
   if [ -n "$snapshot" ]; then
     open=$(scan_open_decisions_snapshot "$STATE" "$snapshot") || return 1
@@ -490,6 +490,14 @@ print_open_decisions_section() {
     bytes=$(( ${#line} + 1 ))
     if [ $((used + bytes)) -gt "$global_bytes" ]; then
       omitted=$((omitted + 1))
+      # Name every omitted key so a byte cap never silently drops a decision.
+      if [ "$key" = default ]; then
+        key_label="$task [key=default]"
+      else
+        key_label="$task [key=$key]"
+      fi
+      omitted_keys="${omitted_keys}${key_label}
+"
       continue
     fi
     output="$output$line
@@ -504,7 +512,13 @@ EOF
   printf 'OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):\n' || return 1
   printf '%s' "$output" || return 1
   if [ "$omitted" -gt 0 ]; then
-    printf 'OPEN DECISIONS: %d more omitted (byte cap)\n' "$omitted" || return 1
+    printf 'OPEN DECISIONS: %d more omitted (byte cap):\n' "$omitted" || return 1
+    while IFS= read -r key_label || [ -n "$key_label" ]; do
+      [ -n "$key_label" ] || continue
+      printf 'OPEN DECISIONS: omitted %s\n' "$key_label" || return 1
+    done <<EOF
+$omitted_keys
+EOF
   fi
   # Answerer-closes hint, printed at exactly the moment an answer gets written:
   # the send that answers a listed decision also closes it, so closure never
