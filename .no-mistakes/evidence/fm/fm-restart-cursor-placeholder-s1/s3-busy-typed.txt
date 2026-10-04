@@ -1,0 +1,10 @@
+== busy, typed 'Add a follow-up' ==
+ ⠘⠆ Running  72 tokens
+  → Add a follow-up
+base verdict: pending
+target verdict: pending
+== busy, typed 'stop now ctrl+c to stop' ==
+ ⠘⠆ Running  72 tokens
+  → stop now ctrl+c to stop
+base verdict: pending
+target verdict: pending

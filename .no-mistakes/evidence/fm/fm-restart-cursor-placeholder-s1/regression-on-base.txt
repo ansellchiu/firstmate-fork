@@ -1,0 +1,4 @@
+== restart test vs BASE fm-secondmate-restart.sh ==
+not ok - the mate was stopped without the liveness lock, so the watcher could race a second spawn
+== composer test vs BASE fm-composer-lib.sh ==
+not ok - cursor grok busy placeholder with ctrl+c to stop: expected empty, got 'pending'

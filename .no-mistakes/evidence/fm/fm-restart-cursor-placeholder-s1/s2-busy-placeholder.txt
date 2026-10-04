@@ -1,0 +1,9 @@
+== busy turn (sleep 120 running) ==
+ ⠀⠞ Running  72 tokens
+    Tip: Use /run-everything to skip all approvals.
+  → Add a follow-up                                                                                                                                                                     ctrl+c to stop
+  1 task
+  Grok 4.7 256K Medium · 11%                                                                                                                                                            Run Everything
+  ~/.no-mistakes/worktrees/d9c8a3404af5/01M43JND7VJFNFG8ZG6DPZP9KD · eeca932
+base verdict: pending
+target verdict: empty

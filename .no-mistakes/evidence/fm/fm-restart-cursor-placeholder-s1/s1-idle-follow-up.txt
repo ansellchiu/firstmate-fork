@@ -1,0 +1,7 @@
+== idle after first turn (→ Add a follow-up) ==
+  OK
+  → Add a follow-up
+  Grok 4.7 256K Medium · 11%                                                                                                                                                            Run Everything
+  ~/.no-mistakes/worktrees/d9c8a3404af5/01M43JND7VJFNFG8ZG6DPZP9KD · eeca932
+base verdict: empty
+target verdict: empty
