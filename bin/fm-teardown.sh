@@ -3356,17 +3356,6 @@ cleanup_firstmate_home_children() {
     fi
     retire_busy_state "$sub_state" "$child_id" "$child_busy_gen" || return 1
     status_retire_presentation_task "$sub_state" "$child_id" || return 1
-    if [ -f "$sub_state/$child_id.status" ]; then
-      fm_wake_status_mark_current "$sub_state" "$sub_state/$child_id.status" 2>/dev/null || true
-      child_hb_marker=$(status_heartbeat_seen_marker_path "$sub_state" "$child_id" 2>/dev/null || true)
-      if [ -n "$child_hb_marker" ]; then
-        child_size=$(_fm_status_file_size "$sub_state/$child_id.status" 2>/dev/null || true)
-        child_ident=$(_fm_open_decisions_file_ident "$sub_state/$child_id.status" 2>/dev/null || true)
-        if [ -n "$child_size" ] && [ -n "$child_ident" ]; then
-          status_presentation_marker_commit "$child_hb_marker" "$sub_state/$child_id.status" "$child_size" "$child_ident" 2>/dev/null || true
-        fi
-      fi
-    fi
     if [ -n "$child_target" ]; then
       child_key=$(printf '%s' "$child_target" | tr ':/.' '___')
       rm -f "$sub_state/.stale-$child_key" "$sub_state/.stale-since-$child_key" \
@@ -3952,17 +3941,6 @@ status_retire_presentation_task "$STATE" "$ID" || exit 1
 # suppress the FIRST notification of whatever next occupies the same window
 # (bin/fm-wake-lib.sh owns the record and its horizon).
 fm_wake_repeat_retire_key "$T"
-if [ -f "$STATE/$ID.status" ]; then
-  fm_wake_status_mark_current "$STATE" "$STATE/$ID.status" 2>/dev/null || true
-  hb_marker=$(status_heartbeat_seen_marker_path "$STATE" "$ID" 2>/dev/null || true)
-  if [ -n "$hb_marker" ]; then
-    status_size=$(_fm_status_file_size "$STATE/$ID.status" 2>/dev/null || true)
-    status_ident=$(_fm_open_decisions_file_ident "$STATE/$ID.status" 2>/dev/null || true)
-    if [ -n "$status_size" ] && [ -n "$status_ident" ]; then
-      status_presentation_marker_commit "$hb_marker" "$STATE/$ID.status" "$status_size" "$status_ident" 2>/dev/null || true
-    fi
-  fi
-fi
 if [ -n "$T" ]; then
   key=$(printf '%s' "$T" | tr ':/.' '___')
   rm -f "$STATE/.stale-$key" "$STATE/.stale-since-$key" \

@@ -2404,7 +2404,7 @@ SH
   [ -e "$closed" ] || fail "herdr-orphan-refusal: the retry never closed the pane under the lock"
   [ -s "$thlog" ] || fail "herdr-orphan-refusal: the successful retry never returned the isolated copy"
   [ ! -e "$case_dir/state/task-x1.meta" ] || fail "herdr-orphan-refusal: the successful retry left the metadata behind"
-  [ -e "$case_dir/state/task-x1.status" ] || fail "herdr-orphan-refusal: the successful retry erased the status record"
+  [ ! -e "$case_dir/state/task-x1.status" ] || fail "herdr-orphan-refusal: the successful retry left the status record behind"
   grep -q "teardown task-x1 complete" "$case_dir/stdout2" \
     || fail "herdr-orphan-refusal: the successful retry did not report completion"
   pass "herdr flat teardown refuses before returning the isolated copy under lock contention and the retry completes cleanly"
@@ -4649,7 +4649,7 @@ EOF
   pass "the run abort and the leaked-process reap both complete before the destructive worktree return"
 }
 
-test_teardown_synchronizes_seen_markers_and_cleans_timers() {
+test_teardown_erases_status_log_and_cleans_timers() {
   local case_dir state status_file seen_marker hb_marker key signals timer
   case_dir=$(make_case teardown-seen-markers)
   state="$case_dir/state"
@@ -4676,10 +4676,10 @@ test_teardown_synchronizes_seen_markers_and_cleans_timers() {
   # Run teardown
   run_teardown "$case_dir" >/dev/null 2>&1 || fail "teardown failed"
 
-  # 1. Status file must be preserved and seen markers synchronized
-  [ -f "$status_file" ] || fail "teardown removed status file"
-  [ -f "$seen_marker" ] || fail "teardown did not write seen marker"
-  [ -f "$hb_marker" ] || fail "teardown did not update heartbeat surfaced marker"
+  # 1. Status file is erased with its presentation markers
+  [ ! -e "$status_file" ] || fail "teardown left the status file behind"
+  [ ! -e "$seen_marker" ] || fail "teardown left the seen marker behind"
+  [ ! -e "$hb_marker" ] || fail "teardown left the heartbeat surfaced marker behind"
 
   # 2. Stale / wedge timers must be removed
   for timer in \
@@ -4689,7 +4689,7 @@ test_teardown_synchronizes_seen_markers_and_cleans_timers() {
     [ ! -e "$timer" ] || fail "teardown left timer marker $timer"
   done
 
-  # 3. Next scan_signals pass must report no change
+  # 3. Next scan_signals pass must not echo the retired log
   signals=$(FM_STATE_OVERRIDE="$state" bash -c '
     . "$1/bin/fm-wake-lib.sh"
     . "$1/bin/fm-classify-lib.sh"
@@ -4698,7 +4698,26 @@ test_teardown_synchronizes_seen_markers_and_cleans_timers() {
   ' _ "$ROOT")
   [ -z "$signals" ] || fail "scan_signals reported unacknowledged signal after teardown: $signals"
 
-  pass "teardown synchronizes seen markers and removes stale timers, avoiding echo wakes"
+  pass "teardown erases the status log and stale timers, so no echo wakes follow"
+}
+
+test_teardown_open_decision_does_not_resurface_in_drain() {
+  local case_dir state out
+  case_dir=$(make_case teardown-open-decision)
+  state="$case_dir/state"
+
+  write_meta "$case_dir" local-only ship
+  wt_commit "$case_dir" "work done"
+  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
+  printf 'needs-decision [key=left-open]: pick A or B\n' > "$state/task-x1.status"
+
+  run_teardown "$case_dir" >/dev/null 2>&1 || fail "teardown failed"
+
+  out=$(FM_STATE_OVERRIDE="$state" bash "$ROOT/bin/fm-wake-drain.sh" 2>&1 || true)
+  if printf '%s' "$out" | grep -F 'OPEN DECISIONS' >/dev/null; then
+    fail "a decision open at cleanup resurfaced in the wake drain: $out"
+  fi
+  pass "a decision left open at cleanup does not resurface in the wake drain"
 }
 
 # Copy the public teardown script tree, then drop or blank one required file.
@@ -4893,7 +4912,8 @@ test_local_only_force_overrides_unpushed
 test_secondmate_pr_registration_publishes_ready_line
 test_secondmate_home_teardown_delivers_final_line_or_refuses
 test_teardown_missing_busy_sidecar_completes
-test_teardown_synchronizes_seen_markers_and_cleans_timers
+test_teardown_erases_status_log_and_cleans_timers
+test_teardown_open_decision_does_not_resurface_in_drain
 test_herdr_teardown_clears_escalation_marker
 test_herdr_flat_teardown_refuses_orphaning_records_then_retry_completes
 test_herdr_flat_teardown_refuses_records_on_unparseable_presence
