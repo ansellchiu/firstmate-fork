@@ -326,8 +326,7 @@ wait_for_healthy_successor() {
   local deadline
   # date(1) exposes whole seconds. Add one rounding second so a timeout of one
   # second cannot collapse to a few milliseconds when called near a boundary.
-  child_err=$(mktemp "${TMPDIR:-/tmp}/fm-watch-arm-err.XXXXXX") || child_err=/dev/null
-deadline=$(( $(date +%s) + CONFIRM_TIMEOUT + 1 ))
+  deadline=$(( $(date +%s) + CONFIRM_TIMEOUT + 1 ))
   while :; do
     healthy_watcher && return 0
     [ "$(date +%s)" -ge "$deadline" ] && return 1
@@ -637,56 +636,7 @@ cleanup_child() {
   if [ -n "$child" ] && fm_pid_alive "$child"; then
     kill -TERM "$child" 2>/dev/null || true
   fi
-  if [ -n "$child_out" ]; then
-    rm -f "$child_out" "$child_err" 2>/dev/null || true
-  fi
 }
-
-# shellcheck disable=SC2329 # Invoked indirectly by the signal traps below.
-handle_arm_signal() {
-  local signal=$1 rc=$2
-  trap - HUP TERM INT
-  if [ -n "$child" ] && fm_pid_alive "$child"; then
-    # The watcher installs its own cleanup traps only after acquiring and
-    # publishing the home-bound lock identity. Do not TERM it in the middle of
-    # stale-lock acquisition: that can abandon the steal mutex. Let startup
-    # reach that cleanup-ready point (or exit naturally) before forwarding TERM,
-    # but never past the startup confirmation deadline.
-    while fm_pid_alive "$child"; do
-      if fm_watcher_lock_matches_pid "$STATE" "$WATCH" "$child" "$FM_HOME" \
-        || [ "$(date +%s)" -ge "$deadline" ]; then
-        kill -TERM "$child" 2>/dev/null || true
-        break
-      fi
-      sleep 0.02
-    done
-    wait "$child" 2>/dev/null || true
-  fi
-  cycle_log_append "$rc" "$signal" arm-interrupted none
-  cleanup_child
-  exit "$rc"
-}
-
-trap 'handle_arm_signal HUP 129' HUP
-trap 'handle_arm_signal TERM 143' TERM
-trap 'handle_arm_signal INT 130' INT
-
-child_out=$(mktemp "$STATE/.watch-arm-output.XXXXXX") || {
-  echo "watcher: FAILED - no live watcher with a fresh beacon"
-  exit 1
-}
-# date(1) exposes whole seconds. Keep the configured confirmation budget from
-# collapsing when startup begins just before the next second boundary.
-child_err=$(mktemp "${TMPDIR:-/tmp}/fm-watch-arm-err.XXXXXX") || child_err=/dev/null
-deadline=$(( $(date +%s) + CONFIRM_TIMEOUT + 1 ))
-if [ -n "${FM_WATCH_PREDECESSOR_ARM_PID:-}" ]; then
-  FM_WATCH_HANDLING_SUCCESSOR=1 "$WATCH" >"$child_out" 2>"$child_err" &
-else
-  "$WATCH" >"$child_out" 2>"$child_err" &
-fi
-child=$!
-cycle_begin "$child" started "$(fm_pid_identity "$child" 2>/dev/null || true)"
-child_done=0
 
 # Pass the watcher's captured stderr through as it was before the capture, and
 # on a nonzero exit keep a bounded tail so a silent exit stays diagnosable.
@@ -711,6 +661,54 @@ finish_child_stderr() {
   cat "$child_err" >&2 2>/dev/null || true
   rm -f "$child_out" "$child_err" 2>/dev/null || true
 }
+
+# shellcheck disable=SC2329 # Invoked indirectly by the signal traps below.
+handle_arm_signal() {
+  local signal=$1 rc=$2
+  trap - HUP TERM INT
+  if [ -n "$child" ] && fm_pid_alive "$child"; then
+    # The watcher installs its own cleanup traps only after acquiring and
+    # publishing the home-bound lock identity. Do not TERM it in the middle of
+    # stale-lock acquisition: that can abandon the steal mutex. Let startup
+    # reach that cleanup-ready point (or exit naturally) before forwarding TERM,
+    # but never past the startup confirmation deadline.
+    while fm_pid_alive "$child"; do
+      if fm_watcher_lock_matches_pid "$STATE" "$WATCH" "$child" "$FM_HOME" \
+        || [ "$(date +%s)" -ge "$deadline" ]; then
+        kill -TERM "$child" 2>/dev/null || true
+        break
+      fi
+      sleep 0.02
+    done
+  fi
+  if [ -n "$child" ]; then
+    wait "$child" 2>/dev/null || true
+  fi
+  cycle_log_append "$rc" "$signal" arm-interrupted none
+  finish_child_stderr "$rc"
+  exit "$rc"
+}
+
+trap 'handle_arm_signal HUP 129' HUP
+trap 'handle_arm_signal TERM 143' TERM
+trap 'handle_arm_signal INT 130' INT
+
+child_out=$(mktemp "$STATE/.watch-arm-output.XXXXXX") || {
+  echo "watcher: FAILED - no live watcher with a fresh beacon"
+  exit 1
+}
+# date(1) exposes whole seconds. Keep the configured confirmation budget from
+# collapsing when startup begins just before the next second boundary.
+child_err=$(mktemp "${TMPDIR:-/tmp}/fm-watch-arm-err.XXXXXX") || child_err=/dev/null
+deadline=$(( $(date +%s) + CONFIRM_TIMEOUT + 1 ))
+if [ -n "${FM_WATCH_PREDECESSOR_ARM_PID:-}" ]; then
+  FM_WATCH_HANDLING_SUCCESSOR=1 "$WATCH" >"$child_out" 2>"$child_err" &
+else
+  "$WATCH" >"$child_out" 2>"$child_err" &
+fi
+child=$!
+cycle_begin "$child" started "$(fm_pid_identity "$child" 2>/dev/null || true)"
+child_done=0
 
 owned_child_finished() {
   local rc=$1 signal reason_type status
@@ -783,6 +781,7 @@ while :; do
       if ! handling_generation=$(handling_successor_generation); then
         cleanup_child
         wait "$child" 2>/dev/null || true
+        finish_child_stderr 1
         cycle_log_append 1 none handling-handoff-failed none
         echo "watcher: FAILED - established successor could not inspect handling state"
         exit 1
@@ -821,6 +820,7 @@ print_watch_output "$child_out"
 cleanup_child
 wait "$child" 2>/dev/null
 rc=$?
+finish_child_stderr "$rc"
 cycle_log_append "$rc" "$(cycle_signal_name "$rc")" confirmation-timeout none
 echo "watcher: FAILED - no live watcher with a fresh beacon"
 exit 1

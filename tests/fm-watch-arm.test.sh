@@ -1084,41 +1084,68 @@ test_stop_ends_the_home_watcher_and_publishes_downtime() {
   pass "watch-arm: --stop ends only this home's watcher, publishes downtime, and reports when none runs"
 }
 
+test_watcher_exit_preserves_stderr_and_cleans_capture() {
+  local dir home state bindir armout status i mode expected_rc
+  for mode in nonzero clean timeout signal; do
+    dir=$(make_case "stderr-tail-$mode")
+    home="$dir/home"
+    state="$dir/state"
+    bindir="$dir/bin"
+    armout="$dir/arm.out"
+    mkdir -p "$home/data" "$dir/tmp"
+    cp -R "$ROOT/bin" "$bindir"
+    cat > "$bindir/fm-watch.sh" <<'SH'
+#!/usr/bin/env bash
+finish() { echo 'stderr line 30' >&2; exit 1; }
+trap finish TERM
+i=1
+while [ "$i" -le 29 ]; do echo "stderr line $i" >&2; i=$((i + 1)); done
+case "$STDERR_TEST_MODE" in
+  nonzero) finish ;;
+  clean) echo 'stderr line 30' >&2; exit 0 ;;
+esac
+: > "$FM_HOME/ready"
+while :; do sleep 0.1; done
+SH
+    chmod +x "$bindir/fm-watch.sh"
+
+    STDERR_TEST_MODE="$mode" TMPDIR="$dir/tmp" FM_HOME="$home" FM_STATE_OVERRIDE="$state" \
+      FM_ARM_CONFIRM_TIMEOUT=1 "$bindir/fm-watch-arm.sh" > "$armout" 2>&1 &
+    ARM_PID=$!
+    if [ "$mode" = signal ]; then
+      i=0
+      while [ ! -f "$home/ready" ] && [ "$i" -lt 100 ]; do
+        sleep 0.02
+        i=$((i + 1))
+      done
+      [ -f "$home/ready" ] || fail "signal fixture did not start"
+      kill -TERM "$ARM_PID" || fail "could not signal arm"
+    fi
+    wait_for_exit "$ARM_PID" 150
+    status=$?
+    expected_rc=1
+    [ "$mode" != signal ] || expected_rc=143
+    expect_code "$expected_rc" "$status" "$mode arm exit"
+    if [ "$mode" != signal ]; then
+      grep -q '^watcher: FAILED' "$armout" || fail "$mode arm did not report the failure: $(cat "$armout")"
+    fi
+    grep -qx 'stderr line 30' "$armout" || fail "$mode stderr was not passed through: $(cat "$armout")"
+    if [ "$mode" = clean ]; then
+      [ ! -e "$state/.watch-cycle-stderr.log" ] || fail "clean child exit logged a failure tail"
+    else
+      grep -q "rc=$expected_rc$" "$state/.watch-cycle-stderr.log" || fail "$mode has no rc record in the stderr log"
+      grep -qx 'stderr line 30' "$state/.watch-cycle-stderr.log" || fail "$mode stderr tail missing its last line"
+      grep -qx 'stderr line 11' "$state/.watch-cycle-stderr.log" || fail "$mode stderr tail lost line 11 of the last 20"
+      ! grep -qx 'stderr line 10' "$state/.watch-cycle-stderr.log" || fail "$mode stderr tail was not bounded to 20 lines"
+    fi
+    i=$(find "$state" "$dir/tmp" -name '.watch-arm-output.*' -o -name 'fm-watch-arm-err.*' 2>/dev/null | wc -l | tr -d ' ')
+    [ "$i" -eq 0 ] || fail "$mode arm left its output or stderr capture behind"
+  done
+  pass "watch-arm: child exits, timeout, and arm signal preserve stderr and clean captures"
+}
 # --take-over stops only a watcher that the named arm itself owns. The seed
 # watcher here is this shell's child, so naming any other process leaves it
 # running and the arm attaches to it exactly as a plain arm does.
-test_nonzero_watcher_exit_keeps_a_bounded_stderr_tail() {
-  local dir home state bindir armout status i
-  dir=$(make_case nonzero-stderr-tail)
-  home="$dir/home"
-  state="$dir/state"
-  bindir="$dir/bin"
-  armout="$dir/arm.out"
-  mkdir -p "$home/data" "$dir/tmp"
-  cp -R "$ROOT/bin" "$bindir"
-  # A watcher that dies silently on stdout but names its cause on stderr.
-  cat > "$bindir/fm-watch.sh" <<'SH'
-#!/usr/bin/env bash
-i=1
-while [ "$i" -le 30 ]; do echo "stderr line $i" >&2; i=$((i + 1)); done
-exit 1
-SH
-  chmod +x "$bindir/fm-watch.sh"
-
-  TMPDIR="$dir/tmp" FM_HOME="$home" FM_STATE_OVERRIDE="$state" FM_ARM_CONFIRM_TIMEOUT=5 \
-    "$bindir/fm-watch-arm.sh" > "$armout" 2>&1
-  status=$?
-  [ "$status" -eq 1 ] || fail "arm did not propagate the watcher's exit 1 (got $status): $(cat "$armout")"
-  grep -q '^watcher: FAILED' "$armout" || fail "arm did not report the failure: $(cat "$armout")"
-  grep -qx 'stderr line 30' "$armout" || fail "stderr was not passed through: $(cat "$armout")"
-  grep -q 'rc=1$' "$state/.watch-cycle-stderr.log" || fail "no rc record in the stderr log"
-  grep -qx 'stderr line 30' "$state/.watch-cycle-stderr.log" || fail "stderr tail missing its last line"
-  grep -qx 'stderr line 11' "$state/.watch-cycle-stderr.log" || fail "stderr tail lost line 11 of the last 20"
-  ! grep -qx 'stderr line 10' "$state/.watch-cycle-stderr.log" || fail "stderr tail was not bounded to 20 lines"
-  i=$(find "$state" "$dir/tmp" -name '.watch-arm-output.*' -o -name 'fm-watch-arm-err.*' 2>/dev/null | wc -l | tr -d ' ')
-  [ "$i" -eq 0 ] || fail "the arm left its output or stderr capture behind"
-  pass "watch-arm: a nonzero watcher exit keeps a bounded stderr tail and cleans its capture"
-}
 test_take_over_attaches_to_a_cycle_the_named_arm_does_not_own() {
   local dir state fakebin armout other status
   dir=$(make_case take-over-not-owner)
@@ -1655,4 +1682,4 @@ test_handling_delivered_rejects_a_superseded_generation
 test_take_over_attaches_to_a_cycle_the_named_arm_does_not_own
 test_take_over_owns_a_fresh_cycle_and_keeps_queued_work_surfacing
 test_take_over_preserves_downtime_from_watcher_self_exit
-test_nonzero_watcher_exit_keeps_a_bounded_stderr_tail
+test_watcher_exit_preserves_stderr_and_cleans_capture
