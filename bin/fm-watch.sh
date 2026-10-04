@@ -2043,14 +2043,6 @@ clear_pause_state() {  # <window-key>
 # write-deferral chain and the wait-deferral throttle. Split out so a caller
 # that must keep a window's DECLARATION-scoped pause state - its .paused-* flag,
 # recheck, and re-surface throttle - can still reset the per-hash half alone.
-# Consecutive no-change heartbeat count; a missing or non-numeric file is 0.
-heartbeat_streak() {
-  local v
-  v=$(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0)
-  case "$v" in ''|*[!0-9]*) v=0 ;; esac
-  echo "$v"
-}
-
 clear_stale_hash_tracking() {  # <window-key>
   local key=$1
   clear_write_tracking "$key"
