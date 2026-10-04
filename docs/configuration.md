@@ -1524,6 +1524,27 @@ Manual samples are taken within twenty minutes of the top of an SGT hour, becaus
 `fm-value-ledger.sh arm` writes and binds `state/value-ledger.check.sh`, which samples and rolls up once a day at the first sweep after 00:15 SGT and prints one line only when an instrument failed, a quota read was not fresh, the row could not be written, or whole days are missing.
 `disarm` removes the shim, its trust binding, and the alert markers.
 
+## Lane burn watch (config/burn-watch.json, state/burn-watch.check.sh)
+
+[`bin/fm-burn-watch.sh`](../bin/fm-burn-watch.sh) is an opt-in watcher check for fast, steering-oriented token burndown tracking.
+While plan payback samples hourly for retrospective accounting, burn watch samples on the watcher's `FM_CHECK_INTERVAL` cadence to detect lanes draining fast or running low at intake time.
+`fm-burn-watch.sh arm` writes and binds `state/burn-watch.check.sh` through `bin/fm-check-register.sh`.
+`fm-burn-watch.sh disarm` removes the shim, its trust binding, and active watch state.
+`fm-burn-watch.sh init` writes the starting configuration to `config/burn-watch.json` when absent.
+
+**Steering thresholds and alerts**
+
+The check stores the previous sample in `state/.burn-watch-prev` and computes per-lane deltas against current quota windows.
+It prints exactly one line when a steering threshold is crossed, and stays silent otherwise.
+Alerts fire once per threshold crossing and re-arm only after recovery, preventing repetitive notifications.
+Starting thresholds include:
+- A lane falling 10+ points between samples.
+- Provider floor thresholds: claude below 20%, codex below 15%, and agy below 20%.
+- The Alibaba monthly bucket burning faster than 1.5%/day.
+
+If an instrument fails, the check prints one diagnostic line once, staying silent on subsequent failed polls until the instrument recovers and re-arms.
+Thresholds and monitored windows are configurable in `config/burn-watch.json`.
+
 ## Mail plane (.env)
 
 The mail plane (bin/fm-mail.sh) reads unseen IMAP messages and sends one SMTP message.
