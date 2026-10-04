@@ -1,0 +1,482 @@
+FM_TEST_BEGIN 2026-10-04T09:17:03Z tests/fm-captain-hold-lifecycle.test.sh family=pure-contract-unit expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:17:03Z tests/fm-composer-lib.test.sh family=pure-contract-unit expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:17:03Z tests/fm-lint.test.sh family=pure-contract-unit expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:17:03Z tests/fm-test-run.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - fm_composer_classify_content: a bare shell prompt glyph (>/$/%/#) reads unknown, never empty
+ok - fm_composer_classify_content: stripped unbordered content is unknown except verified agent glyphs
+ok - fm_composer_classify_content: a bare shell prompt carrying a command is not empty
+ok - fm_composer_classify_content: a bare prompt glyph inside a bordered composer box reads empty (claude's own idle composer)
+ok - fm_composer_classify_content: agent prompt glyphs (❯ claude, › codex, ⟩ muse) read empty bordered or bare
+ok - fm_composer_classify_content: an empty composer reads empty
+ok - fm_composer_classify_content: idle matching is limited to proven placeholder positions
+ok - fm_composer_classify_content: idle matching preserves the caller's case mode
+ok - fm_composer_classify_content: real unsubmitted text reads pending (including a popup argument-hint fill)
+ok - matrix: claude's ❯+NBSP row reads empty on every profile in both locales (#1988)
+ok - matrix: claude's arrow statusline is footer furniture, not a composer holding text
+ok - fm_composer_classify_screen: footer demotion needs a contiguous, glyph-proven pair
+ok - fm_composer_classify_screen: the footer zone holds for boxes, not only separator pairs
+ok - fm_composer_classify_screen: the footer zone only ever refuses, never allows
+ok - matrix: codex's dim hint is empty when styling proves it, unknown (never pending) when it cannot
+ok - matrix: muse's ⟩ reads empty everywhere and survives losing the styled-glyph signal
+ok - matrix: cursor's reverse-video placeholder remnant reads empty; real typed text stays pending
+ok - matrix: herdr half-block rules bound a bare composer's wrap region
+ok - matrix: omp's status row bounds the bare composer's wrap region
+ok - matrix: codex 0.154's starfield rows are furniture; typed, mixed, and unanchored rows keep their verdicts
+ok - matrix: pi's separated composer needs identity + structure; the blank row alone never proves it
+ok - matrix: a dollar-first pi status footer reads empty; dead shells still refuse
+ok - matrix: opencode's left-bar composer reads empty everywhere and scans the full active run
+ok - matrix: grok's real oversized titled bottom is empty while typed and unproved panes stay safe
+ok - matrix: claude's titled top rule proves an idle composer empty and a draft pending (#5601, #5558)
+ok - matrix: kimi's bordered shell-glyph box reads empty through the shared owner (spawn's fourth copy retired)
+ok - matrix: the real claude-in-zellij --ansi dump reads empty in both locales
+ok - strict posture: blank and unidentified rows are unknown, never injectable empty
+ok - fm_composer_classify_screen: the bare composer's wrap region stays identified; structure breaks it
+ok - fm_composer_classify_screen: a row-leading agent glyph reanchors the live composer
+ok - fm_composer_classify_screen: a lower dead shell invalidates only cursorless stale composers
+ok - fm_composer_classify_screen: cursorless bare wrap regions participate in verdicts
+ok - fm_composer_classify_screen: cursorless containers reject only contiguous unclaimed activity
+ok - fm_composer_classify_screen: the bottom-most candidate wins; stale banners cannot
+ok - fm_composer_classify_screen: incomplete lower structure invalidates stale boxes
+ok - fm_composer_classify_screen: titled bottoms retain full box geometry
+ok - fm_composer_classify_screen: a proven box tolerates a bottom-border cursor
+ok - fm_composer_extract_selected_content: scopes user content and excludes furniture
+ok - fm_composer_queued_enter_verdict: pending + busy returns empty (queued Enter)
+ok - fm_composer_queued_enter_verdict: pending + idle/unknown stays pending
+ok - fm_composer_queued_enter_verdict: only proven pending is converted
+ok - pi 0.85: a generating pi's composer is blank in both presentations and is never read as unsubmitted input
+ok - pi 0.85: a pair opened by pi's titled working border is never injectable, while a settled pi still is
+ok - pi 0.85: the titled top border is what makes a stock generating pi's composer readable at all
+ok - pi 0.85: the titled-border predicate accepts pi's indicator border and rejects a word-titled rule
+ok - pi 0.85: real typed text in the composer stays pending whether pi is idle or generating
+ok - pi 0.85: a modal in front of the composer reads unknown, never an injectable empty or a convertible pending
+ok - pi 0.85: both generating presentations read busy while settled, typed-into, and modal-parked panes read idle
+ok - pi 0.85: the captured busy shapes are opt-in per reader, and the reading production takes is the harness-less union
+ok - pi 0.85: pi's working WORD, its Calm sprite glyphs, and another harness's word-titled rule are never busy signals
+ok - pi 0.85: a titled rule INSIDE an open composer pair is content, so real unsent text stays pending
+ok - fm_composer_queued_enter_verdict: pi is excluded from the pending+busy conversion, every other harness keeps it
+FM_TEST_END 2026-10-04T09:17:44Z tests/fm-composer-lib.test.sh exit=0 duration_ms=40830 gate_skip=false
+ok - fm-lint.sh --help reports the complete executable interface
+ok - fm-lint.sh --list-files reports the complete shell inventory
+ok - two canonical lint partitions preserve complete source-aware coverage and reject weakened modes
+ok - fm-lint.sh --fast disables ShellCheck extended analysis
+ok - fm-lint.sh keeps full ShellCheck analysis by default in CI
+ok - fm-lint.sh rejects explicit --fast mode in CI
+ok - fm-lint.sh --fast catches an ordinary shell lint defect
+ok - fm-lint.sh pins an explicit ShellCheck version (0.11.0)
+ok - ShellCheck installer retries a transient download failure
+ok - ShellCheck installer selects the official archive, URL, and checksum per OS/arch
+ok - ShellCheck installer rejects a wrong checksum
+ok - ShellCheck installer falls back to shasum -a 256 when sha256sum is absent
+ok - ShellCheck installer prefers sha256sum when both hashers are present
+ok - ShellCheck installer rejects an unsupported OS or architecture
+ok - missing ShellCheck fails closed
+ok - fm-lint.sh refuses to lint under a non-pinned ShellCheck version
+ok - fm-lint.sh catches a real lint defect the old no-op gate passed
+ok - fm-lint.sh rejects direct Beads CLI invocations in firstmate core
+ok - fm-lint.sh enforces backend purity for explicit core paths
+ok - fm-lint.sh ignores ambient ShellCheck options
+ok - fm-lint.sh passes a clean fixture
+ok - jobs=1 and jobs=2 preserve deterministic diagnostics, failures, cleanup bounds, and quiet telemetry
+ok - jobs=1 and jobs=2 stop complete worker trees with and without telemetry
+ok - SKIP (host cannot enforce the bounded envelope): root deadline kill check
+ok - SKIP (host cannot enforce the bounded envelope): memory-limit death check
+ok - memory failures retry without source following, exclude cross-file codes, and preserve a real fallback finding
+ok - SKIP (host cannot enforce the bounded envelope): fallback deadline check
+ok - explicit memory evidence outranks findings and signal reasons (modes: 0)
+ok - OOM words in a source excerpt or a root path never classify a root as memory
+ok - FM_LINT_REQUIRE_BOUNDS refuses missing enforcement and proceeds when enforceable
+ok - SKIP (host cannot enforce the bounded envelope): pinned memory-envelope check
+ok - the roots sidecar and telemetry record the run's final exit status
+ok - the retained sidecar records each root's lifecycle with a mode, reason, and duration
+ok - seeded dispatcher, adapter, production-owner, and test-local diagnostics preserve parity
+ok - fm-lint.sh changed mode lints only the changed canonical file
+ok - fm-lint.sh forces a full lint in CI even when the local diff would be empty
+ok - fm-lint.sh forces a full lint when HEAD is on main
+ok - fm-lint.sh explicit paths bypass changed-file mode selection
+ok - fm-lint.sh exits 0 with a note when the local branch has no changed lint targets
+ok - fm-lint.sh --list-files reports the would-be changed set in changed mode
+ok - fm-lint.sh changed mode drops source following and excludes cross-file codes
+ok - fm-lint.sh changed mode invokes ShellCheck once per root
+ok - fm-lint.sh CI keeps source following without the local exclusion list
+ok - fm-lint.sh on main keeps source following without the local exclusion list
+ok - fm-lint.sh without a merge-base keeps source following without the local exclusion list
+ok - fm-lint.sh explicit paths keep source following
+ok - fm-lint.sh --fast on a local branch keeps source following
+ok - fm-lint.sh changed mode excludes cross-file codes that explicit paths still report
+ok - local exclusion list covers every no-external-sources ShellCheck code
+FM_TEST_END 2026-10-04T09:25:47Z tests/fm-lint.test.sh exit=0 duration_ms=524162 gate_skip=false
+ok - exact suite coverage: --all lists every tests/*.test.sh once
+ok - family selection returns a proper subset of the suite
+ok - single-script selection lists exactly that path
+ok - changed-file selection stays conservative (never silent full suite)
+ok - a task marker refuses execution in the primary checkout and leaves worktrees and inspection alone
+ok - runner and its documentation surfaces select their curated family, not just their contract owners
+ok - shell line-ending policy selects runner coverage
+ok - a shared -fixture.sh helper selects its consuming suites through the reference scan
+fm-test-run: no tests selected for changes vs HEAD (map is conservative; use --all for the complete suite)
+ok - changed selection covers dependents, fails closed for a live unmapped source, ignores deletions, and accepts a retired unconsumed source
+ok - a bin reference selects the referencing scripts, and consumers still select their curated families
+ok - changed defaults to bounded automatic scheduling with serial override
+ok - Windows emulation exempts only synthetic POSIX modes
+ok - a plain script list defaults to bounded automatic concurrency without an automatic timeout
+ok - family proofs run concurrently only within separate family phases
+ok - empty changed selection emits deterministic text and JSON summaries
+ok - timing markers and JSON artifact are valid
+ok - aggregate exit reflects any script failure
+ok - gate-skip accounting is honest and non-failing
+ok - a gate skip records why it skipped
+ok - a script that actually ran records no skip reason
+ok - live guards are recorded as a capability class, not a bare env opt-in
+ok - fail-on-gate-skip converts herdr-not-found into a hard failure
+ok - exclude-family drops the named primary family after selection
+ok - proven-isolated scheduling ignores parallel hints
+ok - family, all, changed, and script selections ignore parallel hints
+ok - portable shard union, disjointness, and coverage guard hold
+ok - portable parallel lanes are fully hinted and packed within 5% of each other
+ok - portable serial shards are a deterministic disjoint cover of the serial lane
+ok - coverage guard bounds the unmeasured share and serial packing within twenty minutes
+ok - serial packing accepts the exact budget and refuses one millisecond above it
+ok - portable serial shard lanes refuse mismatched, out-of-range, and countless names
+ok - --jobs refuses non-proven / stateful selections
+ok - --jobs admits and schedules a family with a recorded concurrent proof
+ok - an unclassified new test stays serial while the proven residual family runs concurrently
+ok - a changed shared test fixture selects its readers while an unread tests/ path still refuses
+ok - a concurrent run starts the longest-hint script first
+ok - --per-script-timeout-secs turns a hung script into a bounded failure
+ok - the automatic --changed bound gives the slow watcher suite at least 1500s
+ok - --max-wall-ms fails an over-budget run and refuses a malformed budget
+ok - jobs scheduler runs proven scripts; failure propagates; non-proven refused
+ok - Herdr CI family-run step times out at 20 min under a 75 min job backstop
+ok - aggregate-json merges lane timing artifacts
+FM_TEST_END 2026-10-04T09:27:39Z tests/fm-test-run.test.sh exit=0 duration_ms=635350 gate_skip=false
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - marked hold reasons round-trip through public reads, fleet, startup, and return without changing other fields
+ok - new, active, and released holds require the origin first with and without deferral
+ok - historical self-inventories name a workable repair that preserves sibling entries
+ok - completion and verification compare backend identities for entries and current or stored origins
+ok - complete refuses the origin as its own captain-call inventory
+ok - complete refuses an entry held for another origin and flags one with none recorded
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - report-only unresolved captain call is reproduced and completion refuses before loss
+ok - both body-decoding paths work without the allow_nonref default
+ok - cleanup preserves every byte of a retained body's non-ASCII characters
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - the completion gate attests captain-held inventory and transfers open status decisions
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - answer records the captain's words, closes idempotently, and releases routed work
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - release frees held work with the captain's words recorded and the body preserved
+ok - captain holds become visible only after their hold-set timestamp is durable
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - an interrupted answer preserves its hold age until close retry
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a deferred captain call leaves the live Captain's Call until its date and stays answerable
+ok - an out-of-band close is recordable with the captain's word and nothing else
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - ended visual review follows the same captain-hold completion owner
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - resolved findings and decision-like prose do not create captain-held tasks
+ok - terminal single-owner stale status decisions do not block empty inventory
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - main-home and secondmate-home captain calls remain correctly routed
+ok - a secondmate home publishes each hold occurrence and its answer on the parent channel
+ok - secondmate resolutions publish before retiring durable retry triggers
+ok - a bound channel's captured answers close their captain-held tasks at answer time
+ok - only a bound captured source creates reconcile requests
+ok - normal answers and their replays retire reconcile requests
+ok - reconcile closes a moot call with evidence and keeps an active one open with a note
+ok - reconcile outcomes apply durable mutations once across partial failures
+ok - a channel source with no decision binding closes nothing
+ok - legacy identities, metadata, bindings, and the shim keep working
+ok - a board answer reaches the keyed-answer intake and wakes firstmate
+ok - the chat channel feeds the same keyed-answer intake a captured review does
+ok - completion and verification validate origins before constructing paths
+ok - a status resolution over a still-open captain-held task is signalled, not closed
+ok - a captain call with no routed work, a verified transfer, an open decision, and an answered call all stay silent
+ok - a filed report with no negative claim requires --claims-checked >=1
+ok - a filed report with a detected negative claim requires --claims-checked >=2 and quotes the claim
+ok - the classifier detects all five REC-1 negative-claim phrases
+ok - the shim forwards --claims-checked to the shared completion gate
+ok - completion does not require a claims audit when the origin has no filed report
+ok - batched answers record item position, words, and batch text while preserving single-answer behavior
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - cleanup leaves a captain-held work item open with its deliverable, and only an answer closes it
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - release and scout report retention distinguish deliveries from rejected merge answers
+ok - an interrupted cleanup keeps the captain call recoverable and session start retains it
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - an answer before cleanup replay preserves the retained report
+ok - an answer before cleanup replay notes the retained Gerrit change
+ok - an unusable pending-close record names its reason instead of a bare refusal
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - an unsupported relocated report does not wedge the captain's answer
+ok - cleanup retains captain calls in the configured backlog
+ok - cleanup keeps a captain-held Gerrit task open and records its change URL
+ok - merge approval releases before zero-retention cleanup records completion
+ok - the PR merge entrypoint refuses a captain-held task before merging
+ok - the local merge entrypoint refuses a captain-held task before merging
+ok - the PR merge entrypoint separates an unreadable authority record from an absent one
+ok - the local merge entrypoint separates an unreadable authority record from an absent one
+ok - merge entrypoints reject unsafe identities and absent state before locking
+ok - merge entrypoints refuse a replacement incarnation after waiting for cleanup
+ok - merge entrypoints own task state before forced cleanup can retire it
+fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders
+ok - a released merge passes the guarded entrypoint and remains recently landed
+ok - cleanup refuses a ship row when its captain hold cannot be read
+ok - skipped on markdown-only tasks-axi: verify against a beads-migrated hold
+ok - skipped on markdown-only tasks-axi: verify against a prefix-migrated hold
+ok - skipped on markdown-only tasks-axi: prefer a marker-noted row over a prefix namesake
+ok - skipped on markdown-only tasks-axi: complete against a beads-migrated hold
+ok - skipped on markdown-only tasks-axi: verify an unresolvable beads legacy id
+ok - skipped on markdown-only tasks-axi: verify a derived pre-collapse key
+ok - captain-hold mutations address the beads backend without a markdown override
+ok - skipped on markdown-only tasks-axi: captain-hold create under due.required without types.custom
+FM_TEST_END 2026-10-04T09:37:32Z tests/fm-captain-hold-lifecycle.test.sh exit=0 duration_ms=1228962 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T09:37:32Z tests/fm-wake-queue.test.sh family=watcher-wake-lock expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:37:32Z tests/fm-watch-arm.test.sh family=watcher-wake-lock expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:37:32Z tests/fm-pi-watch-extension.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - Pi extension reports external healthy watcher output
+ok - Pi custom tool exposes repair-only metadata and returns automatic-continuation guidance
+ok - Pi redundant tool call returns ownership guidance and spawns no second child
+ok - Pi scheduled retry remains extension-owned after another tool call
+ok - Pi actionable close starts one successor before wake delivery settles
+ok - Pi actionable output waits for predecessor close before successor restoration
+ok - Pi dispatcher branch offer owns accepted wakes and falls back to main
+ok - Pi dispatcher flags a fleet-wide heartbeat offer as branch-eligible
+ok - a co-present check row neither vetoes nor rides a heartbeat into main
+ok - every main-only check class still reaches main, never the supervision branch
+ok - a captain-held signal trigger reaches main with routine rows present
+ok - an unread pending-reply escalation keeps later stale aliases on main
+ok - a mixed batch of two distinct files - one routine, one needs-decision - routes wholly to main
+ok - a co-present needs-decision row neither vetoes nor rides a heartbeat into main
+ok - heartbeat restoration failure stays on main
+ok - watcher-failure repair stays with main even with a live, accepting branch listener
+ok - under the away-posture record every actionable row is offered to the branch while broken-queue wakes and watcher-failure alarms still reach main
+ok - Pi refused handling handshake is classified and not swallowed
+ok - Pi confirm failure retires the named arm with distinct watcher pid
+ok - Pi confirm failure for a stale successor spares the newer arm
+ok - Pi superseded handling delivery carries no rejection appendix and is logged
+ok - Pi superseded handling delivery is offered to the branch like a confirmed one
+ok - Pi extension diagnostic log stays off unless opted in
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi deferred close starts a fresh arm instead of stalling on a dead child
+ok - Pi hung successor falls back to one typed actionable wake
+ok - Pi unretired successor falls back without an overlapping retry
+ok - Pi late unretired closes resume classified supervision
+ok - Pi clean empty close triggers a bounded continuity retry
+ok - Pi established clean closes stop at the configured retry limit
+ok - Pi close handler verifies session-lock ownership before successor launch
+ok - Pi watcher arm distinguishes all session lock ownership states
+ok - Pi session transitions auto-arm through a generation owner across /new /resume /fork/reload, stale callbacks, and quit
+ok - Pi session replacement auto-arms and carries its in-flight actionable close
+ok - Pi replacement replays a streaming follow-up before consumption
+ok - Pi streaming-time wake delivery keeps the successor chain and replays only unconsumed wakes
+ok - Pi retries a verified successor that failed during wake delivery without waiting for settlement
+ok - Pi keeps its live retry arm when a stale recovery confirmation is rejected
+ok - Pi keeps a single bounded retry chain for an instantly unready successor
+ok - Pi replacement receives actionable closes after retirement timeout
+ok - Pi delivers a late actionable close through the in-process replacement handoff
+ok - Pi drops a retired session's restoration failure from a replayed wake
+ok - Pi queues an unterminated actionable row before its restoration runs
+ok - Pi shares one bounded restoration with an actionable close landing during it
+ok - Pi keeps a retired session's restoration verdict off an inherited wake
+ok - Pi replacement handoff tokens stay unique across fresh modules
+ok - Pi replacement persistence failure keeps its predecessor until a successor commits
+ok - Pi process-exit cleanup listener remains singular across session replacement
+ok - Pi process-exit cleanup stops the attached arm child
+ok - OpenCode plugins have an explicit ESM boundary even under a typeless parent package
+ok - OpenCode watcher plugin uses the effective FM_HOME state
+ok - OpenCode watcher plugin sources the effective config
+ok - OpenCode watcher plugin requires session lock ownership
+ok - OpenCode watcher coordinator respects primary scope
+ok - OpenCode watcher plugin starts one successor before wake prompt delivery settles
+ok - OpenCode watcher plugin runs the supervision host on an opted-in home and relays every host line (away record)
+ok - OpenCode watcher plugin runs the supervision host on an opted-in home and relays every host line (quiet record)
+ok - OpenCode pre-ready actionable close preserves its successor
+ok - OpenCode hung successor falls back to one typed actionable wake
+ok - OpenCode unretired successor falls back without an overlapping retry
+ok - OpenCode late unretired closes resume classified supervision
+ok - OpenCode clean empty close triggers a bounded continuity retry
+ok - OpenCode established clean closes stop at the configured retry limit
+ok - OpenCode close handler verifies session-lock ownership before successor launch
+ok - OpenCode watcher plugin coordinates with the turn-end guard
+ok - OpenCode healthy arm output does not suppress the turn-end guard
+ok - a catch-up burst delivers one follow-up and leaves every durable row queued
+ok - an accepted but unconsumed follow-up cannot mute the captain
+ok - a wake is delivered without its burst count when the count wedges or cannot be taken
+FM_TEST_END 2026-10-04T09:39:51Z tests/fm-pi-watch-extension.test.sh exit=0 duration_ms=138267 gate_skip=false
+ok - an abandoned same-process lock hold is reclaimed; a parent's live hold is not
+ok - without BASHPID a subshell cannot release or reclaim its parent lock and owns its own hold
+ok - bounded acquire hands ownership to the waiting caller after contention
+ok - presentation lock waits are bounded and retriable without weakening acknowledgement atomicity
+ok - malformed presentation locks report acquire failure instead of contention
+tests/wake-helpers.sh: line 349: 47061 Killed: 9                  PATH="$dir/fakebin:$PATH" FM_FAKE_NOW_FILE="$dir/now" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" FM_FAKE_TMUX_WINDOW='firstmate:fm-mate' FM_SECONDMATE_WAKE_STALL_SECS=1 FM_SECONDMATE_LIVENESS_SECS=99999999 FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch-$leg.out" 2> "$dir/watch-$leg.err"
+tests/wake-helpers.sh: line 349: 48062 Killed: 9                  PATH="$dir/fakebin:$PATH" FM_FAKE_NOW_FILE="$dir/now" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" FM_FAKE_TMUX_WINDOW='firstmate:fm-mate' FM_SECONDMATE_WAKE_STALL_SECS=1 FM_SECONDMATE_LIVENESS_SECS=99999999 FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch-$leg.out" 2> "$dir/watch-$leg.err"
+tests/wake-helpers.sh: line 349: 52321 Killed: 9                  PATH="$dir/fakebin:$PATH" FM_FAKE_NOW_FILE="$dir/now" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" FM_FAKE_TMUX_WINDOW='firstmate:fm-mate' FM_SECONDMATE_WAKE_STALL_SECS=1 FM_SECONDMATE_LIVENESS_SECS=99999999 FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch-$leg.out" 2> "$dir/watch-$leg.err"
+ok - foreign secondmate queue alerts once per no-progress episode without age-only or cascade noise
+ok - declared external-wait pause rows do not feed secondmate wake-loop escalation
+ok - a reprovisioned queue generation starts a fresh no-progress interval
+ok - an active turn defers the secondmate stall escalation without cancelling it
+ok - a long-lived mate mid-turn is not a stall, but a queue frozen past the busy bound still alarms
+ok - a proven-idle leftover row is rung so the child home can drain without a parent alarm
+ok - busy panes defer without a ring and unknown panes keep the parent alarm
+ok - a leftover row that survives a proven-idle ring still surfaces as a genuine stall
+ok - secondmate stall markers reject symlinks without touching their targets
+ok - stall publication acknowledgement closes the pre-marker crash window
+ok - empty prefix mate cleanup preserves another mate's stall receipt
+ok - self-announced appends suppress only their own bytes and fail toward waking
+ok - separate self-announced answers after a fold stay owned; worker decisions and later lines still wake
+ok - an unreadable status still reads as unreported, with or without owned growth
+ok - a worker resolved in fold lag still wakes after this home's close
+ok - owned growth suppresses the wake without hiding the turn-ended annotation
+ok - historical annotations replay nothing already announced and keep everything new
+wake drain: queue lock could not be acquired safely
+not ok - concurrent append/drain subprocess failed
+FM_TEST_END 2026-10-04T09:40:04Z tests/fm-wake-queue.test.sh exit=1 duration_ms=151547 gate_skip=false
+ok - watch-arm: an attached arm reports the wake its cycle delivered instead of a false failure
+ok - watch-arm: a delivered wake consumed by the handling turn still closes the attached arm cleanly
+ok - watch-arm: an unusable launch confirm window refuses to arm by name
+ok - watch-arm: a disposable validation checkout refuses to arm
+ok - watch-arm: a watcher exits when its state directory is removed
+ok - watch-arm: a watcher exits when its home is removed
+ok - watch-arm: the test reaper stops a watcher armed for a tracked temporary home
+ok - watch-arm: a cycle that delivered no wake of its own still fails loudly
+ok - watch-arm: an attached arm keeps following a slow live holder and reports its wake
+ok - watch-arm: an attached arm hands a holder stalled past the bound to its owner's replacement
+/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M4334BA1QWEWV2M3XR4FAKBZ/bin/fm-watch-arm.sh: line 766: 95814 Killed: 9                  "$WATCH" > "$child_out"
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 97521.1791106724.eGzEa8
+ok - watch-arm: re-arm surfaces every queued wake and an open remote decision after downtime
+ok - watch-arm: re-arm with empty queue resolves downtime marker without resurface wake
+/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M4334BA1QWEWV2M3XR4FAKBZ/bin/fm-watch-arm.sh: line 766: 11013 Killed: 9                  "$WATCH" > "$child_out"
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 11969.1791106739.n0EWHR
+ok - watch-arm: a re-arm whose recovery cycle runs slowly still surfaces it
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - watch-arm: marker publication failure retains stale-lock recovery evidence
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 80250.1791106795.70E95N
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 3 --recovery-generation 99094.1791106804.hVXkDH
+ok - watch-arm: a wake queued after handling drain is recovered once at successor arm
+ok - watch-arm: interrupted handling leaves its wake durable for successor re-drain
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 0 --recovery-generation 12310.1791106819.P0nydq
+ok - watch-arm: malformed recovery state is quarantined without a successor loop
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 1 --recovery-generation 15044.1791106823.3k3RWb
+ok - watch-arm: publication after recovery handoff is surfaced
+ok - watch-arm: restart publishes recovery before clearing a reused-pid watcher lock
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 7 --recovery-generation 18814.1791106829.HKNLiR
+ok - watch-arm: markerless legacy queues are adopted and recovered
+ok - watch-arm: an idle Lavish source stays quiet and its real result wakes promptly
+ok - watch-arm: appending work reopens recovery after an empty-queue arm resolved it
+ok - watch-arm: a watcher close during handling keeps the printed acknowledgement valid
+ok - watch-arm: a moved recovery generation consumes handled rows and names its remedy
+ok - watch-arm: downtime marker publication does not follow symlinks
+ok - watch-arm: --stop ends only this home's watcher, publishes downtime, and reports when none runs
+ok - watch-arm: an already-acknowledged handling confirmation succeeds as a no-op
+ok - watch-arm: a churned generation's handling confirmation reports a mismatch and an arm check keeps it
+ok - watch-arm: --take-over attaches to a cycle the named arm does not own and leaves it running
+ok - watch-arm: --take-over owns a fresh cycle without a recovery wake and still surfaces queued work
+watcher: secondmate liveness check failed
+ok - watch-arm: takeover preserves self-exit downtime and resolves it without a synthetic recovery wake
+FM_TEST_END 2026-10-04T09:41:30Z tests/fm-watch-arm.test.sh exit=0 duration_ms=238117 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T09:41:30Z tests/fm-calm-pi-extension.test.sh family=pure-contract-unit expected_gate_skip=none
+ok - Pi calm resolves its persistent home independently of Pi's launch directory
+ok - Pi calm compatibility evidence never rejects a Pi version for being newer than 0.82.0, and still fails closed on a missing or malformed version
+ok - a missing collapsed-thinking presentation API degrades only that Calm adapter with a clear skip reason, while the rest of Calm still registers
+ok - missing Pi presentation class exports reach the independent adapter degradation path
+ok - Calm hides queued Firstmate rows only on a session that can keep them, keeps hidden ones out of the editor on Escape, delivers them once in order, and leaves unsupported sessions and Calm off stock
+ok - Calm registers none of its 7 built-in tool wrappers at load while config/calm is off, and all 7 synchronously at load while config/calm is on
+ok - Calm's first same-session /calm activation claims every uncontested built-in, leaves a foreign bash tool fully intact and callable, warns prominently and logs the contested name, and only rows constructed before that activation - the documented bound - fail to retroactively collapse
+ok - Pi calm centralizes transcript visibility, preserves execution/export data, keeps Pi's stock working row visible while no run is active, and persists its choice across session starts
+ok - Pi calm on collapses mid-turn assistant working notes to zero height while Calm off keeps them, leaves streaming, truncated-final, and genuine final replies untouched, never mutates the messages, ignores every /calm argument, and restores a legacy persisted max as ordinary Calm on
+ok - Pi operational follow-up E2E processes exact user-role notifications once while Calm hides current and adjacent rows, Calm off and absent render them, and restart preserves semantics
+ok - Pi 1.0.0 with Calm on hides and retains queued Firstmate input through Escape, delivers it once, and leaves Calm off stock
+ok - Pi Calm native /skill:ahoy geometry keeps every collapsed thinking and tool block at zero height while preserving expansion, history, restart, and Calm-off rendering
+ok - Pi Calm working ship keeps its centered two-row asymmetric Unicode boat inside a deterministic long-wave trough, paints all water standard blue and the whole boat standard yellow with balanced resets, keeps ANSI-stripped width exact, reverses cleanly at both edges and every width, clamps visible and hidden resizes, falls back deterministically when narrow, freezes and resumes across settle/start without hidden-time jumps or duplicate timers, resets only on a fresh session, and leaves Calm-off visibility untouched
+ok - the rendered-export-DOM guard renders in one pass, retries a bounded number of Chrome start-up failures, and reports the Chrome binary, Chrome version, Pi version, exit status, and Chrome diagnostic when every attempt fails
+ok - Pi calm native E2E replaces the stock working row with a moving, resize-clamped working ship that freezes and resumes across two working periods in one Pi session, clears on abort, keeps captain turns visible, hides exact operational user rows without changing persistence, restores stock rendering Calm-off, survives restart, and preserves export plus Ctrl+O behavior
+FM_TEST_END 2026-10-04T09:42:41Z tests/fm-calm-pi-extension.test.sh exit=0 duration_ms=71068 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T09:42:41Z tests/fm-session-start.test.sh family=session-bootstrap expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:42:42Z tests/fm-private-divergence.test.sh family=session-bootstrap expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T09:42:42Z tests/fm-upstream.test.sh family=session-bootstrap expected_gate_skip=none
+ok - T1 a missing inventory is a hard failure
+ok - T2 schema errors fail hard with a deterministic reason
+ok - T3 a clean inventory reports ok
+ok - T4 stale paths and unresolved provenance are reported
+ok - T5 dispositions that need a human decision are surfaced
+ok - T6 uncovered drift is computed from git, not from the file
+ok - T7 the recorded review point gates when an entry resurfaces
+ok - T8 an unconfirmed upstream-equivalence claim is challenged
+ok - T9 an unresolvable revision reports why, and the other checks still run
+ok - T10 the inventory this repo ships is schema-valid
+ok - T11 an uncomputable comparison never reports a false unconfirmed equivalence
+# all fm-private-divergence tests passed
+FM_TEST_END 2026-10-04T09:43:01Z tests/fm-private-divergence.test.sh exit=0 duration_ms=19799 gate_skip=false
+ok - T1 public upstream with no new commits reports current
+ok - T2 patch-equivalent upstream work is reported as already contained
+ok - T3 divergence reconciles on an isolated branch, preserving both sides
+ok - T4 a conflicting reconciliation aborts cleanly and stops for a decision
+ok - T5 a home with no public upstream remote degrades to origin-only updating
+ok - T5b reconcile with no public upstream remote is not-required, not a refusal
+ok - T5c an upstream whose push url reaches the public repo refuses
+ok - T6 an upstream that is the private origin refuses
+ok - T7 an unreachable public upstream degrades to origin-only updating
+ok - T7b reconcile against an unreachable public upstream is not-required
+ok - T8 a landed reconciliation reaches the home through the guarded fast-forward
+ok - T9 cleanup removes the scratch worktree and keeps the branch
+ok - T10 cleanup refuses to discard uncommitted reconciliation work
+ok - T11 a missing or schema-invalid inventory refuses with its own exit code
+ok - T12 a refused reconciliation leaves nothing behind and a retry succeeds
+ok - T13 no reconcile decision is printed before its invariants are proven
+ok - T14 the reported merged-commit count matches what the merge actually brings in
+ok - T15 a teardown that could not complete says so and names what was left
+ok - T16 a degraded check never compares against the cached upstream ref
+ok - T17 a broken reconciliation invariant returns the dedicated invariant code
+ok - T18 a fetch that fails without output still reports a concrete reason
+ok - T19 a conflict whose teardown cannot complete reports the kept scratch
+ok - T20 a withheld comparison and an unresolvable revision report different reasons
+ok - T21 a public repo with no matching default branch degrades to origin-only updating
+ok - T22 a merge git refuses outright reports a failure, not a conflict
+ok - T23 a requested comparison with no merge base says the merge base could not be computed
+# all fm-upstream tests passed
+FM_TEST_END 2026-10-04T09:50:03Z tests/fm-upstream.test.sh exit=0 duration_ms=441599 gate_skip=false
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/pre-rebase: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/pre-applypatch: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/pre-auto-gc: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/pre-merge-commit: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/post-commit: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/sendemail-validate: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/applypatch-msg: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/prepare-commit-msg: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/post-checkout: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/post-applypatch: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/post-rewrite: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/commit-msg: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/pre-push: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/post-merge: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks/pre-commit: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state/fmtest-sm-LYBorZ.git-hooks: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home/state: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network/home: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-slow-network: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/pre-rebase: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/pre-applypatch: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/pre-auto-gc: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/pre-merge-commit: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/post-commit: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/sendemail-validate: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/applypatch-msg: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/prepare-commit-msg: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/post-checkout: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/post-applypatch: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/post-rewrite: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/commit-msg: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/pre-push: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/post-merge: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks/pre-commit: Permission denied
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state/fmtest-sm-LYBorZ.git-hooks: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home/state: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported/home: Directory not empty
+rm: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-test-run.8NglRE/w9/tmp/fm-session-start-tests.LYBorZ/secondmate-relaunch-reported: Directory not empty

@@ -1,0 +1,12 @@
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upchk.b0NC08/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upchk.b0NC08/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main fede619
+origin-ref: origin/main 643a4de
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: current
+reconcile: not-required: upstream is current

@@ -1,0 +1,78 @@
+## fm-upstream.sh check after merge (origin=643a4de2, upstream=fede6197)
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-up.fpv144/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-up.fpv144/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main fede619
+origin-ref: origin/main 643a4de
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: current
+reconcile-required: no
+inventory: attention
+inventory-entries: 46
+inventory-entry: extension-contract unresolved-provenance: 878d5ff
+inventory-entry: automic-vault-injection unresolved-provenance: 57868e0,6b936e7
+inventory-entry: token-spend-view unresolved-provenance: f9266d3
+inventory-entry: agy-harness-preflight unresolved-provenance: 69e375e
+inventory-entry: rate-limit-classification unresolved-provenance: f7205a1
+inventory-entry: unmetered-quota-report unresolved-provenance: 2382d33
+inventory-entry: pi-branch-rotation unresolved-provenance: 6277477
+inventory-entry: wake-batch-coalescing unresolved-provenance: 1d5b398
+inventory-entry: spawn-launch-postcondition unresolved-provenance: b36ef90
+inventory-entry: upstream-reconciliation unresolved-provenance: ecfcdf0
+inventory-entry: stale-repeat-suppression unresolved-provenance: 636c4ba
+inventory-entry: auto-standdown unresolved-provenance: b9d709d
+inventory-entry: daemon-lock-liveness unresolved-provenance: c3b13aa
+inventory-entry: claims-audit unresolved-provenance: c3cbf27,1cc00e2
+inventory-entry: batched-captain-answers unresolved-provenance: f3a4f14
+inventory-entry: scout-research-standards unresolved-provenance: 94d362e
+inventory-entry: delivery-posture-gate unresolved-provenance: 1c68a87
+inventory-entry: pi-primary-growth unresolved-provenance: 47566fc
+inventory-entry: portfolio-attention-limit unresolved-provenance: 42cd407
+inventory-entry: herdr-native-submit-proof unresolved-provenance: 0dd04ef
+inventory-entry: pr-forge-state-classification unresolved-provenance: 099dfb5
+inventory-entry: teardown-dedupe-marker-sync unresolved-provenance: 16a1a08
+inventory-entry: config-inherit-single-owner unresolved-provenance: a418b46
+inventory-entry: changed-selection-deletions unresolved-provenance: a1b2b24
+inventory-entry: away-escalation-delivery unresolved-provenance: b353bf25,3348e080
+inventory-entry: catch-all-marker-crosscheck unresolved-provenance: 05507d1c
+inventory-entry: rearm-resurface-empty-queue unresolved-provenance: 950421c7
+inventory-entry: herdr-native-idle-unknown unresolved-provenance: a80d6499
+inventory-entry: session-lock-harness-case unresolved-provenance: ee2f2a4c
+inventory-entry: autoarm-actionable-rewake unresolved-provenance: 478c974,d0c2d76
+inventory-entry: mail-plane-input-hardening unresolved-provenance: 478c974
+inventory-entry: launch-agent-xml-escaping unresolved-provenance: d0c2d76
+inventory-entry: macos-platform-binary-holder unresolved-provenance: 0a6e6a7
+inventory-entry: herdr-relaunch-identity-release unresolved-provenance: 0a6e6a7
+inventory-entry: residual-private-drift needs-review
+inventory-drift: compared fede6197556c188dd2f451809d17851760d1ef46..origin/main vs fede6197556c188dd2f451809d17851760d1ef46..upstream/main
+inventory-uncovered-count: 0
+exit=0
+
+## same fixture with origin rewound to pre-merge ce05defb
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-up.fpv144/upstream.git
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main fede619
+upstream-new-commits: 11
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: 349e189 test: preserve Pi calm transcript captures with Pi 1.0 (#6338)
+upstream-commit: 6af8331 fix(bin): preserve hold reasons and reject invalid completion inventories (#6331)
+upstream-commit: 8690c41 fix: reclaim orphaned watcher arms on the next park (#6335)
+upstream-commit: 241d461 fix(bin): restore downtime on supervision-host hand-back when the successor already closed (#6355)
+upstream-commit: 65e2aa4 fix: reduce remote-job polling process churn (#6363)
+upstream-commit: f50e9cd fix(bin): recognize titled Claude top rules and preserve grey slash commands (#5963)
+upstream-commit: 87fa81b fix: prevent Pi trust prompts in seeded secondmate homes (#6387)
+upstream-commit: d719ef3 fix(bin): retry ShellCheck roots that hit the memory ceiling without --external-sources (#6443)
+upstream-commit: e31bc6e fix(pi): restore watcher continuity across successor gaps and make extension log opt-in (#5489)
+upstream-commit: 1f3e769 fix(pi): hide duplicate assistant finals from hidden processing retries (#5863)
+upstream-commit: fede619 test(pi): accept Pi 1.0.1's renamed HTML export renderer lookup (#6530)
+reconcile-required: yes
+inventory: attention
+inventory-uncovered-count: 2
+exit=0

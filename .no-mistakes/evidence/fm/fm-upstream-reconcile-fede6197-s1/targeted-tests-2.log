@@ -1,0 +1,326 @@
+FM_TEST_BEGIN 2026-10-04T09:59:41Z tests/fm-wake-queue.test.sh family=watcher-wake-lock expected_gate_skip=none
+ok - an abandoned same-process lock hold is reclaimed; a parent's live hold is not
+ok - without BASHPID a subshell cannot release or reclaim its parent lock and owns its own hold
+ok - bounded acquire hands ownership to the waiting caller after contention
+ok - presentation lock waits are bounded and retriable without weakening acknowledgement atomicity
+ok - malformed presentation locks report acquire failure instead of contention
+tests/wake-helpers.sh: line 349: 11535 Killed: 9                  PATH="$dir/fakebin:$PATH" FM_FAKE_NOW_FILE="$dir/now" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" FM_FAKE_TMUX_WINDOW='firstmate:fm-mate' FM_SECONDMATE_WAKE_STALL_SECS=1 FM_SECONDMATE_LIVENESS_SECS=99999999 FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch-$leg.out" 2> "$dir/watch-$leg.err"
+tests/wake-helpers.sh: line 349: 12174 Killed: 9                  PATH="$dir/fakebin:$PATH" FM_FAKE_NOW_FILE="$dir/now" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" FM_FAKE_TMUX_WINDOW='firstmate:fm-mate' FM_SECONDMATE_WAKE_STALL_SECS=1 FM_SECONDMATE_LIVENESS_SECS=99999999 FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch-$leg.out" 2> "$dir/watch-$leg.err"
+tests/wake-helpers.sh: line 349: 14280 Killed: 9                  PATH="$dir/fakebin:$PATH" FM_FAKE_NOW_FILE="$dir/now" FM_HOME="$dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$dir/state" FM_FAKE_TMUX_WINDOW='firstmate:fm-mate' FM_SECONDMATE_WAKE_STALL_SECS=1 FM_SECONDMATE_LIVENESS_SECS=99999999 FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$dir/watch-$leg.out" 2> "$dir/watch-$leg.err"
+ok - foreign secondmate queue alerts once per no-progress episode without age-only or cascade noise
+ok - declared external-wait pause rows do not feed secondmate wake-loop escalation
+ok - a reprovisioned queue generation starts a fresh no-progress interval
+ok - an active turn defers the secondmate stall escalation without cancelling it
+ok - a long-lived mate mid-turn is not a stall, but a queue frozen past the busy bound still alarms
+ok - a proven-idle leftover row is rung so the child home can drain without a parent alarm
+ok - busy panes defer without a ring and unknown panes keep the parent alarm
+ok - a leftover row that survives a proven-idle ring still surfaces as a genuine stall
+ok - secondmate stall markers reject symlinks without touching their targets
+ok - stall publication acknowledgement closes the pre-marker crash window
+ok - empty prefix mate cleanup preserves another mate's stall receipt
+ok - self-announced appends suppress only their own bytes and fail toward waking
+ok - separate self-announced answers after a fold stay owned; worker decisions and later lines still wake
+ok - an unreadable status still reads as unreported, with or without owned growth
+ok - a worker resolved in fold lag still wakes after this home's close
+ok - owned growth suppresses the wake without hiding the turn-ended annotation
+ok - historical annotations replay nothing already announced and keep everything new
+wake drain: queue lock could not be acquired safely
+not ok - concurrent append/drain subprocess failed
+FM_TEST_END 2026-10-04T10:01:22Z tests/fm-wake-queue.test.sh exit=1 duration_ms=100249 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T10:01:22Z tests/fm-session-start.test.sh family=session-bootstrap expected_gate_skip=none
+ok - context digest distinguishes ABSENT, empty-but-present, and populated files
+ok - a lock refusal prints a loud read-only banner, skips every mutating step, and still completes the digest
+ok - session start stays read-only when lock ownership cannot be published
+ok - locked session start freezes trace context and lock refusal leaves it unchanged
+ok - concurrent session-lock acquisition admits exactly one live harness
+ok - digest sections are ordered safety-preamble first, live fleet state before curated memory
+ok - the read-once contract is stated once, ahead of the sources it governs
+ok - session start: configured and auto-detected Herdr homes never require tmux
+ok - session start: an absent recorded tmux window relaunches its Pi secondmate exactly once, off the blocking path
+ok - session start: a deferred relaunch is always reported, so the digest's stale endpoint record cannot stand
+ok - session start: inactive reconciliation runs after the digest and retains its durable wake
+ok - session start: an unreachable host delays a reported check, not the digest
+ok - session start: a deferred result the digest outran still reaches the agent as a wake
+ok - session start: a read-only session declares its skipped network checks rather than dropping them
+ok - session start: the tasks-axi compatibility verdict is computed once and reused
+ok - session start: an existing ambiguous Pi process prevents duplicate recovery
+ok - session start: transient tmux unreadability never licenses a relaunch
+ok - session start: the proven bare-shell recovery path remains intact
+ok - session start: a confirmed Herdr husk is closed and relaunched
+ok - status tail is bounded to the configured line count, with the full log path pattern printed
+ok - status tail lines are capped with a truncation marker while the full log stays reachable
+ok - orphan status logs are summarized as a count plus recent ids
+ok - hold_reason is capped at 220 characters on tasks-axi and manual backlog paths
+ok - projects.md and secondmates.md rows are capped at 220 characters with the full path named
+ok - work under way prints identity keys, endpoint verdict, and a shared two-line status tail
+ok - work-under-way budget bounds the first record, header included
+ok - recovery commands follow split-home overrides and quote paths with spaces
+ok - a fixture with many orphan status logs keeps the digest under the 64 KB ceiling
+ok - byte budgets share spending, disclose overflow, and preserve supervision
+ok - pending incidental findings surface in the digest and stay silent when absent
+ok - tmux endpoint liveness is reported per task: alive for a live window, dead for a gone one
+ok - herdr endpoint liveness is reported per task: alive, dead for exit 1, dead for any other probe status
+skip: /proc not readable (the read-death shape needs process ancestry)
+Terminated: 15
+ok - a hung per-task endpoint read hits its configured bound, reports the task, and leaves nothing stuck
+Terminated: 15
+ok - a padded-zero per-read bound falls back to the 10s default instead of removing the bound
+ok - the perl timeout fallback reports a signal death as a nonzero status
+skip: /proc not readable (the digest-death shape needs process ancestry)
+ok - fm-session-start.sh composes the real fm-lock.sh, fm-bootstrap.sh, and fm-wake-drain.sh output verbatim
+ok - locked Pi session start replays leading routine outcomes, preserves the captain barrier, and sweeps only dead leases
+ok - non-Pi session start neither sweeps nor replays Pi branch state
+ok - session start seeds an existing outcome store's absent display tail copy while away, moving no marker
+ok - compatible tasks-axi backlog rendering drops done rows and keeps every in-flight, held, and blocked row
+ok - the startup backlog bound cuts only dispatchable queued rows and discloses the remainder exactly
+ok - manual backlog rendering drops done rows, keeps every held or blocked title line, and bounds the rest
+ok - unavailable or incompatible tasks-axi falls back to compact manual backlog rendering
+ok - an empty fleet reports (none) for in-flight tasks and an absent AFK flag
+ok - session start emits X-mode cadence guidance in the harness supervision block
+ok - next step delegates watcher ownership to the AFK daemon
+ok - next step delegates watcher ownership to the daemon in quiet mode, distinctly from away mode
+ok - the AFK digest reads a quiet record as a present captain holding nothing, and an away record as hold-for-return
+ok - a legacy empty .afk flag (written before mode existed) still reads as away mode
+ok - session start emits exactly one detected harness block and reports Pi extension load state
+ok - session start preserves pi-signed primary identity while applying Pi extension guarantees
+ok - session start rejects stale Pi loaded markers
+ok - session start rejects a Pi watcher generation left in handoff
+ok - session start accepts current Pi markers written before lock acquisition
+ok - session start emits the omp block and reports omp extension load state
+ok - session start accepts current omp markers written before lock acquisition
+ok - session start rejects Pi sessions missing the turn-end guard marker
+ok - session start rejects Pi loaded markers from previous sessions
+ok - the pure-Bash watchdog bounds session start, kills its hung grandchild, and emits the truncation contract
+ok - the portable timeout path force-kills a command that ignores TERM
+ok - a session start inside its budget prints no truncation banner
+ok - a failed byte-counter mktemp still emits the full digest
+ok - the runtime bound leaves enough ancestry headroom for a deeply nested session to take the lock
+ok - --reemit reprints the digest without repeating startup's mutating sweeps and still drains queued wakes
+ok - true-start AGENTS baselines stay immutable while every drifted Pi compact re-emits the current contract
+ok - read-only Pi compact refreshes against the rebuilding session identity without mutation
+ok - Codex reset sources do not claim an unavailable instruction-refresh channel
+ok - instruction baselines require SHA-256 and successful startup completion
+ok - --reemit re-verifies lock ownership and keeps repair ownership with whoever holds it
+ok - an installed extension renders its own bounded subsection ahead of the network checks
+ok - a home with no installed extensions prints no EXTENSIONS section at all
+ok - a failing contributor degrades to a visible diagnostic without stopping the digest
+ok - a hanging contributor is bounded and the session start completes anyway
+ok - session start reports degraded vault and stays silent when vault is healthy
+# fm-session-start.test.sh: all assertions passed
+FM_TEST_END 2026-10-04T10:21:40Z tests/fm-session-start.test.sh exit=0 duration_ms=1217902 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T10:21:40Z tests/fm-pi-branch-extension.test.sh family=standalone expected_gate_skip=none
+FM_TEST_BEGIN 2026-10-04T10:21:40Z tests/fm-extension-binding.test.sh family=standalone expected_gate_skip=none
+ok - unknown extension conformance section selectors fail before setup
+ok - the section coordinator propagates ordered failures and bounded cleanup
+not-autohandled: example-file (left for the handler; still unacknowledged)
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 257: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 259: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-backend.sh: No such file or directory
+not-autohandled: flow-source (left for the handler; still unacknowledged)
+ok - the shipped file-signal package is a runnable end-to-end external adapter
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 257: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 259: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-backend.sh: No such file or directory
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 257: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 259: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-backend.sh: No such file or directory
+ok - one external adapter registers, invokes, captures unhandled evidence, classifies, and terminally retires end to end
+ok - register-extension and reconcile of an unhandled extension result take their locks in one order
+
+all extension-binding tests passed
+not-autohandled: remote-source (left for the handler; still unacknowledged)
+not-autohandled: example-symlinked (left for the handler; still unacknowledged)
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 257: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 259: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-backend.sh: No such file or directory
+ok - a home reached through a symlinked ancestor captures external evidence normally
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 257: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-task-inbox-lib.sh: No such file or directory
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-procevent.sh: line 259: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-test-run.XrzltL/w4/tmp/fm-extension-binding.iRCUry/remote-root/bin/fm-backend.sh: No such file or directory
+ok - serialized remote binding crosses fm-on through addressed-home capture and retirement
+
+all extension-binding tests passed
+not ok - an isolated extension conformance section failed
+FM_TEST_END 2026-10-04T10:22:14Z tests/fm-extension-binding.test.sh exit=1 duration_ms=34265 gate_skip=false
+ok - fm_branch_outcomes and fm_branch_processed call headers match stock on Pi before and from 0.99
+ok - fm_branch_outcomes hides through ToolExecutionComponent while Calm-off and HTML export stay stock
+ok - the installed Pi still bounds the picker's list and ranks its search
+ok - branch owns accepted wakes with a stable prefix and deterministic verdict-driven delivery
+ok - a captain outcome reaches main's model as one typed, sequence-keyed processing request while routine notes stay plain
+ok - requested and unsolicited healthy outcomes keep distinct delivery and event ownership
+ok - captain outcomes are exact and exactly once across crash, reload, busy main, compaction, and an unrelated assistant response
+ok - a captain outcome opens one sequence-keyed processing turn, survives empty and unrelated answers, is re-presented at run end and session start, and closes only on its acknowledgement
+ok - Pi: an abbreviated processing request points to the full outcome and instructs main to read it first
+ok - Pi: a marker-less >1 MiB backlog is presented oldest first in bounded requests and continues after batch acknowledgement
+ok - an unprocessed captain row the store lists without its age is reported to main, never formatted undated, and stays unprocessed until the store is healthy
+ok - scopeForUnreadWake excludes every main-only class without vetoing eligible task-local rows, and writes the eligible snapshot
+ok - second-mate signal rows route by their new span while crewmate and stale routing stay unchanged
+ok - branch prompt_cache_key is stable per home across sessions and distinct between homes
+ok - branch default-on eligibility (task-scoped, heartbeat, legacy flag ignored) binds and a broken branch rejects to watcher fallback
+ok - under the away-posture record the wake carries the verbatim read-back tail, claims every row, opens no processing turn, cancels a pending request, and presents the accumulated rows after archive
+ok - Pi branch: an unchanged held outcome reaches the captain once across cadences, and a later red check on the task still does
+ok - an accepted away-only wake rejects after archive, while a drained task-local wake stays a quiet no-op
+ok - a claimed heartbeat row on a non-heartbeat away wake lifts task scoping for the fleet report
+ok - a heartbeat review survives a check row arriving before its drain
+ok - fm_branch_report refuses a task the wake did not name, fleet included, while a heartbeat is unscoped
+ok - pre-drain eligibility re-check excludes a newly main-owned row without deferring eligible work
+ok - a co-present needs-decision row neither vetoes nor falsely settles routine branch delivery
+ok - a settled branch turn without a durable outcome falls back and releases its grant for main replay
+ok - provider-error latches cool down, re-probe once with backoff, and recover through a durable report
+ok - selection changes preserve in-flight transcript ownership and reset provider-error streaks
+ok - a stale main claim returns the durable wake to watcher delivery
+ok - pre-drain eligibility re-check no-ops an already-drained wake
+ok - dialog mirror filters tool and operational traffic, lands before wakes, and keeps a durable cursor
+ok - the dialog mirror re-anchors for each session's new branch conversation and stays incremental within it
+ok - every main session start begins a new branch conversation while one session keeps its own
+ok - the current pin state binds every branch build, and clearing it returns the branch to main's model
+ok - unpinned branches follow main model changes live while pinned branches stay fixed
+ok - supervision-model command persists the captain's pick and rebinds the live branch
+ok - supervision-model opens a bounded searchable list, follow main first, and pins the branch alone
+ok - branch model picker keeps follow main first and filters the eligible catalog
+ok - the effort pin binds every branch build, and clearing it returns the branch to main's effort
+ok - unpinned branches follow main effort changes live while pinned branches stay fixed
+ok - an extension-registered provider resolves in the isolated branch runtime
+ok - supervision-model runs an effort picker after the model picker and persists both independently
+ok - an unusable model pin rejects to watcher fallback and an unparseable one is treated as no pin
+ok - replacement activation cleans old branch leases and retries failed cleanup
+ok - branch activates on a cold start once the lock is acquired, never before
+ok - queued wakes and mirrors stop mutating branch state after lock ownership is lost
+ok - stale reports, shells, mirrors, cursors, leases, and prompts perform no side effects
+ok - a Pi session that does not own the lock accepts nothing and mutates no branch state
+ok - an extension rebind re-mirrors undelivered dialog instead of dropping it
+ok - rotation replaces the conversation only after a wake has settled, capturing first
+ok - a settled wake counts even when the durable-outcome guard rejects it
+ok - outcome delivery keeps the event loop running and interleaved reports stay ordered and exactly once
+ok - a session replaced mid-delivery cancels cleanly and the stored outcome still arrives exactly once
+ok - a failing store script surfaces to the branch and its outcome is neither lost nor delivered twice
+ok - a failed cursor write re-delivers a routine note exactly once more while a captain outcome stays deduplicated
+FM_TEST_END 2026-10-04T10:25:33Z tests/fm-pi-branch-extension.test.sh exit=0 duration_ms=233560 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T10:25:33Z tests/fm-spawn-dispatch-profile.test.sh family=backend-dispatch expected_gate_skip=none
+ok - allowlist=absent preserves the operational floor and filters only when opted in
+ok - allowlist=missing-config preserves the operational floor and filters only when opted in
+ok - allowlist=enabled preserves the operational floor and filters only when opted in
+ok - allowlist=empty preserves the operational floor and filters only when opted in
+ok - invalid allowlist names refuse before launch or task publication
+ok - inaccessible config with present allowlist refuses before launch or task publication
+ok - inaccessible config with absent allowlist refuses before launch or task publication
+ok - inaccessible ancestor with present allowlist refuses before launch or task publication
+ok - inaccessible ancestor with absent allowlist refuses before launch or task publication
+ok - secondmate launch inherits the allowlist for subsequent worker launches
+ok - local inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - remote inheritance preserves the allowlist on source errors and mirrors proven absence
+ok - fm-spawn: actual ship/scout launch commands deliver the worker role contract
+ok - no --model/--effort records defaults and types the claude launch instructions
+ok - a claude launch publishes the brief as an operational-inbox record and passes only the doorbell
+ok - a secondmate claude launch publishes its brief record into the secondmate's own home
+ok - a claude spawn whose launch-brief record cannot publish stops with a clear error and sends no launch
+ok - non-cursor launches clear inherited Cursor identity markers
+ok - relative home overrides ignore CDPATH and become absolute before spawn launch construction
+ok - FM_HOME defaults resolve relative paths and preserve absolute spellings
+ok - absolute override spellings are preserved in spawn launch paths
+ok - unresolvable relative spawn overrides fail with named diagnostics
+ok - active crew-dispatch profile requires an explicit harness for ship spawns
+ok - active crew-dispatch profile requires an explicit harness for scout spawns
+ok - active crew-dispatch profile allows an explicit resolved harness
+ok - active crew-dispatch profile allows the legacy positional harness form
+ok - active crew-dispatch profile allows the raw launch-command escape hatch
+ok - a chained raw launch commits through the AI-trailer strip in every step
+ok - claude receives --model and --effort profile flags
+ok - codex receives --model and model_reasoning_effort profile flags
+ok - codex Luna receives --model and model_reasoning_effort max profile flags
+ok - codex omits max for models without the catalog capability
+ok - a codex crewmate launches with no hook layer and keeps its turn-end signal
+ok - a codex secondmate keeps the project hook layer its primary session runs on
+ok - grok receives --model and --reasoning-effort profile flags
+ok - grok omits unsupported max reasoning effort
+ok - grok omits unsupported xhigh reasoning effort
+ok - cursor receives its model-qualified reasoning class and exact task workspace
+ok - cursor refuses model ids absent from its resolved binary's live catalog
+ok - cursor preserves the requested model when its live catalog is unreachable
+ok - agy is refused as a secondmate harness, matching muse's boundary
+ok - opencode receives --model and the effort as its config's agent variant
+ok - opencode without an effort keeps its launch config unchanged
+ok - opencode emits the variant for an effort the openai family exposes
+ok - opencode omits the variant for an effort outside the model family's list
+ok - native effort validator checks harness and model as separate axes
+ok - Ultra is explicit for native Pi and Pi-signed, including direct-PR, and refuses unsupported profiles before provisioning
+ok - batch dispatch preserves native Ultra in metadata and launch flags
+ok - Pi scout spawn enters the recorded worktree before launch
+ok - pi receives --model and --thinking max profile flags
+ok - Pi launch probing omits --tui-mode on older Pi and preserves it on supporting Pi
+ok - pi-signed shares Pi launch semantics while preserving its configured and recorded identity
+ok - pi-signed refuses safely and actionably when the selected executable is unavailable
+ok - pi-signed is a distinct persistent secondmate runtime with shared Pi supervision semantics
+ok - seeded Pi/pi-signed secondmate launches carry session --approve when advertised
+ok - ordinary Pi worker launches omit --approve
+ok - Pi approve probing omits --approve when help does not advertise it
+ok - batch dispatch forwards shared --harness, --model, and --effort to every pair
+ok - claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store
+ok - the primary-owned Lavish server address reaches every worker launch
+cat: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-spawn-dispatch-profile.R15RZI/profile-lavish-ambient/pane.log: No such file or directory
+ok - absent Lavish configuration preserves the destination environment
+ok - claude omits the config-dir prefix when firstmate runs with the single-store default
+ok - config/claude-permission-mode=bypass launches exactly as an absent file does
+ok - config/claude-permission-mode=auto replaces --dangerously-skip-permissions with --permission-mode auto
+ok - config/claude-permission-mode=auto reaches scout launches too
+ok - claude worker launches cover the task-channel directories in bypass and auto modes
+ok - an unrecognized config/claude-permission-mode token refuses before any endpoint or metadata
+ok - config/claude-permission-mode changes claude launches only
+ok - non-claude harnesses do not receive the claude CLAUDE_CONFIG_DIR prefix
+ok - a claude task launch establishes only Firstmate's task control channels through the system prompt
+ok - a persistent claude secondmate keeps its supervisor contract without a task-worker authority overlay
+ok - fm-spawn: a Claude launch longer than 1024 bytes is delivered intact through the staging path
+ok - a claude crewmate launch carries the attribution-off policy in its own settings
+ok - keep-ai-trailers omits Claude attribution settings and the pane strip hooks
+ok - keep-ai-trailers is inherited so a secondmate's crew launch keeps AI trailers
+ok - a claude secondmate launch carries the attribution-off policy too
+ok - active crew-dispatch profile does not block secondmate launches
+# all fm-spawn-dispatch-profile tests passed
+FM_TEST_END 2026-10-04T10:34:01Z tests/fm-spawn-dispatch-profile.test.sh exit=0 duration_ms=507612 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T10:34:01Z tests/fm-spawn-launch-postcondition.test.sh family=unclassified expected_gate_skip=none
+ok - a launch that produces a live agent is reported as spawned and recorded
+ok - a launch that leaves a bare shell refuses, prints no spawned line, and records the failure
+ok - an endpoint the classifier cannot attribute proceeds instead of producing a false refusal
+ok - an opted-in home spawns normally with no Automic Vault CLI on PATH
+FM_TEST_END 2026-10-04T10:34:25Z tests/fm-spawn-launch-postcondition.test.sh exit=0 duration_ms=24550 gate_skip=false
+FM_TEST_BEGIN 2026-10-04T10:34:26Z tests/fm-supervision-host.test.sh family=afk expected_gate_skip=none
+ok - host+hook: a successor closed before exit_to_main does not suppress the branch-outcome rewake
+ok - host+hook: a successor that closes during a held engine turn does not suppress the branch-outcome rewake
+ok - host+hook: a hand-back on a pending handling marker rewakes main when downtime restoration fails
+ok - host+hook: a hand-back on an announced handling marker rewakes main when downtime restoration fails
+ok - host: parked child-exit sampling uses ordinary half-second sleeps
+ok - report surface: only the branch actor's current turn may report, and only on the tasks its wake names
+ok - report surface: visible late outcomes queue a relay, while silent outcomes remain stored without a wake or note
+ok - dispatch entry: the host reads branch eligibility, the offer rule, and the wake prompt from the Pi branch's own owner
+ok - drain: BRANCH OUTCOMES runs on a Claude home by default and on another primary with the file, never with off, and never on Pi
+ok - drain: captain outcomes come first, and routine overflow collapses into a count one drain clears
+ok - drain: suppressed routine repeats stay off the host drain
+ok - drain: repeated captain outcomes collapse per task, and the byte cap presents only the run its acknowledgement covers
+ok - drain: a long away window costs one short drain, captain outcomes collapsed per task and routine overflow counted, and nothing from it is shown again
+ok - drain: the BRANCH OUTCOMES budgets count bytes, cutting multibyte summaries by whole characters in any locale
+ok - drain: branch outcomes stay unread when a projection of the store fails
+ok - drain: branch outcomes stay unread and the drain fails when jq is missing
+ok - drain: branch outcomes stay unread when the drain cannot print them
+ok - drain: a legacy backlog is presented with each outcome's age and a check-first instruction, never adopted
+ok - drain: a keyed decision survives acknowledgement through a newer outcome for its task
+ok - drain: an outcome carried across a switch off Pi comes back with its age, never adopted
+ok - drain: an outcome nothing has shown is presented until acknowledged, and a repeated acknowledgement changes nothing
+ok - drain: an outcome the host drain presented but main never acknowledged stays unprocessed across a switch to Pi
+ok - drain: an outcome the host drain presented but main never acknowledged survives an outcome index repair
+ok - host: an attended wake the branch may take is handled on the engine, and its routine outcome never wakes main
+ok - host: an attended captain outcome wakes main once and stays in its drain until main acknowledges it
+ok - host: a captain outcome recorded after the captain left waits for the return, then reaches main's drain
+ok - host: a quiet record without its daemon is a present captain, so outcomes and decisions reach main
+ok - host: an attended decision close stays main's exactly as the plain arm delivers it
+ok - host: an off written while the host is parked sends the next attended close to main, naming the opt-out
+ok - host: a main-only pass-through leaves the successor watcher running and the close undelivered for main
+ok - host: an attended close whose main session cannot be identified reaches main and runs no engine turn
+ok - host: a decision close accepted away whose turn starts attended still reaches main unchanged
+ok - host: an attended close whose task turns main-only before its turn still reaches main unchanged
+ok - host+hook: an attended main-only pass-through rewakes main and keeps its successor watcher
+ok - host+hook: a captain outcome beside a quiet record rewakes the present captain with no away note
+ok - host+hook: a Claude home without config/supervision-host runs the host at the default engine, and an off file restores the plain arm
+ok - host+hook: a close that turns main-only at its turn rewakes main and keeps its successor watcher
+ok - host+hook: failed at-turn downtime write notifies main despite a healthy successor
+ok - host+hook: a successor close that lands during main's turn is delivered at the next turn end
+ok - host+hook: the next park takes over the cycle a main-only pass-through left, so one arm owns it
+ok - host+hook: a park stopped mid take-over leaves the take-over to the next park
+ok - host+hook: a successor that cannot be recorded is stopped, and main's next turn end arms a fresh cycle
+ok - host: a primary with no verified dialog mirror keeps every attended close on main, and its away posture still runs
+ok - host: each wake carries the captain's dialog since the last wake, without operational input
+ok - host: the dialog mirror, its feed, and the wake file are owner-only

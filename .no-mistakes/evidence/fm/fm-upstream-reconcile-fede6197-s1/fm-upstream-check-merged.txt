@@ -1,0 +1,62 @@
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upchk.b0NC08/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upchk.b0NC08/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main fede619
+origin-ref: origin/main 643a4de
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: current
+reconcile-required: no
+inventory: attention
+inventory-entries: 46
+inventory-entry: extension-contract ok
+inventory-entry: automic-vault-injection ok
+inventory-entry: token-spend-view ok
+inventory-entry: agy-harness-preflight ok
+inventory-entry: rate-limit-classification ok
+inventory-entry: unmetered-quota-report ok
+inventory-entry: pi-branch-rotation ok
+inventory-entry: wake-batch-coalescing ok
+inventory-entry: spawn-launch-postcondition ok
+inventory-entry: upstream-reconciliation ok
+inventory-entry: stale-repeat-suppression ok
+inventory-entry: auto-standdown ok
+inventory-entry: daemon-lock-liveness ok
+inventory-entry: claims-audit ok
+inventory-entry: batched-captain-answers ok
+inventory-entry: scout-research-standards ok
+inventory-entry: delivery-posture-gate ok
+inventory-entry: pi-primary-growth ok
+inventory-entry: portfolio-attention-limit ok
+inventory-entry: herdr-native-submit-proof ok
+inventory-entry: pr-forge-state-classification ok
+inventory-entry: teardown-dedupe-marker-sync ok
+inventory-entry: config-inherit-single-owner ok
+inventory-entry: changed-selection-deletions ok
+inventory-entry: away-escalation-delivery ok
+inventory-entry: catch-all-marker-crosscheck ok
+inventory-entry: rearm-resurface-empty-queue ok
+inventory-entry: herdr-native-idle-unknown ok
+inventory-entry: session-lock-harness-case ok
+inventory-entry: autoarm-actionable-rewake ok
+inventory-entry: mail-plane-input-hardening ok
+inventory-entry: launch-agent-xml-escaping ok
+inventory-entry: macos-platform-binary-holder ok
+inventory-entry: herdr-relaunch-identity-release ok
+inventory-entry: merge-plane-completion-receipts ok
+inventory-entry: branch-outcome-repeat-suppression ok
+inventory-entry: unreadable-posture-refusal ok
+inventory-entry: calm-composer-shapes ok
+inventory-entry: secondmate-same-origin-worktree ok
+inventory-entry: bearings-board-private ok
+inventory-entry: pi-idle-observer ok
+inventory-entry: contributions-read-concurrency ok
+inventory-entry: fleet-health-procevent ok
+inventory-entry: private-ci-repo-references ok
+inventory-entry: lint-root-memory-cap ok
+inventory-entry: residual-private-drift needs-review
+inventory-drift: compared fede6197556c188dd2f451809d17851760d1ef46..origin/main vs fede6197556c188dd2f451809d17851760d1ef46..upstream/main
+inventory-uncovered-count: 0

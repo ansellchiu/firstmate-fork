@@ -1,0 +1,127 @@
+## AFTER merge (HEAD=643a4de2)
+inventory: attention
+inventory-entries: 46
+inventory-entry: extension-contract ok
+inventory-entry: automic-vault-injection ok
+inventory-entry: token-spend-view ok
+inventory-entry: agy-harness-preflight ok
+inventory-entry: rate-limit-classification ok
+inventory-entry: unmetered-quota-report ok
+inventory-entry: pi-branch-rotation ok
+inventory-entry: wake-batch-coalescing ok
+inventory-entry: spawn-launch-postcondition ok
+inventory-entry: upstream-reconciliation ok
+inventory-entry: stale-repeat-suppression ok
+inventory-entry: auto-standdown ok
+inventory-entry: daemon-lock-liveness ok
+inventory-entry: claims-audit ok
+inventory-entry: batched-captain-answers ok
+inventory-entry: scout-research-standards ok
+inventory-entry: delivery-posture-gate ok
+inventory-entry: pi-primary-growth ok
+inventory-entry: portfolio-attention-limit ok
+inventory-entry: herdr-native-submit-proof ok
+inventory-entry: pr-forge-state-classification ok
+inventory-entry: teardown-dedupe-marker-sync ok
+inventory-entry: config-inherit-single-owner ok
+inventory-entry: changed-selection-deletions ok
+inventory-entry: away-escalation-delivery ok
+inventory-entry: catch-all-marker-crosscheck ok
+inventory-entry: rearm-resurface-empty-queue ok
+inventory-entry: herdr-native-idle-unknown ok
+inventory-entry: session-lock-harness-case ok
+inventory-entry: autoarm-actionable-rewake ok
+inventory-entry: mail-plane-input-hardening ok
+inventory-entry: launch-agent-xml-escaping ok
+inventory-entry: macos-platform-binary-holder ok
+inventory-entry: herdr-relaunch-identity-release ok
+inventory-entry: merge-plane-completion-receipts ok
+inventory-entry: branch-outcome-repeat-suppression ok
+inventory-entry: unreadable-posture-refusal ok
+inventory-entry: calm-composer-shapes ok
+inventory-entry: secondmate-same-origin-worktree ok
+inventory-entry: bearings-board-private ok
+inventory-entry: pi-idle-observer ok
+inventory-entry: contributions-read-concurrency ok
+inventory-entry: fleet-health-procevent ok
+inventory-entry: private-ci-repo-references ok
+inventory-entry: lint-root-memory-cap ok
+inventory-entry: residual-private-drift needs-review
+inventory-drift: compared 8f756bbc287c5bdfacc64a7cc09e8516c64fc919..HEAD vs 8f756bbc287c5bdfacc64a7cc09e8516c64fc919..fede6197
+inventory-contended: .agents/skills/captain-hold-lifecycle/SKILL.md
+inventory-contended: .pi/extensions/fm-branch-supervision.ts
+inventory-contended: .pi/extensions/fm-primary-pi-watch.ts
+inventory-contended: bin/backends/herdr.sh
+inventory-contended: bin/fm-afk-return.sh
+inventory-contended: bin/fm-captain-hold.sh
+inventory-contended: bin/fm-claude-stop-autoarm.sh
+inventory-contended: bin/fm-composer-lib.sh
+inventory-contended: bin/fm-fleet-snapshot.sh
+inventory-contended: bin/fm-lint.sh
+inventory-contended: bin/fm-session-start.sh
+inventory-contended: bin/fm-spawn.sh
+inventory-contended: bin/fm-test-run.sh
+inventory-contended: bin/fm-wake-lib.sh
+inventory-contended: docs/captain-hold-lifecycle.md
+inventory-contended: docs/configuration.md
+inventory-contended: docs/fm-test-portable-shards.md
+inventory-contended: docs/pi-supervision-branch.md
+inventory-contended: docs/verification/runtime-backends.md
+inventory-contended: docs/watcher-continuity.md
+inventory-contended: tests/fm-afk-return.test.sh
+inventory-contended: tests/fm-backend-herdr.test.sh
+inventory-contended: tests/fm-calm-pi-extension.test.sh
+inventory-contended: tests/fm-captain-hold-lifecycle.test.sh
+inventory-contended: tests/fm-claude-stop-autoarm.test.sh
+inventory-contended: tests/fm-composer-lib.test.sh
+inventory-contended: tests/fm-lint.test.sh
+inventory-contended: tests/fm-pi-branch-extension.test.sh
+inventory-contended: tests/fm-pi-branch-live-e2e.test.sh
+inventory-contended: tests/fm-pi-watch-extension.test.sh
+inventory-contended: tests/fm-spawn-dispatch-profile.test.sh
+inventory-contended: tests/fm-supervision-host.test.sh
+inventory-contended: tests/fm-wake-queue.test.sh
+inventory-contended: tests/fm-watch-arm.test.sh
+inventory-uncovered-count: 0
+exit=0
+
+## BEFORE merge (head=ce05defb)
+inventory: invalid: inventory not found: /dev/fd/11
+exit=1
+
+## BEFORE merge (head=ce05defb, its own inventory)
+inventory: attention
+inventory-entries: 45
+inventory-entry: extension-contract upstream-unreviewed-change: bin/fm-session-start.sh
+inventory-entry: automic-vault-injection upstream-unreviewed-change: docs/configuration.md
+inventory-entry: agy-harness-preflight upstream-unreviewed-change: bin/fm-composer-lib.sh,bin/fm-spawn.sh,bin/fm-test-run.sh,docs/configuration.md,tests/fm-spawn-dispatch-profile.test.sh
+inventory-entry: unmetered-quota-report upstream-unreviewed-change: bin/fm-test-run.sh
+inventory-entry: pi-branch-rotation upstream-unreviewed-change: .pi/extensions/fm-branch-supervision.ts,docs/pi-supervision-branch.md,tests/fm-pi-branch-extension.test.sh,tests/fm-pi-branch-live-e2e.test.sh
+inventory-entry: wake-batch-coalescing upstream-unreviewed-change: docs/watcher-continuity.md
+inventory-entry: spawn-launch-postcondition upstream-unreviewed-change: bin/fm-spawn.sh
+inventory-entry: upstream-reconciliation upstream-unreviewed-change: bin/fm-test-run.sh
+inventory-entry: stale-repeat-suppression upstream-unreviewed-change: bin/fm-wake-lib.sh,docs/configuration.md,tests/fm-wake-queue.test.sh
+inventory-entry: auto-standdown upstream-unreviewed-change: bin/fm-spawn.sh
+inventory-entry: daemon-lock-liveness upstream-unreviewed-change: bin/fm-wake-lib.sh
+inventory-entry: claims-audit upstream-unreviewed-change: .agents/skills/captain-hold-lifecycle/SKILL.md,bin/fm-captain-hold.sh,docs/captain-hold-lifecycle.md,tests/fm-captain-hold-lifecycle.test.sh
+inventory-entry: batched-captain-answers upstream-unreviewed-change: bin/fm-captain-hold.sh,docs/captain-hold-lifecycle.md,tests/fm-captain-hold-lifecycle.test.sh
+inventory-entry: delivery-posture-gate upstream-unreviewed-change: bin/fm-spawn.sh
+inventory-entry: pi-primary-growth upstream-unreviewed-change: .pi/extensions/fm-primary-pi-watch.ts,bin/fm-test-run.sh,docs/pi-supervision-branch.md,tests/fm-calm-pi-extension.test.sh,tests/fm-pi-watch-extension.test.sh
+inventory-entry: portfolio-attention-limit upstream-unreviewed-change: bin/fm-fleet-snapshot.sh,bin/fm-spawn.sh,bin/fm-test-run.sh,docs/configuration.md
+inventory-entry: herdr-native-submit-proof upstream-unreviewed-change: bin/backends/herdr.sh,tests/fm-backend-herdr.test.sh
+inventory-entry: config-inherit-single-owner upstream-unreviewed-change: docs/configuration.md
+inventory-entry: changed-selection-deletions upstream-unreviewed-change: bin/fm-test-run.sh
+inventory-entry: away-escalation-delivery upstream-unreviewed-change: bin/fm-afk-return.sh,tests/fm-afk-return.test.sh
+inventory-entry: rearm-resurface-empty-queue upstream-unreviewed-change: bin/fm-wake-lib.sh,tests/fm-watch-arm.test.sh
+inventory-entry: herdr-native-idle-unknown upstream-unreviewed-change: bin/backends/herdr.sh,tests/fm-backend-herdr.test.sh
+inventory-entry: autoarm-actionable-rewake upstream-unreviewed-change: bin/fm-claude-stop-autoarm.sh,tests/fm-claude-stop-autoarm.test.sh
+inventory-entry: branch-outcome-repeat-suppression upstream-unreviewed-change: tests/fm-supervision-host.test.sh
+inventory-entry: calm-composer-shapes upstream-unreviewed-change: tests/fm-composer-lib.test.sh
+inventory-entry: secondmate-same-origin-worktree upstream-unreviewed-change: docs/verification/runtime-backends.md
+inventory-entry: private-ci-repo-references upstream-unreviewed-change: docs/fm-test-portable-shards.md
+inventory-entry: residual-private-drift needs-review
+inventory-drift: compared 8f756bbc287c5bdfacc64a7cc09e8516c64fc919..ce05defb vs 8f756bbc287c5bdfacc64a7cc09e8516c64fc919..fede6197
+inventory-uncovered: bin/fm-lint.sh
+inventory-uncovered: tests/fm-lint.test.sh
+inventory-uncovered-count: 2
+exit=0

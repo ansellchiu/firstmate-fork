@@ -1,0 +1,13 @@
+$ fm-captain-hold.sh hold lab-rollout --title 'Rollout choice' --reason <reason with parens + newline>
+lab-rollout
+exit=0
+
+$ stored backlog row:
+4:- [ ] lab-rollout - Rollout choice (repo: firstmate) (kind: captain) (since 2026-10-04) (hold: fm-hold-v1:UGljayB0aGUgcm9sbG91dCAoc3RhZ2VkIHZzLiBiaWctYmFuZykKc2Vjb25kIGxpbmU6IGNvc3QgfiQ0MC9tbw==) (hold-kind: captain)
+
+$ fm-session-start.sh (backlog section)
+exit=0 bytes=   14252
+113:  lab-rollout,queued,captain,firstmate,Rollout choice,none,captain,"Pick the rollout (staged vs. big-bang)\nsecond line: cost ~$40/mo"
+114-
+115-blocked queued:
+116-count: 0
