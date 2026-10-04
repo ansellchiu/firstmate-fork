@@ -145,7 +145,7 @@ Default collection performs bounded concurrent remote-ledger reads for registere
 remote homes under one shared snapshot budget and may refresh the parent-side cache.
 --include-prs additionally performs live GitHub discovery and checks.
 
-Default fields: schema, home, generated, prs, attention,
+Default fields: schema, home, generated, generated_local, today_local, prs, attention,
   portfolio{project,attention,why}, in_flight{id,kind,state,repo,name,doing},
   secondmates{id,state,doing,provenance,freshness,age_seconds,contradiction,reason},
   secondmate_reconcile{id,spawn_gen,host,kind,ids},
@@ -231,7 +231,32 @@ if [ "$GUARD_RC" -eq 4 ]; then
     '{pending:true,blockers:$blockers,reason:$reason}')
 fi
 
+# Same instant as generated, in the machine local zone. Prints
+# generated_local<TAB>today_local (RFC3339 with a colon in the offset, plus
+# YYYY-MM-DD). Fail closed so a UTC calendar date never silently stands in.
+bearings_local_fields() {  # <utc-rfc3339-Z>
+  local utc=$1 epoch raw local_ts today
+  epoch=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$utc" +%s 2>/dev/null \
+    || date -u -d "$utc" +%s 2>/dev/null) || return 1
+  raw=$(date -r "$epoch" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null \
+    || date -d "@$epoch" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null) || return 1
+  case "$raw" in
+    *[+-][0-9][0-9][0-9][0-9]) local_ts="${raw%??}:${raw#"${raw%??}"}" ;;
+    *) return 1 ;;
+  esac
+  today=${local_ts%%T*}
+  case "$today" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+    *) return 1 ;;
+  esac
+  printf '%s\t%s\n' "$local_ts" "$today"
+}
+
 NOW=${FM_BEARINGS_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+LOCAL_FIELDS=$(bearings_local_fields "$NOW") \
+  || { echo "fm-bearings-snapshot: cannot render local clock from generated=$NOW" >&2; exit 1; }
+GENERATED_LOCAL=${LOCAL_FIELDS%%$'\t'*}
+TODAY_LOCAL=${LOCAL_FIELDS#*$'\t'}
 if [ "$ALL_LANDED" = 1 ] || [ "$ALL_SECONDMATES" = 1 ]; then
   if [ "$ALL_LANDED" = 1 ]; then
     SNAP=$(FM_SNAPSHOT_NOW="$NOW" FM_SNAPSHOT_SECONDMATES=0 FM_SNAPSHOT_SECONDMATE_LANDED_PER_HOME=0 "$FLEET" --json) || exit $?
@@ -347,15 +372,11 @@ EOF
 fi
 
 # --- projection: canonical snapshot -> fm-bearings.v1 model (JSON) ----------
-BEARINGS_TODAY=${NOW%%T*}
-case "$BEARINGS_TODAY" in
-  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) : ;;
-  *) BEARINGS_TODAY=$(date -u +%Y-%m-%d) ;;
-esac
 MODEL=$(printf '%s' "$SNAP" | jq \
   --arg home "$HOME_LABEL" \
   --arg now "$NOW" \
-  --arg today "$BEARINGS_TODAY" \
+  --arg generated_local "$GENERATED_LOCAL" \
+  --arg today_local "$TODAY_LOCAL" \
   --arg prs "$PR_STATUS" \
   --arg fields "$FIELDS" \
   --argjson landed_n "$FM_BEARINGS_LANDED" \
@@ -619,6 +640,8 @@ MODEL=$(printf '%s' "$SNAP" | jq \
       schema: "fm-bearings.v1",
       home: $home,
       generated: $now,
+      generated_local: $generated_local,
+      today_local: $today_local,
       prs: $prs,
       contributions:(
         ([$snap.contributions + {owner:"(main)"}]

@@ -323,6 +323,7 @@ For the full `stuck-crewmate-recovery` trigger, including a live worker claiming
 
 - **Talk in outcomes, not mechanics.**
 - Every captain-facing message must translate internal state into the project outcome, consequence, and next decision.
+- A captain-facing time renders in the captain's local zone from a local-labelled source, and a `Z`-suffixed UTC value is never relabeled as a local zone.
 - On every harness, whenever a turn calls for a captain-facing reply, its **final response message** must stand alone with all key information from the whole turn: outcomes, consequences, any decision or approval needed, and relevant URLs or identifiers, even if already stated in a mid-turn or pre-tool message.
 - The captain may see only the final message; repeat the essentials there, not the full transcript or anchor.
 - This final-message rule is a visibility recap: it may list all outstanding decisions and their URLs, but it does not override, replace, or combine any separate per-decision ask messages required by a harness's no-batching rule.

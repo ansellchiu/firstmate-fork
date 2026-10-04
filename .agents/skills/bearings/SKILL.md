@@ -3,7 +3,7 @@ name: bearings
 description: >-
   Generate a "pick up where I left off" fleet digest from firstmate's live fleet state.
   Use when the captain invokes /bearings or asks for a bearings report, morning brief, status report, catch-up, "where did I leave off", or "what's in the works".
-  Plain /bearings is chat-only by default, /bearings file explicitly writes the dated data/status-report-<YYYY-MM-DD>.md artifact, and /bearings lavish additionally builds and arms the interactive fleet board; live PR enrichment remains opt-in and composes with the other modes.
+  Plain /bearings is chat-only by default, /bearings file explicitly writes the dated data/status-report-<YYYY-MM-DD>.md artifact named from the snapshot's today_local calendar date, and /bearings lavish additionally builds and arms the interactive fleet board; live PR enrichment remains opt-in and composes with the other modes.
   Also use on a contributions check wake or when filing work linked to an upstream issue.
   Also load this skill's board-wake handling when a procevent lavish wake's source id matches the canonical source id of the stable bearings board path.
 user-invocable: true
@@ -24,7 +24,7 @@ Board answers are acted on later under the normal authority rules; this skill's 
 ## Invocation modes
 
 - Plain `/bearings` gathers a fresh bounded snapshot and renders the four-section chat digest without creating, deleting, reading, or replacing `data/status-report-<YYYY-MM-DD>.md`.
-- `/bearings file` gathers a fresh bounded snapshot, replaces today's `data/status-report-<YYYY-MM-DD>.md` from scratch, and renders the four-section chat digest with a link or path to that report.
+- `/bearings file` gathers a fresh bounded snapshot, replaces `data/status-report-<YYYY-MM-DD>.md` for the snapshot's `today_local` date from scratch, and renders the four-section chat digest with a link or path to that report.
 - `/bearings lavish` gathers a fresh bounded snapshot, rebuilds and arms the interactive fleet board (the "Lavish board mode" section below), and renders the four-section chat digest with the board's URL inside it.
 - Treat `file` and `lavish` only as explicit invocation options in the slash command.
 - Do not treat natural-language requests such as "write a report", "save this", "persist it", "make a file", or "make a board" as file or lavish mode unless the invocation explicitly includes the standalone option.
@@ -79,8 +79,8 @@ For a contribution wake or linked-issue filing, go directly to Contribution foll
 4. **In explicit file mode only, compose and replace the detailed report file.**
    The report uses the same four complete sections as the chat, in the same order, and adds the detail the chat omits.
    Never read an earlier `data/status-report-*.md` to decide what to omit, include, describe as changed, or call current.
-   Write the full report to `data/status-report-<YYYY-MM-DD>.md` using today's date.
-   If today's file already exists, delete it first, then create a new file from scratch.
+   Write the full report to `data/status-report-<YYYY-MM-DD>.md` using the snapshot's `today_local` date.
+   If that day's file already exists, delete it first, then create a new file from scratch.
    This is the only file-mode write allowed by the skill.
    The detailed report includes:
    - **Title** - `# Bearings - <day> <YYYY-MM-DD>` (use "Morning status" only when the captain specifically asks for a morning brief), followed by two or three sentences framing where things stand.
@@ -166,6 +166,7 @@ Every `/bearings` chat response renders EXACTLY these four sections, in THIS ord
 
 Rules that keep the contract unambiguous:
 
+- Any clock or date the digest or the report states comes from `generated_local` and `today_local` verbatim; `generated` is a UTC machine value that is never relabeled as a local zone and never presented as the captain's time.
 - Every section ALWAYS renders, even when empty, with its short empty-state sentence; never omit a section.
 - Every chat digest and file-mode report is a complete current snapshot, never a delta against a prior report.
 - Recently Landed always renders the bounded current baseline, even when the same completions appeared in an earlier report.
