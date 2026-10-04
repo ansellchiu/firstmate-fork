@@ -1,0 +1,26 @@
+# disarm + arm clears baseline; real quota-axi output, codex weekly shifted and alibaba monthly injected (real alibaba is in error state)
+disarmed: state/burn-watch.check.sh
+armed: state/burn-watch.check.sh
+## t=+0min codex-delta=0 alibaba=95
+burn watch: claude unmeasured
+  [rc=0] alerts={"active":["unmeasured:claude"]}
+## t=+60min codex-delta=40 alibaba=95
+burn watch: codex below 15% (13% remaining); codex dropped 40 points (53% -> 13%)
+  [rc=0] alerts={"active":["drop:codex","floor:codex","unmeasured:claude"]}
+## t=+120min codex-delta=40 alibaba=95
+  [rc=0] alerts={"active":["floor:codex","unmeasured:claude"]}
+## t=+180min codex-delta=0 alibaba=95
+  [rc=0] alerts={"active":["unmeasured:claude"]}
+## t=+240min codex-delta=12 alibaba=95
+burn watch: codex dropped 12 points (53% -> 41%)
+  [rc=0] alerts={"active":["drop:codex","unmeasured:claude"]}
+# alibaba rate: single 1-point step after 6.5h must NOT alert
+## t=+390min codex-delta=12 alibaba=94
+  [rc=0] alerts={"active":["unmeasured:claude"]}
+# alibaba 95->93 over 7h = above 1.5%/day after discounting one quantization point
+## t=+420min codex-delta=12 alibaba=93
+burn watch: alibaba monthly burning faster than 1.5%/day (3.4%/day)
+  [rc=0] alerts={"active":["rate:alibaba","unmeasured:claude"]}
+# same rate next hour: no repeat
+## t=+480min codex-delta=12 alibaba=93
+  [rc=0] alerts={"active":["rate:alibaba","unmeasured:claude"]}

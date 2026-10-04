@@ -1,0 +1,10 @@
+# real quota-axi with claude seven_day shifted -12 (63->51); run bin/fm-watch.sh in lab home
+check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.AZuXve/state/burn-watch.check.sh: burn watch: claude dropped 12 points (63% -> 51%)
+watcher rc=0
+$ cat state/.burn-watch-alerts
+{"active":["drop:claude","unmeasured:alibaba"]}
+
+burn-watch.check-trust
+burn-watch.check.sh
+home-summary.json
+terminal-outcomes

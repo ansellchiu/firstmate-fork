@@ -1,0 +1,9 @@
+# baseline codex real
+burn watch: alibaba unmeasured
+  [rc=0] prev.codex=53 alerts={"active":["rate:alibaba","unmeasured:alibaba","unmeasured:claude"]}
+# state dir made read-only, codex drops 20: expect storage diagnostic, non-zero rc, baseline untouched
+burn watch: state write failed - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.AZuXve/state
+  [rc=1] prev.codex=53 alerts={"active":["rate:alibaba","unmeasured:alibaba","unmeasured:claude"]}
+# storage recovers, same reading: drop is still reported (not lost)
+burn watch: codex dropped 20 points (53% -> 33%)
+  [rc=0] prev.codex=33 alerts={"active":["drop:codex","rate:alibaba","unmeasured:alibaba","unmeasured:claude"]}

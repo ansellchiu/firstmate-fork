@@ -1,0 +1,31 @@
+# watcher again, same reading (claude 51): expect no wake (timeout)
+check: rearm-resurface
+watcher rc=0 (124 = blocked, no wake)
+# claude shifted -45 (->18%, under 20% floor)
+burn watch: claude below 20% (17% remaining)
+  [rc=0] alerts={"active":["drop:claude","floor:claude","unmeasured:alibaba"]}
+# same again: no repeat
+burn watch: claude unmeasured
+  [rc=0] alerts={"active":["drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+# recovery to real value
+  [rc=0] alerts={"active":["drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+# drop again after recovery: re-armed
+  [rc=0] alerts={"active":["drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+# instrument fails
+burn watch: instrument failed - quota-axi
+  [rc=0] alerts={"active":["drop:claude","floor:claude","instrument:quota-axi","unmeasured:alibaba","unmeasured:claude"]}
+# still failing: no repeat
+  [rc=0] alerts={"active":["drop:claude","floor:claude","instrument:quota-axi","unmeasured:alibaba","unmeasured:claude"]}
+# instrument recovers
+  [rc=0] alerts={"active":["drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+# invalid config: floor_pct as string
+burn watch: invalid config - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.AZuXve/config/burn-watch.json
+  [rc=0] alerts={"active":["config:invalid","drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+  [rc=0] alerts={"active":["config:invalid","drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+# trailing-comma config
+  [rc=0] alerts={"active":["config:invalid","drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
+# sample with invalid config
+fm-burn-watch: invalid config - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.AZuXve/config/burn-watch.json
+  rc=1
+# config restored
+  [rc=0] alerts={"active":["drop:claude","floor:claude","unmeasured:alibaba","unmeasured:claude"]}
