@@ -1,0 +1,32 @@
+### Live spawn: fm-spawn.sh agy-live-pos <proj> --harness agy --model gemini-3.8-flash --effort medium (real agy, lab home)
+spawned agy-live-pos harness=agy kind=ship mode=local-only yolo=off window=primary:fm-agy-live-pos worktree=/Users/achiu/.treehouse/proj-683019/1/proj
+--- meta
+harness=agy
+model=gemini-3.8-flash-medium
+effort=medium
+--- real agy process argv
+-zsh
+treehouse get
+--- pane capture
+  When this task works on Firstmate itself, the repository root `AGENTS.md`
+  (also imported by `CLAUDE.md`) is project content and the supervisor contract
+  for the firstmate managing you: follow this brief instead of that supervisor
+  contract.
+  Project instructions still govern the work wherever they do not conflict with
+  this worker identity, including `CONTRIBUTING.md` and
+  `firstmate-coding-guidelines` for Firstmate changes.
+  # Task
+  ## Captain's intent
+  Say hi.
+  ## Firstmate spec
+  Reply hi then stop.
+● Bash(test -f "/var/folders/52/xcqf00nn5kd1k_zk6377bs34000...) (ctrl+o to
+expand)
+  Hi!
+────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                        Gemini 3.8 Flash · medium
+
+### Live spawn refusal: --model gemini-9.9-flash --effort medium
+error: agy model 'gemini-9.9-flash' is not listed by 'agy models'; choose a listed id or omit --model  (no window created)

@@ -1,0 +1,12 @@
+### Scenario A: invalid agy + cursor ids against REAL live catalogs
+{"rules":[{"when":"docs work","use":[{"harness":"agy","model":"gemini-3.8-flash","effort":"medium"},{"harness":"agy","model":"gemini-3.8-flash-high"},{"harness":"agy","model":"gemini-9.9-flash","effort":"high"}]}],
+ "default":[{"harness":"cursor","model":"cursor-grok-4.5-ultra"},{"harness":"cursor","model":"cursor-grok-4.5-high"},{"harness":"claude"}]}
+--- bootstrap output (CREW lines + exit):
+CREW_DISPATCH: invalid config/crew-dispatch.json - unknown model: profile 2 agy/gemini-9.9-flash (valid: gemini-3.1-pro-low, gemini-3.1-pro-high, gemini-3.6-flash-low, gemini-3.7-flash-low, gemini-3.8-flash-low), profile 3 cursor/cursor-grok-4.5-ultra (valid: cursor-grok-4.5-high, cursor-grok-4.5-medium, cursor-grok-4.5-low, cursor-grok-4.5-low-fast, cursor-grok-4.5-high-fast)
+exit=0
+
+### Scenario B: all-valid ids incl. agy base+effort and suffixed form -> no diagnostic
+{"rules":[{"when":"docs work","use":[{"harness":"agy","model":"gemini-3.8-flash","effort":"medium"},{"harness":"agy","model":"gemini-3.8-flash-high"}]}],
+ "default":[{"harness":"cursor","model":"cursor-grok-4.5-high"},{"harness":"cursor","model":"cursor-grok-4.5-high-fast"},{"harness":"claude"}]}
+--- bootstrap output (CREW lines + exit):
+exit=0
