@@ -1,0 +1,45 @@
+
+ ▀▀█  v1.0.0
+ █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more
+ Press ctrl+o to show full startup help and loaded resources.
+
+ Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.
+
+[Skills]
+  adhd-mode, ask-matt, bailian-cli, bailian-docs-llm-wiki, bailian-finetune, bailian-gen, bailian-managed-agent, bailian-model-recommend, bailian-protocol,
+bailian-sandbox, bailian-train-deploy, bailian-web-search, batch-grill-me, claude-handoff, code-review, codebase-design, design-an-interface, diagnosing-bugs,
+domain-modeling, edit-article, find-skills, git-guardrails-claude-code, grill-me, grill-with-docs, grilling, handoff, impeccable, implement, implement-spec,
+improve-codebase-architecture, loop-me, maze-study-review, maze-study-setup, mcp-scripting, migrate-to-shoehorn, no-mistakes, obsidian-vault, pr, prototype, qa,
+quill, request-refactor-plan, research, research-plan, resolving-merge-conflicts, retro, scaffold-exercises, session-close, setup-matt-pocock-skills,
+setup-pre-commit, setup-ts-deep-modules, tailscale-serve, tdd, teach, technical-doc-writing, tetra-docs, to-questionnaire, to-spec, to-tickets, triage,
+ubiquitous-language, visual-writing-style, wait-what, wayfinder, wizard, writing-beats, writing-for-agents, writing-fragments, writing-great-skills,
+writing-shape
+
+[Extensions]
+  fm-headroom.ts
+
+[Skill conflicts]
+  "impeccable" collision:
+    ✓ auto (user) ~/.pi/agent/skills/impeccable/SKILL.md
+    ✗ ~/.agents/skills/impeccable/SKILL.md (skipped)
+
+
+ Warning: Headroom ignored an unrecognized --headroom value "bogus"; use off, baseline, or transform. This session is not instrumented.
+
+ Warning: tmux extended-keys is off. Modified Enter keys may not work. Add `set -g extended-keys on` to ~/.tmux.conf and restart tmux.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-headroom.nTXMYL
+$0.000 (sub) 0.0%/272k (auto)                                                                                                   (openai-codex) gpt-6.1-sol • low
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "session": "1f6b52cf77392c87",
+  "mode": "transform",
+  "tokenEstimator": "pi-estimateTokens",
+  "byteEncoding": "utf8-json",
+  "createdAt": "2026-10-04T08:22:34.807Z",
+  "results": [
+    {
+      "resultId": "hr-1eae0ad8-1",
+      "pairingKey": "153cb05f80e922a20496c14c5fecec369beb35300290c0cfd41dba55a768cb2c",
+      "sequence": 1,
+      "toolName": "bash",
+      "mode": "transform",
+      "toolClass": "log",
+      "foldEligible": true,
+      "foldDecision": "applied",
+      "transformed": true,
+      "rawBytes": 206,
+      "rawTokens": 43,
+      "transformedBytes": 200,
+      "transformedTokens": 42,
+      "compressionRatio": 0.970874,
+      "toolLatencyMs": 17.054,
+      "modelLatencyMs": 3001.17,
+      "truncations": 0,
+      "sourceOmissions": 0,
+      "foldedLines": 5
+    }
+  ]
+}
