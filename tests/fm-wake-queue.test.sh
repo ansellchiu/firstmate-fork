@@ -2824,6 +2824,81 @@ test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking()
   pass "presentation and acknowledgement lock waits are bounded, retriable, and consume nothing when skipped"
 }
 
+test_inactive_receipt_lock_timeout_is_reported_and_retriable() {
+  local mode prefix dir state record holder i direct_rc drain_rc start elapsed
+  for mode in acknowledge acknowledge-notice; do
+    case "$mode" in
+      acknowledge) prefix=inactive-outcome ;;
+      acknowledge-notice) prefix=inactive-reconcile ;;
+    esac
+    dir=$(make_case "receipt-lock-$mode")
+    state="$dir/state"
+    mkdir -p "$state/terminal-outcomes"
+    record="$state/terminal-outcomes/abcdef.pending"
+    printf 'phase=presentation\nnotice_emitted=0\n' > "$record"
+    cp "$record" "$dir/receipt.before"
+    append_wake "$state" check "$prefix:abcdef" 'check: receipt fixture' \
+      || fail "could not seed the receipt wake"
+    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/drain.out" 2> "$dir/drain.err" \
+      || fail "receipt wake could not be presented"
+    cp "$state/.wake-queue" "$dir/queue.before"
+
+    FM_STATE_OVERRIDE="$state" bash -c '
+      . "$1"
+      fm_lock_acquire_wait "$2"
+      printf "ready\n" > "$3"
+      exec sleep 30
+    ' _ "$ROOT/bin/fm-wake-lib.sh" "$state/.inactive-outcome-reconcile.lock" "$dir/ready" &
+    holder=$!
+    i=0
+    while [ "$i" -lt 100 ] && [ ! -s "$dir/ready" ]; do
+      sleep 0.05
+      i=$((i + 1))
+    done
+    [ -s "$dir/ready" ] \
+      || { kill "$holder" 2>/dev/null || true; fail "receipt holder never acquired its lock"; }
+
+    direct_rc=0
+    FM_STATE_OVERRIDE="$state" FM_INACTIVE_ACK_LOCK_TIMEOUT=1 \
+      "$ROOT/bin/fm-inactive-reconcile.sh" "$mode" abcdef \
+      > "$dir/direct.out" 2> "$dir/direct.err" || direct_rc=$?
+    drain_rc=0
+    start=$(date +%s)
+    FM_STATUS_PRESENTATION_LOCK_TIMEOUT=1 ack_drain_err "$state" "$dir/drain.err" \
+      > "$dir/ack.out" 2> "$dir/ack.err" || drain_rc=$?
+    elapsed=$(( $(date +%s) - start ))
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+
+    [ "$direct_rc" -eq 124 ] || fail "$mode lost the receipt timeout status ($direct_rc)"
+    [ "$drain_rc" -eq 1 ] || fail "$mode drain did not refuse receipt contention ($drain_rc)"
+    [ "$elapsed" -le 4 ] || fail "$mode receipt contention delayed the drain for ${elapsed}s"
+    for prefix in direct ack; do
+      [ "$(wc -l < "$dir/$prefix.err" | tr -d ' ')" -eq 1 ] \
+        || fail "$mode $prefix did not emit exactly one advisory"
+      grep -F "ACKNOWLEDGEMENT SKIPPED: inactive-outcome receipt lock remains held by live pid $holder after 1s" "$dir/$prefix.err" >/dev/null \
+        || fail "$mode $prefix did not name the receipt lock holder"
+      grep -F 're-run the same --ack-through command' "$dir/$prefix.err" >/dev/null \
+        || fail "$mode $prefix omitted the retry instruction"
+    done
+    cmp -s "$dir/queue.before" "$state/.wake-queue" || fail "$mode timeout consumed queue rows"
+    cmp -s "$dir/receipt.before" "$record" || fail "$mode timeout changed the receipt"
+    ack_drain_err "$state" "$dir/drain.err" || fail "$mode retry failed after contention cleared"
+    [ ! -s "$state/.wake-queue" ] || fail "$mode retry left the wake queued"
+    case "$mode" in
+      acknowledge)
+        [ -f "$state/terminal-outcomes/abcdef.presented" ] && [ ! -e "$record" ] \
+          || fail "receipt retry did not commit presentation"
+        ;;
+      acknowledge-notice)
+        grep -qxF 'notice_emitted=1' "$record" || fail "receipt retry did not commit the notice"
+        ;;
+    esac
+    ack_drain_err "$state" "$dir/drain.err" || fail "$mode repeated retry was not idempotent"
+  done
+  pass "both receipt acknowledgement modes preserve holder advisories and retriable wakes"
+}
+
 # The backlog tool behind RECORD DIVERGENCE can take seconds under load; it must
 # run after the status-presentation lock is released so it never holds up the
 # other drain (conversation vs supervision branch) contending for that lock.
@@ -3588,6 +3663,7 @@ test_self_held_lock_reclaims_instead_of_deadlocking
 test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention
 test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking
+test_inactive_receipt_lock_timeout_is_reported_and_retriable
 test_record_divergence_runs_outside_the_presentation_lock
 test_malformed_presentation_lock_reports_acquire_failure
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once

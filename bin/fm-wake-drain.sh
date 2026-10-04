@@ -273,7 +273,7 @@ acknowledge_inactive_outcomes() { # <mode> <newline-separated-fingerprints>
   while IFS= read -r fingerprint; do
     [ -n "$fingerprint" ] || continue
     FM_INACTIVE_ACK_LOCK_TIMEOUT=$PRESENTATION_LOCK_TIMEOUT \
-      "$SCRIPT_DIR/fm-inactive-reconcile.sh" "$mode" "$fingerprint" || return 1
+      "$SCRIPT_DIR/fm-inactive-reconcile.sh" "$mode" "$fingerprint" || return $?
   done <<< "$fingerprints"
 }
 
@@ -913,11 +913,12 @@ if [ -n "$ACK_THROUGH" ]; then
   fi
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
   DRAIN_LOCK_HELD=false
-  if ! acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
-    || ! acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS"; then
+  acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
+    && acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS" || {
+    [ "$?" -ne 124 ] || exit 1
     echo "wake drain: inactive outcome receipt could not be recorded safely" >&2
     exit 1
-  fi
+  }
   fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT" || {
     [ "$?" -ne 124 ] || ack_lock_skipped
     echo "wake drain: queue lock could not be acquired safely" >&2

@@ -99,8 +99,16 @@ SCAN_LOCK="$STATE/.inactive-outcome-reconcile.lock"
 # FM_INACTIVE_ACK_LOCK_TIMEOUT (set by fm-wake-drain.sh's acknowledgement) allows,
 # so a long scan cannot hold an acknowledgement open; unset keeps the plain wait.
 ack_scan_lock() {
+  local rc
   if [ -n "${FM_INACTIVE_ACK_LOCK_TIMEOUT:-}" ]; then
-    fm_lock_acquire_wait_bounded "$SCAN_LOCK" "$FM_INACTIVE_ACK_LOCK_TIMEOUT"
+    fm_lock_acquire_wait_bounded "$SCAN_LOCK" "$FM_INACTIVE_ACK_LOCK_TIMEOUT" || {
+      rc=$?
+      if [ "$rc" -eq 124 ]; then
+        printf 'wake drain: ACKNOWLEDGEMENT SKIPPED: inactive-outcome receipt lock remains held by live pid %s after %ss; nothing was consumed, re-run the same --ack-through command.\n' \
+          "${FM_LOCK_HELD_PID:-unknown}" "$FM_INACTIVE_ACK_LOCK_TIMEOUT" >&2
+      fi
+      return "$rc"
+    }
   else
     fm_lock_acquire_wait "$SCAN_LOCK"
   fi
@@ -700,13 +708,13 @@ case "$mode" in
     ;;
   acknowledge)
     [ "$#" -eq 2 ] || { printf 'usage: fm-inactive-reconcile.sh acknowledge <fingerprint>\n' >&2; exit 2; }
-    ack_scan_lock || exit 1
+    ack_scan_lock || exit $?
     trap 'fm_lock_release "$SCAN_LOCK"' EXIT
     acknowledge "$2"
     ;;
   acknowledge-notice)
     [ "$#" -eq 2 ] || exit 2
-    ack_scan_lock || exit 1
+    ack_scan_lock || exit $?
     trap 'fm_lock_release "$SCAN_LOCK"' EXIT
     acknowledge_notice "$2"
     ;;
