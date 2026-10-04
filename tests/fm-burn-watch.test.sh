@@ -376,6 +376,29 @@ test_state_write_failure_is_reported_not_silent() {
   pass "state write failures are reported instead of reporting success"
 }
 
+test_failed_alert_publication_keeps_drop_retryable() {
+  local home out rc=0
+  home=$(make_home partialpub)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  rm -f "$home/state/.burn-watch-alerts"
+  mkdir "$home/state/.burn-watch-alerts"
+  chmod 555 "$home/state/.burn-watch-alerts"
+  if touch "$home/state/.burn-watch-alerts/.probe" 2>/dev/null; then
+    chmod 755 "$home/state/.burn-watch-alerts"; rm -rf "$home/state/.burn-watch-alerts"
+    pass "partial publication (skipped: alerts path stays writable)"
+    return
+  fi
+  set_quota "$home" 68 70 60 95
+  out=$(FM_BURN_NOW=1300 bw "$home" check) || rc=$?
+  assert_equals "burn watch: state write failed - $home/state" "$out" "alert publication failure reported"
+  assert_equals 1 "$rc" "alert publication failure exits non-zero"
+  chmod 755 "$home/state/.burn-watch-alerts"; rm -rf "$home/state/.burn-watch-alerts"
+  out=$(FM_BURN_NOW=1600 bw "$home" check)
+  assert_equals "burn watch: claude dropped 12 points (80% -> 68%)" "$out" "drop retried against restored baseline"
+  pass "failed alert publication restores the baseline so the drop is retried"
+}
+
 test_init_writes_default_config_when_absent() {
   local home out out2
   home=$(make_home init)
@@ -407,4 +430,5 @@ test_failed_instrument_prints_one_line_once_and_rearms
 test_invalid_config_reports_once_instead_of_defaults
 test_mistyped_config_fields_are_invalid
 test_state_write_failure_is_reported_not_silent
+test_failed_alert_publication_keeps_drop_retryable
 test_init_writes_default_config_when_absent

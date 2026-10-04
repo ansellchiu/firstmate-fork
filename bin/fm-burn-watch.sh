@@ -317,10 +317,21 @@ action_check() {
     --argjson now "$now" \
     "$LANE_EXTRACT_JQ$BURN_EVAL_JQ" 2>/dev/null) || die "burn evaluation failed"
 
-  if ! { publish "$PREV_SAMPLE" '.new_sample' "$eval_out" \
-    && publish "$ALERTS_FILE" '{active: .active}' "$eval_out"; }; then
+  local prev_backup="$STATE/.fm-burn-prev-backup"
+  rm -f -- "$prev_backup"
+  if [ -f "$PREV_SAMPLE" ]; then
+    ln -f -- "$PREV_SAMPLE" "$prev_backup" 2>/dev/null || { state_write_failed; return; }
+  fi
+  publish "$PREV_SAMPLE" '.new_sample' "$eval_out" || { rm -f -- "$prev_backup"; state_write_failed; return; }
+  if ! publish "$ALERTS_FILE" '{active: .active}' "$eval_out"; then
+    if [ -f "$prev_backup" ]; then
+      mv -f -- "$prev_backup" "$PREV_SAMPLE"
+    else
+      rm -f -- "$PREV_SAMPLE"
+    fi
     state_write_failed; return
   fi
+  rm -f -- "$prev_backup"
 
   local alert_line
   alert_line=$(jq -r '.new_alerts | join("; ")' <<< "$eval_out")
