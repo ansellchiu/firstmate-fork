@@ -1298,16 +1298,16 @@ tabs_before=$(grep -c '^tab create' "$HERDR_LOG" || true)
 # The watcher relaunches synchronously and may take up to its own relaunch
 # timeout (120s) before it can wake and exit, so the wait below is that timeout
 # plus margin, and the fake launch is slower than the old 30s bound to pin it.
+# The bound is wall-clock seconds, not a poll count, so it holds on any host.
 FM_FAKE_SSH_MODE=launch-slow FM_FAKE_LAUNCH_DELAY=35 \
   FM_STATE_OVERRIDE="$WATCH_STATE" FM_SECONDMATE_LIVENESS_SECS=1 FM_POLL=1 \
   FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
   remote_env exec "$ROOT/bin/fm-watch.sh" \
   > "$TMP_ROOT/watch-liveness.out" 2> "$TMP_ROOT/watch-liveness.err" &
 watch_pid=$!
-watch_wait=0
-while kill -0 "$watch_pid" 2>/dev/null && [ "$watch_wait" -lt 7500 ]; do
+watch_deadline=$((SECONDS + 150))
+while kill -0 "$watch_pid" 2>/dev/null && [ "$SECONDS" -lt "$watch_deadline" ]; do
   sleep 0.02
-  watch_wait=$((watch_wait + 1))
 done
 if kill -0 "$watch_pid" 2>/dev/null; then
   kill "$watch_pid" 2>/dev/null || true
