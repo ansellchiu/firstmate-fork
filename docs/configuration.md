@@ -1524,6 +1524,33 @@ Manual samples are taken within twenty minutes of the top of an SGT hour, becaus
 `fm-value-ledger.sh arm` writes and binds `state/value-ledger.check.sh`, which samples and rolls up once a day at the first sweep after 00:15 SGT and prints one line only when an instrument failed, a quota read was not fresh, the row could not be written, or whole days are missing.
 `disarm` removes the shim, its trust binding, and the alert markers.
 
+## Lane burn watch (config/burn-watch.json, state/burn-watch.check.sh)
+
+[`bin/fm-burn-watch.sh`](../bin/fm-burn-watch.sh) is an opt-in watcher check for fast, steering-oriented quota burndown tracking.
+Quota-axi percentages are the accepted steering signal because every approved threshold is a quota percentage; plan payback (`bin/fm-value-ledger.sh`) already samples token draw from tokscale and codeburn hourly.
+While plan payback samples hourly for retrospective accounting, burn watch samples on the watcher's `FM_CHECK_INTERVAL` cadence to detect lanes draining fast or running low at intake time.
+`fm-burn-watch.sh arm` writes and binds `state/burn-watch.check.sh` through `bin/fm-check-register.sh`.
+`fm-burn-watch.sh disarm` removes the shim, its trust binding, and active watch state.
+`fm-burn-watch.sh init` writes the starting configuration to `config/burn-watch.json` when absent.
+
+**Steering thresholds and alerts**
+
+The check accepts only the configured window ID from a fresh provider and stores readings in `state/.burn-watch-prev` to compute per-lane deltas.
+The same file keeps each lane's rate anchor value and timestamp, resetting when its provider, window, or reset period changes (reset times within one hour count as the same period) or remaining quota rises; rates are evaluated only after six hours and discount one point for whole-percent quantization.
+It prints exactly one line when a steering threshold is crossed, and stays silent otherwise.
+Alerts fire once per threshold crossing and re-arm only after recovery, preventing repetitive notifications.
+Starting thresholds include:
+
+- A lane falling 10+ points between samples.
+- Provider floor thresholds: claude below 20%, codex below 15%, and agy below 20%.
+- The Alibaba monthly bucket burning faster than 1.5%/day.
+
+If an instrument fails or a lane is unmeasured, the check prints one diagnostic line once, staying silent on subsequent failed polls until measurement recovers and re-arms.
+Thresholds and monitored windows are configurable in `config/burn-watch.json`.
+Defaults apply only when that file is absent; an existing unreadable or invalid file prints `burn watch: invalid config - <path>` once and skips evaluation until it is fixed.
+A file is invalid when `lanes` is not an object, a lane entry is not an object, `provider` or `window` is not a string, or `drop_threshold_pp`, `floor_pct`, or `rate_pct_day` is present but not a number.
+If writing watch state fails, the check prints `burn watch: state write failed - <state dir>` and exits non-zero instead of reporting threshold alerts.
+
 ## Mail plane (.env)
 
 The mail plane (bin/fm-mail.sh) reads unseen IMAP messages and sends one SMTP message.
