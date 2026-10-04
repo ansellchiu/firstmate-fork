@@ -411,6 +411,8 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 # the durable recurrence beside teardown's one-time surface.
 # shellcheck source=bin/fm-findings-lib.sh
 . "$SCRIPT_DIR/fm-findings-lib.sh"
+# shellcheck source=bin/fm-hold-reason-lib.sh
+. "$SCRIPT_DIR/fm-hold-reason-lib.sh"
 
 # One tasks-axi compatibility verdict per session start. The probe costs three
 # tasks-axi subprocesses and this digest needs the same answer twice - here for
@@ -668,7 +670,7 @@ print_backlog_manual_compact() {
         }
       }
     }
-  ' "$path" | while IFS= read -r line || [ -n "$line" ]; do
+  ' "$path" | fm_hold_reason_decode_stream markdown | while IFS= read -r line || [ -n "$line" ]; do
     cap_manual_hold_reason_line "$line"
   done
 }
@@ -722,11 +724,11 @@ print_backlog_tasks_axi_compact() {
     printf 'compact backlog listing (tasks-axi; done rows omitted; every in-flight, held, and blocked row shown; hold_reason capped at %s characters; ready queued bounded to %s; task bodies omitted)\n' \
       "$FM_LINE_CAP_DEFAULT" "$QUEUED_LIMIT"
     printf '\nin flight:\n'
-    printf '%s\n' "$in_flight" | strip_axi_help | cap_tasks_axi_hold_reason_stream
+    printf '%s\n' "$in_flight" | fm_hold_reason_decode_stream | strip_axi_help | cap_tasks_axi_hold_reason_stream
     printf '\nheld (captain- or time-gated; an in-flight item that is also held appears in both groups):\n'
-    printf '%s\n' "$held" | strip_axi_help | cap_tasks_axi_hold_reason_stream
+    printf '%s\n' "$held" | fm_hold_reason_decode_stream | strip_axi_help | cap_tasks_axi_hold_reason_stream
     printf '\nblocked queued:\n'
-    printf '%s\n' "$blocked" | strip_axi_help | cap_tasks_axi_hold_reason_stream
+    printf '%s\n' "$blocked" | fm_hold_reason_decode_stream | strip_axi_help | cap_tasks_axi_hold_reason_stream
     printf '\nready queued (dispatchable now):\n'
     print_ready_queued_bounded "$ready"
     return 0

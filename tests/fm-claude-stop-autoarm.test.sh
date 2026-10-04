@@ -1473,6 +1473,24 @@ write_host_fixture() {
       stood-down)
         printf "printf 'supervision-host stood down: this session no longer owns supervision\\n'\n"
         ;;
+      lost-handback|lost-announced-handback)
+        local marker=pending
+        [ "$kind" = lost-handback ] || marker=announced
+        printf "printf '%s:handling:fixture-generation\\\\n' > \"\$FM_HOME/state/.watcher-down\"\\n" "$marker"
+        cat <<'SH'
+printf 'signal: fixture.status\n'
+printf 'supervision-host: branch-outcome: fixture\n'
+printf 'supervision-host: watcher downtime could not be restored for the main hand-back\n'
+exit 1
+SH
+        ;;
+      benign-refusal)
+        cat <<'SH'
+printf 'acked:downtime:fixture-generation\n' > "$FM_HOME/state/.watcher-down"
+printf 'signal: fixture.status\n'
+printf 'supervision-host: branch-outcome: fixture\n'
+SH
+        ;;
       handed-back-many)
         cat <<'SH'
 printf 'pending:downtime:fixture-generation\n' > "$FM_HOME/state/.watcher-down"
@@ -1632,6 +1650,55 @@ test_host_stand_down_is_silent() {
   pass "auto-arm: a host that stood down closes silently without a retry"
 }
 
+# Main already drained and acknowledged the wake. This home commits the
+# actionable rewake UNBOUND on an acknowledged marker rather than refusing into
+# a silent exit 0 that would discard the banner, and that is no failure episode.
+test_host_rewake_on_acknowledged_marker_opens_no_failure_episode() {
+  local dir out status
+  dir=$(make_primary_dir "$TMP_ROOT/host-benign-refusal")
+  mkdir -p "$dir/config"
+  rm -f "$dir/config/supervision-host-off"
+  : > "$dir/state/task.meta"
+  write_host_fixture "$dir" benign-refusal
+  out=$(run_autoarm "$dir" 2>/dev/null); status=$?
+  expect_code 2 "$status" "a host rewake on an acknowledged marker must still continue main"
+  assert_contains "$out" "supervision-host: branch-outcome: fixture" "the unbound rewake must carry the host's lines"
+  assert_not_contains "$out" "auto-arm FAILED" "an acknowledged marker must not deliver a failure notice"
+  assert_absent "$dir/state/.claude-autoarm-failure-notified" "an acknowledged marker opened a failure episode"
+  [ "$(epoch_outcome "$dir")" = rewake ] || fail "an acknowledged marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
+  pass "auto-arm: a host rewake on an acknowledged marker continues main unbound and opens no failure episode"
+}
+
+# The host handed a wake back but left the marker in handling (pending or
+# announced) with no live successor. This home's rewake accepts a handling
+# marker, so the hand-back itself reaches main as the rewake on every
+# invocation and no failure episode opens.
+assert_host_handling_handback_rewakes_main() {
+  local kind=$1 dir out status
+  dir=$(make_primary_dir "$TMP_ROOT/host-$kind")
+  mkdir -p "$dir/config"
+  rm -f "$dir/config/supervision-host-off"
+  : > "$dir/state/task.meta"
+  write_host_fixture "$dir" "$kind"
+  out=$(run_autoarm "$dir" 2>/dev/null); status=$?
+  expect_code 2 "$status" "a hand-back on a handling marker must reach main"
+  assert_contains "$out" "supervision-host: watcher downtime could not be restored for the main hand-back" \
+    "the rewake must carry the host's hand-back lines"
+  assert_not_contains "$out" "auto-arm FAILED" "a rewake that committed must not deliver a failure notice"
+  assert_absent "$dir/state/.claude-autoarm-failure-notified" "a committed hand-back opened a failure episode"
+  [ "$(epoch_outcome "$dir")" = rewake ] || fail "a hand-back on a handling marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
+}
+
+test_host_pending_handling_handback_rewakes_main() {
+  assert_host_handling_handback_rewakes_main lost-handback
+  pass "auto-arm: a host hand-back on a pending handling marker rewakes main"
+}
+
+test_host_announced_handling_handback_rewakes_main() {
+  assert_host_handling_handback_rewakes_main lost-announced-handback
+  pass "auto-arm: a host hand-back on an announced handling marker rewakes main"
+}
+
 test_host_crash_is_retried_then_reported() {
   local dir out status
   dir=$(make_primary_dir "$TMP_ROOT/host-crash")
@@ -1756,6 +1823,9 @@ test_host_handback_beside_a_quiet_record_carries_no_away_note
 test_plain_arm_banner_keeps_its_wake_line_cap
 test_host_handback_carries_every_host_line
 test_host_stand_down_is_silent
+test_host_rewake_on_acknowledged_marker_opens_no_failure_episode
+test_host_pending_handling_handback_rewakes_main
+test_host_announced_handling_handback_rewakes_main
 test_host_crash_is_retried_then_reported
 test_arguments_never_arm
 test_fm_lock_status_still_works_with_shared_lib
