@@ -1,0 +1,44 @@
+## Live reconciliation per bin/fm-slot-audit.sh header
+step 2: stop the escaped legacy worker
+step 1: tear down stale claimant legacy (scout-like record, worktree= slot 1 also held by alpha)
+$ FM_HOME=$LAB bin/fm-teardown.sh legacy
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65
+REFUSED: task legacy has a missing, empty, or ambiguous window endpoint; preserving task state.
+exit=
+alpha.meta
+beta.meta
+legacy.meta
+slot 1 claim:
+task=alpha
+home=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65
+slot 1 exists: yes
+retry with a realistic scout record (backend=tmux window=primary:fm-legacy, window already closed)
+$ FM_HOME=$LAB bin/fm-teardown.sh legacy
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: task legacy's recorded worktree /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo was reassigned to task alpha (home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65), which claimed that pool slot after this record was written; that slot is no longer legacy's, so its processes, copy, and claim are left untouched and only legacy's own cleanup runs.
+REFUSED: scout task legacy has no report at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/data/legacy/report.md.
+The report is the work product. Have the crewmate write it, or use --force after explicit discard approval.
+metas: alpha.meta beta.meta legacy.meta 
+slot 1 claim:
+task=alpha
+home=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65
+slot 1 exists: yes
+alpha pane:
+2.1.289 /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo
+legacy is abandoned lab work -> discard
+$ FM_HOME=$LAB bin/fm-teardown.sh legacy --force
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: task legacy's recorded worktree /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo was reassigned to task alpha (home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65), which claimed that pool slot after this record was written; that slot is no longer legacy's, so its processes, copy, and claim are left untouched and only legacy's own cleanup runs.
+teardown legacy complete (window primary:fm-legacy; pool slot /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo/ left to task alpha (home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65), which it was reassigned to)
+Backlog: legacy just finished (this home keeps no markdown backlog at /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/data/backlog.md). Update /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/data/backlog.md - move legacy to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+metas: alpha.meta beta.meta 
+slot 1 claim:
+task=alpha
+home=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65
+alpha still live in slot 1: 2.1.289 /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo
+
+step 3: re-run audit
+$ FM_HOME=$LAB bin/fm-slot-audit.sh
+exit=0

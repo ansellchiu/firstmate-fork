@@ -1,0 +1,8 @@
+## Live audit: legacy double claim (logical path + trailing slash) and a real cursor-agent worker in the project primary clone
+alpha.meta: worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo
+beta.meta: worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/2/demo
+legacy.meta: worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo/
+$ FM_HOME=$LAB bin/fm-slot-audit.sh
+DOUBLE_CLAIM /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/state/alpha.meta /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/state/legacy.meta
+OUT_OF_ISOLATION legacy 10127 .lo /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/projects/demo
+exit=1

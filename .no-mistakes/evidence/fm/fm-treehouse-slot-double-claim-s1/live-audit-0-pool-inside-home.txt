@@ -1,0 +1,3 @@
+$ FM_HOME=$LAB bin/fm-slot-audit.sh   # alpha's live claude sits in its pool slot
+OUT_OF_ISOLATION alpha 30707 claude /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.6eS2BF/th/.treehouse/demo-c2e096/1/demo
+exit=1

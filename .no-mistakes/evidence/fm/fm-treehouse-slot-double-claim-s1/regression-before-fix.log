@@ -1,0 +1,6 @@
+ok - a remote-seeded secondmate home allocates and launches from its Treehouse pool
+ok - a Treehouse slot claim names the launched task, refuses when unclaimable, and is dropped by a locked abort
+not ok - spawn launched into a slot another task's record holds: warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-spawn-pool-base-freshen.42ad2p/slot-held/home/data/pool-slot-held-r1/brief.md records no Packet line in its header field block above the first '#' heading (scaffolded before briefs recorded the dispatch packet class); dispatching as ordinary - if this packet is conflict-level or prohibited, classify it at intake by adding the Packet line to the top of the brief above the first '#' heading, which is the only region read at dispatch
+warning: the portfolio attention limit could not be checked for project (fm-fleet-snapshot: portfolio classification failed: the project registry data/projects.md is absent; register this home's projects before trusting the portfolio); dispatching anyway - confirm the captain is not already carrying too many projects
+spawned pool-slot-held-r1 harness=codex kind=scout window=firstmate:fm-pool-slot-held-r1 worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-spawn-pool-base-freshen.42ad2p/slot-held/slots/1/project
+EXIT=1

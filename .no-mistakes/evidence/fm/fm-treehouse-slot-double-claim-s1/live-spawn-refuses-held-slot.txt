@@ -1,0 +1,20 @@
+## Live: different task (gamma) handed alpha's released slot by real Treehouse
+treehouse status before gamma: slot 1 available, alpha.meta worktree= slot 1, alpha pane shell-only
+$ bin/fm-spawn.sh gamma $LAB/projects/demo --scout --harness claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: the portfolio attention limit could not be checked for demo (fm-fleet-snapshot: portfolio classification failed: the project registry data/projects.md is absent; register this home's projects before trusting the portfolio); dispatching anyway - confirm the captain is not already carrying too many projects
+error: Treehouse pool slot /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo is still recorded by /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/state/alpha.meta; refusing to launch gamma into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window primary:fm-gamma
+
+state metas after: alpha.meta beta.meta 
+slot claim after:
+task=alpha
+home=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65
+
+slot HEAD before=c255529620663125c9ab4850a4e7cda16786e7dd after=c255529620663125c9ab4850a4e7cda16786e7dd
+gamma pane:
+treehouse get
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo. Type 'exit' to return.
+achiu@achiu-macbook demo %

@@ -1,0 +1,4 @@
+ok - audit recognizes harness surfaces, canonical claims and linked clones
+ok - audit reports unavailable cwd sources
+ok - audit converges to clean after conflicting record and workers are removed
+EXIT=0

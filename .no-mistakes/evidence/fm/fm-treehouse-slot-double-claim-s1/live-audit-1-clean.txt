@@ -1,0 +1,3 @@
+$ FM_HOME=$LAB bin/fm-slot-audit.sh   # alpha (real claude) in its Treehouse slot
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo
+exit=0

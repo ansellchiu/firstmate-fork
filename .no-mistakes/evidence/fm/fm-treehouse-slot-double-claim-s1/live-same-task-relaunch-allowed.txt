@@ -1,0 +1,14 @@
+## Live: same task (alpha) relaunches into its own held slot
+alpha pane: shell-only (zsh) inside slot 1, alpha.meta still holds slot 1
+$ bin/fm-spawn.sh alpha --relaunch --harness claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.sDip65
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+spawned alpha harness=claude kind=scout window=primary:fm-alpha worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo
+alpha pane after:
+ ▝▝   ▝▝   /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-th.VJTA61/pool/.treehouse/demo-f38f50/1/demo
+❯ : Firstmate operational input waiting: read '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.sDip65/state/operational-inbox/1791218781-cf823cabe989b631.msg' and handle its contents
+  as Firstmate operational input.
+  Read 1 file
+⏺ idle
+✻ Sautéed for 9s · done 12:46 AM
+slot HEAD before=c255529620663125c9ab4850a4e7cda16786e7dd after=c255529620663125c9ab4850a4e7cda16786e7dd
