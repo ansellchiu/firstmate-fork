@@ -4508,27 +4508,6 @@ spawn_refuse_held_slot() {
     echo "error: cannot enumerate local Firstmate homes to prove Treehouse pool slot $WT is free; refusing to launch $ID; inspect window $T" >&2
     exit 1
   }
-  # A holder whose own endpoint is PROVEN agent-free is a husk awaiting its
-  # recovery, not a live task: the pool handed the slot on because the
-  # holder's worker is gone, and its recovery re-enters the pool for a slot of
-  # its own. Anything unproven, unreadable, or alive still holds the slot.
-  local live='' holder_meta holder_state holder_verdict
-  while IFS= read -r holder_meta; do
-    [ -n "$holder_meta" ] || continue
-    if fm_backend_validate_task_endpoint "$holder_meta" "$(basename "$holder_meta" .meta)" 2>/dev/null &&
-      fm_backend_source "$FM_BACKEND_VALIDATED_BACKEND"; then
-      holder_state=$(fm_backend_agent_state "$FM_BACKEND_VALIDATED_BACKEND" "$FM_BACKEND_VALIDATED_TARGET")
-      if [ "$holder_state" = missing ]; then
-        holder_verdict=$(fm_control_endpoint_absence_verdict "$FM_BACKEND_VALIDATED_BACKEND" "$FM_BACKEND_VALIDATED_TARGET")
-        case "${holder_verdict%%$'\t'*}" in gone|dead) holder_state=dead ;; esac
-      fi
-      [ "$holder_state" != dead ] || continue
-    fi
-    live="$live$holder_meta"$'\n'
-  done <<EOF_HELD
-$held
-EOF_HELD
-  held=${live%$'\n'}
   [ -z "$held" ] || {
     echo "error: Treehouse pool slot $WT is still recorded by $(printf '%s' "$held" | paste -sd, -); refusing to launch $ID into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window $T" >&2
     exit 1

@@ -766,44 +766,59 @@ test_pool_slot_recorded_by_another_task_is_refused() {
   pass "a slot another task's record still holds is refused without touching its claim"
 }
 
-# Homes may reuse a task id, so a registered home's record of the same id still
-# holds the slot even when the slot carries no claim naming that home.
-# A holder whose endpoint is a shell-only husk (its worker is gone, recovery
-# pending) does not block a different task; a holder whose endpoint reads as
-# a live agent still does.
-test_pool_slot_held_by_a_husk_is_not_refused() {
-  local rec id out status real
-  id='pool-slot-husk-r1'
-  rec=$(make_case slot-husk "$id")
+test_pool_slot_held_by_a_shell_only_task_is_refused() {
+  local rec id holder out status real before state
+  id='pool-slot-shell-only-r1'
+  holder='shell-only-holder-r1'
+  rec=$(make_case slot-shell-only "$id")
   read_case_record "$rec"
   lay_out_as_pool_slot
-  printf 'backend=tmux\nkind=ship\nwindow=firstmate:fm-husk-holder-r1\nproject=%s\nworktree=%s\n' \
-    "$PROJECT_DIR" "$POOL_DIR" > "$HOME_DIR/state/husk-holder-r1.meta"
-  printf 'task=husk-holder-r1\nhome=%s\n' "$HOME_DIR" > "$SLOT_CLAIM"
+  fm_test_spawn_brief "$HOME_DIR" "$holder"
+  printf 'backend=tmux\nkind=scout\nharness=codex\nwindow=firstmate:fm-%s\nproject=%s\nworktree=%s\n' \
+    "$holder" "$PROJECT_DIR" "$POOL_DIR" > "$HOME_DIR/state/$holder.meta"
+  printf 'task=%s\nhome=%s\n' "$holder" "$HOME_DIR" > "$SLOT_CLAIM"
   real="$FAKEBIN_DIR/tmux.fixture"
   mv "$FAKEBIN_DIR/tmux" "$real"
   cat > "$FAKEBIN_DIR/tmux" <<SH
 #!/usr/bin/env bash
 case "\$*" in
-  *"#{pane_current_command}"*) printf '%s\\n' "\${FM_FAKE_HOLDER_COMMAND:-zsh}"; exit 0 ;;
+  *"#{pane_current_command}"*)
+    if [ -s "\${FM_FAKE_LAUNCH_LOG:-/dev/null}" ]; then
+      printf '%s\\n' codex
+    else
+      printf '%s\\n' zsh
+    fi
+    exit 0 ;;
 esac
 exec "$real" "\$@"
 SH
   chmod +x "$FAKEBIN_DIR/tmux"
-  export FM_FAKE_DUPLICATE_WINDOW=fm-husk-holder-r1
-
-  out=$(FM_FAKE_HOLDER_COMMAND=claude run_spawn "$id" --scout 2>&1)
-  status=$?
-  [ "$status" -ne 0 ] || fail "spawn launched into a slot whose holder still reads as a live agent"
-  assert_contains "$out" "still recorded by" "a live holder was not named"
+  export FM_FAKE_DUPLICATE_WINDOW="fm-$holder"
+  state=$(PATH="$FAKEBIN_DIR:$PATH" bash -c '. "$1/bin/fm-backend.sh"; fm_backend_source tmux; fm_backend_agent_state tmux "$2"' \
+    _ "$ROOT" "firstmate:fm-$holder")
+  [ "$state" = dead ] || fail "the holder fixture is not shell-only: $state"
+  before=$(git -C "$POOL_DIR" rev-parse HEAD)
 
   out=$(run_spawn "$id" --scout 2>&1)
   status=$?
+  [ "$status" -ne 0 ] || fail "a different task launched into the shell-only holder's slot: $out"
+  assert_contains "$out" "/state/$holder.meta; refusing" "spawn did not name the shell-only holder"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for the held slot"
+  grep -Fxq "task=$holder" "$SLOT_CLAIM" || fail "spawn overwrote the holder's slot claim"
+  [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$before" ] || fail "refused spawn moved the holder's HEAD"
+
+  out=$(FM_FAKE_LAUNCH_LOG="$CASE_DIR/relaunch.log" fm_test_run_spawn "$HOME_DIR" "$POOL_DIR" "$FAKEBIN_DIR" "$holder" --relaunch)
+  status=$?
   unset FM_FAKE_DUPLICATE_WINDOW
-  expect_code 0 "$status" "a husk holder blocked a different task's spawn"$'\n'"$out"
-  pass "a slot held only by a proven-husk record is reusable while a live holder still blocks"
+  expect_code 0 "$status" "the same task's own relaunch was refused"$'\n'"$out"
+  assert_contains "$out" "spawned $holder" "the holder's relaunch did not complete"
+  assert_grep "worktree=$POOL_DIR" "$HOME_DIR/state/$holder.meta" "the holder's relaunch changed its worktree"
+  [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$before" ] || fail "relaunch moved the holder's HEAD"
+  pass "a shell-only holder blocks another task while its own relaunch preserves the copy"
 }
 
+# Homes may reuse a task id, so a registered home's record of the same id still
+# holds the slot even when the slot carries no claim naming that home.
 test_pool_slot_recorded_by_a_registered_home_is_refused() {
   local rec id out status mate
   id='pool-slot-held-elsewhere-r1'
@@ -859,7 +874,7 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
-test_pool_slot_held_by_a_husk_is_not_refused
+test_pool_slot_held_by_a_shell_only_task_is_refused
 test_pool_slot_recorded_by_a_registered_home_is_refused
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
