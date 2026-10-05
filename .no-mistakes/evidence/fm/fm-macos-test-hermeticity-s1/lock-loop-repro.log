@@ -1,0 +1,6 @@
+== base
+    import fm_voice_frame as frame              # noqa: E402
+ModuleNotFoundError: No module named 'fm_voice_frame'
+== head
+    import fm_voice_frame as frame              # noqa: E402
+ModuleNotFoundError: No module named 'fm_voice_frame'
