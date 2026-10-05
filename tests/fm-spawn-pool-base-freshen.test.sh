@@ -763,9 +763,23 @@ install_slot_sequence() {  # <path>...
   cat > "$FAKEBIN_DIR/tmux" <<SH
 #!/usr/bin/env bash
 case "\$*" in
-  *"treehouse get"*) printf 'x\\n' >> "$CASE_DIR/get-count"; rm -f "$CASE_DIR/left-slot" ;;
+  *"treehouse get"*)
+    if [ -e "$CASE_DIR/left-slot" ] && [ -e "$CASE_DIR/leave-path-sequence" ] && [ ! -e "$CASE_DIR/parent-observed" ]; then
+      : > "$CASE_DIR/premature-retry"
+    fi
+    printf 'x\\n' >> "$CASE_DIR/get-count"; rm -f "$CASE_DIR/left-slot" ;;
   *"treehouse lease "*) printf '%s\\n' "\$*" >> "$CASE_DIR/lease-log"; : > "$CASE_DIR/left-slot" ;;
   *"#{pane_current_path}"*)
+    if [ -e "$CASE_DIR/left-slot" ] && [ -e "$CASE_DIR/leave-path-sequence" ]; then
+      printf 'x\\n' >> "$CASE_DIR/leave-read-count"
+      n=\$(wc -l < "$CASE_DIR/leave-read-count" | tr -d ' ')
+      total=\$(wc -l < "$CASE_DIR/leave-path-sequence" | tr -d ' ')
+      [ "\$n" -le "\$total" ] || n=\$total
+      p=\$(sed -n "\${n}p" "$CASE_DIR/leave-path-sequence")
+      [ "\$p" != "$PROJECT_DIR" ] || : > "$CASE_DIR/parent-observed"
+      printf '%s\\n' "\$p"
+      exit 0
+    fi
     [ ! -e "$CASE_DIR/left-slot" ] || { printf '%s\\n' "$PROJECT_DIR"; exit 0; }
     n=\$(wc -l < "$CASE_DIR/get-count" | tr -d ' ')
     total=\$(wc -l < "$CASE_DIR/slot-sequence" | tr -d ' ')
@@ -871,6 +885,47 @@ test_pool_slot_held_elsewhere_moves_to_a_free_slot() {
   grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" || fail "the held slot's claim was rewritten"
   grep -Fq "worktree=$POOL_DIR" "$HOME_DIR/state/parked-holder-r1.meta" || fail "the holder's record was rewritten"
   pass "a held slot is left alone and the spawn takes the next free slot"
+}
+
+test_pool_slot_retry_requires_return_to_project() {
+  local rec id out status mode
+  for mode in empty-transient unrelated-transient empty-only unrelated-only; do
+    id="pool-slot-leave-$mode"
+    rec=$(make_case "slot-leave-$mode" "$id")
+    read_case_record "$rec"
+    lay_out_as_pool_slot
+    printf 'kind=ship\nworktree=%s\n' "$POOL_DIR" > "$HOME_DIR/state/parked-holder.meta"
+    printf 'task=parked-holder\nhome=%s\n' "$HOME_DIR" > "$SLOT_CLAIM"
+    add_second_slot
+    install_slot_sequence "$POOL_DIR" "$SLOT2_DIR"
+    case "$mode" in
+      empty-transient) printf '\n%s\n%s\n' "$POOL_DIR" "$PROJECT_DIR" ;;
+      unrelated-transient) printf '%s\n%s\n%s\n' "$SLOT2_DIR" "$POOL_DIR" "$PROJECT_DIR" ;;
+      empty-only) printf '\n' ;;
+      unrelated-only) printf '%s\n' "$SLOT2_DIR" ;;
+    esac > "$CASE_DIR/leave-path-sequence"
+    fm_test_fake_sleep_noop "$FAKEBIN_DIR"
+    out=$(run_spawn "$id" --scout 2>&1)
+    status=$?
+    [ ! -e "$CASE_DIR/premature-retry" ] || fail "spawn retried before observing its parent project: $mode"
+    case "$mode" in
+      *-transient)
+        expect_code 0 "$status" "spawn did not wait through $mode"$'\n'"$out"
+        [ "$(wc -l < "$CASE_DIR/get-count" | tr -d ' ')" -eq 2 ] || fail "spawn did not retry after returning to its project"
+        assert_grep "worktree=$SLOT2_DIR" "$HOME_DIR/state/$id.meta" "spawn did not record the free slot"
+        ;;
+      *-only)
+        [ "$status" -ne 0 ] || fail "spawn accepted $mode as proof it left the held slot"
+        assert_contains "$out" "the pane did not leave held Treehouse pool slot" "spawn did not explain the leave refusal"
+        [ "$(wc -l < "$CASE_DIR/get-count" | tr -d ' ')" -eq 1 ] || fail "spawn requested another slot without returning to its project"
+        [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "refused spawn published task metadata"
+        [ ! -e "$SLOT2_CLAIM" ] || fail "refused spawn claimed another slot"
+        ;;
+    esac
+    grep -Fxq 'task=parked-holder' "$SLOT_CLAIM" || fail "spawn rewrote the held slot claim"
+    assert_grep "worktree=$POOL_DIR" "$HOME_DIR/state/parked-holder.meta" "spawn rewrote the holder record"
+    pass "slot retry requires return to the parent project: $mode"
+  done
 }
 
 test_pool_slot_held_by_a_shell_only_task_is_refused() {
@@ -990,6 +1045,7 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
 test_pool_slot_held_elsewhere_moves_to_a_free_slot
+test_pool_slot_retry_requires_return_to_project
 test_leaving_a_held_slot_keeps_every_process_out_of_it
 test_pool_slot_held_by_a_shell_only_task_is_refused
 test_pool_slot_recorded_by_a_registered_home_is_refused

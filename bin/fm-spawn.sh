@@ -4658,10 +4658,12 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
         }
         for _ in $(seq 1 30); do
           p=$(spawn_current_path "$WT_TARGET" || true)
-          [ -z "$p" ] || [ "$(real_path_or_raw "$p")" != "$slot_avoid" ] || { sleep 1; continue; }
-          break
+          if [ -n "$p" ] && [ "$(real_path_or_raw "$p")" = "$PROJ_ABS_REAL" ]; then
+            break
+          fi
+          sleep 1
         done
-        if [ -n "$p" ] && [ "$(real_path_or_raw "$p")" = "$slot_avoid" ]; then
+        if [ -z "$p" ] || [ "$(real_path_or_raw "$p")" != "$PROJ_ABS_REAL" ]; then
           echo "error: the pane did not leave held Treehouse pool slot $WT; refusing to launch $ID while a process of this task still sits in a copy another record holds; inspect window $T" >&2
           exit 1
         fi
