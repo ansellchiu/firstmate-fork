@@ -1196,20 +1196,22 @@ FM_OPEN_DECISIONS_FOLD_VERSION=9
 
 # Portable device:inode identity for the rotation/recreation check below.
 _fm_open_decisions_file_ident() {  # <file> -> strongest available identity
-  local f=$1 epoch birth ident
+  local f=$1 epoch birth ident fields
   if [ -n "${FM_STATUS_IDENTITY_READER:-}" ]; then
     "$FM_STATUS_IDENTITY_READER" "$f"
     return
   fi
+  # One stat call yields every field: this runs per task in every presentation
+  # sweep while the status-presentation lock is held, so each extra fork widens
+  # the window other drains wait behind.
   if [ "$_FM_CLASSIFY_UNAME_S" = Darwin ]; then
-    ident=$(LC_ALL=C /usr/bin/stat -f '%d:%i' "$f" 2>/dev/null) || return 1
-    epoch=$(LC_ALL=C /usr/bin/stat -f '%B' "$f" 2>/dev/null) || epoch=0
-    if [ "$epoch" != 0 ]; then birth=$(LC_ALL=C /usr/bin/stat -f '%FB' "$f" 2>/dev/null) || birth=''; else birth=''; fi
+    fields=$(LC_ALL=C /usr/bin/stat -f '%d:%i%t%B%t%FB' "$f" 2>/dev/null) || return 1
   else
-    ident=$(LC_ALL=C stat -c '%d:%i' "$f" 2>/dev/null) || return 1
-    epoch=$(LC_ALL=C stat -c '%W' "$f" 2>/dev/null) || epoch=0
-    if [ "$epoch" != 0 ]; then birth=$(LC_ALL=C stat -c '%w' "$f" 2>/dev/null) || birth=''; else birth=''; fi
+    fields=$(LC_ALL=C stat --printf '%d:%i\t%W\t%w' "$f" 2>/dev/null) || return 1
   fi
+  IFS=$'\t' read -r ident epoch birth <<< "$fields"
+  [ -n "$ident" ] || return 1
+  [ "${epoch:-0}" != 0 ] || birth=''
   case "$ident$birth" in *$'\t'*|*$'\n'*|'') return 1 ;; esac
   if [ -n "$birth" ]; then printf 'strong:%s:%s' "$ident" "$birth"; else printf 'weak:%s' "$ident"; fi
 }
@@ -1809,7 +1811,7 @@ EOF
     fi
   fi
   if [ "$rc" -eq 0 ]; then
-    rm -f -- "$state/.$task.open-decisions-cursor" \
+    rm -f -- "$state/$task.status" "$state/.$task.open-decisions-cursor" \
       "$home_appends" "$signal_marker" "$heartbeat_marker" "$daemon_marker" || rc=1
     fm_lock_remove_path "$home_appends_lock" 2>/dev/null || true
   fi
@@ -2792,14 +2794,6 @@ scan_captain_relevant_statuses() {  # <state>
   return 0
 }
 
-_fm_classify_status_mtime() {  # <file>
-  if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
-    LC_ALL=C stat -f '%m' "$1" 2>/dev/null
-  else
-    LC_ALL=C stat -c '%Y' "$1" 2>/dev/null
-  fi
-}
-
 # Composite signature of a task's underlying pane and status state.
 # Used by the watcher to detect whether state has changed between consecutive
 # stale escalations.
@@ -2807,7 +2801,7 @@ stale_underlying_state_sig() {  # <task> <state> <pane-hash>
   local task=$1 state=$2 pane_hash=$3 statusf mtime sig
   statusf="$state/$task.status"
   if [ -e "$statusf" ]; then
-    mtime=$(_fm_classify_status_mtime "$statusf") || mtime=0
+    mtime=$(_fm_status_file_mtime "$statusf") || mtime=0
     sig=$(status_observed_signature "$statusf" 2>/dev/null) || sig="sig-error"
   else
     mtime="absent"
@@ -2933,11 +2927,6 @@ detect_stale_blocker() {  # <pane-text> [agent-alive-verdict]
 # supervision turn should re-read only the records that actually moved, not the
 # whole fleet. wake_changed_records names them from a persisted fingerprint
 # manifest, so a quiet task costs nothing to skip.
-
-# uname once, locally: this library is sourced standalone by tests and by
-# consumers that do not also source bin/fm-wake-lib.sh, so it cannot borrow that
-# library's copy.
-_FM_CLASSIFY_UNAME=$(uname 2>/dev/null || echo unknown)
 
 # Seconds a routine batch accumulates before presentation or quiet telemetry
 # rollover. 0 disables batching entirely. A malformed override is not a window,
@@ -3161,7 +3150,7 @@ wake_record_fingerprint() {  # <state> <task>
   local state=$1 task=$2 part out='' one
   for part in "$state/$task.status" "$state/$task.meta"; do
     if [ -f "$part" ] && [ ! -L "$part" ]; then
-      if [ "$_FM_CLASSIFY_UNAME" = Darwin ]; then
+      if [ "$_FM_CLASSIFY_UNAME_S" = Darwin ]; then
         one=$(stat -f '%z:%Fm' "$part" 2>/dev/null) || one=unreadable
       else
         one=$(stat -c '%s:%Y' "$part" 2>/dev/null) || one=unreadable

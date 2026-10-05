@@ -75,6 +75,9 @@ case "${1:-}" in
           if [ -e "$D/remote-relaunch-start" ] && [ ! -e "$D/remote-relaunch-end" ]; then
             : > "$D/local-relaunch-during-remote"
           fi
+          if [ -e "$FM_HOME/state/.secondmate-liveness-${target##*:fm-}.lock" ]; then
+            : > "$D/liveness-lock-held-at-exit"
+          fi
           printf 'zsh' > "$D/command.$target"
           ;;
         *'encode launch-brief'* | *'Firstmate operational input waiting: read'*) cat "$D/becomes" > "$D/command.$target" ;;
@@ -307,6 +310,23 @@ test_persist_precedes_restart() {
   grep -h '^phase=' "$dir/home/state/pending-replies"/* | grep -q '^phase=resolved$' \
     || fail "the persist answer did not settle its durable expectation"
   pass "T2 the mate persists before anything is stopped"
+}
+
+# --- T2a: the restart holds the watcher's liveness lock across the relaunch -
+test_restart_holds_liveness_lock_across_relaunch() {
+  local dir out rc
+  dir=$(new_case liveness-lock)
+  add_local_mate "$dir" sm1
+  arm_answer "$dir" sm1
+
+  out=$(run_restart "$dir" sm1); rc=$?
+
+  expect_code 0 "$rc" "a confirmed persist should restart the mate"$'\n'"$out"
+  assert_present "$dir/fake/liveness-lock-held-at-exit" \
+    "the mate was stopped without the liveness lock, so the watcher could race a second spawn"
+  assert_absent "$dir/home/state/.secondmate-liveness-sm1.lock" \
+    "the liveness lock was left held after the restart"
+  pass "T2a the restart serializes with the watcher's auto-relaunch"
 }
 
 # --- T2b: an answer delivered at a zero-second bound still releases the gate -
@@ -849,6 +869,7 @@ test_already_current_unprovable_mate_stays_on_the_nudge_path() {
 
 test_persist_gates_and_asks_only_for_open_records
 test_persist_precedes_restart
+test_restart_holds_liveness_lock_across_relaunch
 test_arrived_answer_precedes_deadline_check
 test_answer_between_resolution_and_timeout_wins
 test_unprovable_runtime_falls_back

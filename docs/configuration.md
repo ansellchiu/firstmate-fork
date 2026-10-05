@@ -85,7 +85,7 @@ Each effective `FM_HOME` contains private operational directories.
 - Task metadata, append-only status events, and endpoint signals.
 - Watcher and wake-queue coordination, away-mode state, and generated Relay artifacts.
 - Inactive terminal-outcome receipts under `state/terminal-outcomes/`.
-- Enabled extension working namespaces under `state/extensions/`.
+- Enabled extension working namespaces and opt-in Pi extension records under `state/extensions/`.
 - Parent-side remote ledger copies under `state/secondmate-summary-cache/`.
 - One-shot Bearings reconcile requests under `state/reconcile-notify/`.
 - Private secondmate config-reread generations with their retry and quarantine state.
@@ -630,6 +630,29 @@ With it present, ship and scout briefs gain the `# Waiting` section and the fore
 With the file absent, generated briefs omit the waiting section and the no-poll inbox line, the drive text backgrounds the call, recovery sends during an open decision, and a fire-and-forget steer is not owed a retry ring.
 The flag is a home-local preference and is not inherited by secondmate homes.
 
+## Secret backend (config/secret-backend / FM_SECRET_BACKEND)
+
+The optional local, gitignored `config/secret-backend` selects which backend serves a `bin/fm-av-run.sh` call once `config/av-inject` is on.
+`automic` (absent, empty, or `automic`) is the Automic Vault behavior above for every key.
+`varlock-op` routes per key: `EXA_API_KEY`, `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, `LINKUP_API_KEY`, and `PARALLEL_API_KEY`, the low-value rapid-recon search keys, come from `varlock`, so an unattended worker needs no per-run approval tap for them; every other key stays on the unchanged Automic path.
+A call naming only search keys needs no `av`; a call naming only other keys is exactly the `automic` behavior; a mixed call checks the `varlock-op` prerequisites below first, so a missing one never costs an approval tap, then runs the Automic preflight and approval probe for the other keys and execs `av inject +OTHER... -- varlock run ... -- <tool>`, so `av` stays outermost and the calling agent remains the launcher its Direct Access rule matches.
+Any other value refuses the call rather than defaulting, because a typo must not route a key through the wrong backend.
+`FM_SECRET_BACKEND` overrides the file with the same values and exists for tests.
+`config/secret-backend` and `config/varlock/.env.schema` are primary-authoritative and inherited into secondmate homes, local and remote, like `config/av-inject`.
+
+The `varlock-op` half runs `varlock run --path <home>/config/varlock --filter <search keys> -- <tool>` after the same key-name validation as Automic, and refuses without running the tool for a missing `varlock`, a missing `config/varlock/.env.schema`, a missing or malformed token, or a requested search key that does not resolve to a non-empty value, which `--filter` alone does not catch.
+Key names are validated as exact names, so the `--filter` is always the requested keys and never a glob.
+The operator supplies:
+
+- A dedicated 1Password vault holding only those five keys, and a read-only service account scoped to it.
+- The service-account `ops_` token stored in the macOS keychain with `security add-generic-password -s firstmate-rapid-recon -a OP_SERVICE_ACCOUNT_TOKEN -w`; the token is read at the moment of the call and handed to `varlock` as an exec-time environment assignment, so it is never in Firstmate's environment, argv, a file, or a log.
+- A schema at `config/varlock/.env.schema` that reads the five keys from that vault with the 1Password plugin and marks the token variable `@internal`; Firstmate also unsets the token before the tool runs.
+
+A well-formed token that 1Password rejects is refused by `varlock` itself, which does not run the tool when resolution fails.
+This backend has no human approval to wait for, so `FM_VAULT_PROBE_TIMEOUT`, `FM_AV_INJECT_PREFLIGHT_DEADLINE`, and `FM_AV_APPROVAL_TIMEOUT` apply to the `automic` backend only.
+It trades the Automic launcher gate for a bearer token on this Mac, which is acceptable only for low-value, individually rate-limited, separately revocable keys; every other key stays on `automic`.
+`bin/fm-av-inject-lib.sh`'s header owns the mechanics.
+
 ## Turn-end pane-churn absorb (config/turnend-churn-absorb)
 
 The optional local, gitignored `config/turnend-churn-absorb` presence flag opts this home into a default-off third form of positive work evidence in watcher triage.
@@ -890,6 +913,7 @@ The Kimi installer requires an existing regular non-symlink `~/.kimi-code/config
 
 Its `remove` action excises only the marker-delimited Firstmate region and removes Firstmate's hook files.
 For Pi and pi-signed secondmate launches, `fm-spawn.sh` starts the selected executable with `-e` pointed at the secondmate home's own tracked `.pi/extensions/fm-primary-pi-watch.ts` and `.pi/extensions/fm-primary-turnend-guard.ts`, both already present from the secondmate home's git worktree.
+Pi-family secondmates can start unattended in Firstmate-seeded homes without accepting project trust manually; [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the capability requirement, session-only approval scope, and older-version fallback, with [regression evidence](verification/runtime-backends.md#pi-seeded-secondmate-project-trust).
 
 For omp secondmate launches, `fm-spawn.sh` passes no `-e` at all: omp auto-discovers the home's tracked `.omp/extensions/` with no trust gate, and naming a discovered file with `-e` as well loads it twice; every omp launch instead carries the tracked `.omp/fm-worker-overlay.yml` posture overlay through `--config`, which [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns.
 
@@ -1499,6 +1523,33 @@ Optional `prices/*.json` files hold first-party per-model prices, shaped as `{"m
 Manual samples are taken within twenty minutes of the top of an SGT hour, because a later read cannot be aligned to tokscale's hourly buckets.
 `fm-value-ledger.sh arm` writes and binds `state/value-ledger.check.sh`, which samples and rolls up once a day at the first sweep after 00:15 SGT and prints one line only when an instrument failed, a quota read was not fresh, the row could not be written, or whole days are missing.
 `disarm` removes the shim, its trust binding, and the alert markers.
+
+## Lane burn watch (config/burn-watch.json, state/burn-watch.check.sh)
+
+[`bin/fm-burn-watch.sh`](../bin/fm-burn-watch.sh) is an opt-in watcher check for fast, steering-oriented quota burndown tracking.
+Quota-axi percentages are the accepted steering signal because every approved threshold is a quota percentage; plan payback (`bin/fm-value-ledger.sh`) already samples token draw from tokscale and codeburn hourly.
+While plan payback samples hourly for retrospective accounting, burn watch samples on the watcher's `FM_CHECK_INTERVAL` cadence to detect lanes draining fast or running low at intake time.
+`fm-burn-watch.sh arm` writes and binds `state/burn-watch.check.sh` through `bin/fm-check-register.sh`.
+`fm-burn-watch.sh disarm` removes the shim, its trust binding, and active watch state.
+`fm-burn-watch.sh init` writes the starting configuration to `config/burn-watch.json` when absent.
+
+**Steering thresholds and alerts**
+
+The check accepts only the configured window ID from a fresh provider and stores readings in `state/.burn-watch-prev` to compute per-lane deltas.
+The same file keeps each lane's rate anchor value and timestamp, resetting when its provider, window, or reset period changes (reset times within one hour count as the same period) or remaining quota rises; rates are evaluated only after six hours and discount one point for whole-percent quantization.
+It prints exactly one line when a steering threshold is crossed, and stays silent otherwise.
+Alerts fire once per threshold crossing and re-arm only after recovery, preventing repetitive notifications.
+Starting thresholds include:
+
+- A lane falling 10+ points between samples.
+- Provider floor thresholds: claude below 20%, codex below 15%, and agy below 20%.
+- The Alibaba monthly bucket burning faster than 1.5%/day.
+
+If an instrument fails or a lane is unmeasured, the check prints one diagnostic line once, staying silent on subsequent failed polls until measurement recovers and re-arms.
+Thresholds and monitored windows are configurable in `config/burn-watch.json`.
+Defaults apply only when that file is absent; an existing unreadable or invalid file prints `burn watch: invalid config - <path>` once and skips evaluation until it is fixed.
+A file is invalid when `lanes` is not an object, a lane entry is not an object, `provider` or `window` is not a string, or `drop_threshold_pp`, `floor_pct`, or `rate_pct_day` is present but not a number.
+If writing watch state fails, the check prints `burn watch: state write failed - <state dir>` and exits non-zero instead of reporting threshold alerts.
 
 ## Mail plane (.env)
 
@@ -2386,8 +2437,9 @@ FM_BACKEND_HERDR_SUBMIT_POLLS=6  # herdr-only: agent-state samples spread across
 FM_BACKEND_HERDR_SUBMIT_MIN_SLEEP=0.6  # herdr-only: minimum per-Enter confirmation budget before polling agent-state after an idle baseline
 FM_ZELLIJ_SESSION=firstmate  # zellij-only: named session for normal backend ops and test isolation (docs/zellij-backend.md)
 CMUX_SOCKET_PASSWORD=   # cmux-only: socket password fallback when config/cmux-socket-password is absent (docs/cmux-backend.md)
-FM_SESSION_START_STATUS_TAIL=5   # state/*.status lines printed per task in the session-start digest; each line is capped by bin/fm-line-cap-lib.sh
-FM_SESSION_START_QUEUED_LIMIT=20   # plain queued backlog rows in the session-start digest; in-flight, held, and blocked rows are never bounded and done rows are never listed
+FM_SESSION_START_STATUS_TAIL=2   # state/*.status lines printed per task in the session-start digest; each line is capped by bin/fm-line-cap-lib.sh
+FM_SESSION_START_BUDGET_WORK=10240   # byte ceiling for the session-start digest's work-under-way section (meta records, endpoint reads, status tails); invalid or zero values fall back to 10240; an overflow prints the omitted-task count plus a recovery command
+FM_SESSION_START_QUEUED_LIMIT=20   # plain queued backlog rows in the session-start digest; in-flight, held, and blocked rows are never count-bounded (only the digest's backlog byte ceiling applies) and done rows are never listed
 FM_SESSION_START_ENDPOINT_TIMEOUT=10   # seconds bounding each per-task endpoint liveness read in the session-start digest (bin/fm-session-start.sh); nonpositive or invalid values fall back to 10; a read that hits the bound or dies becomes that task's own `endpoint: error` line and the digest continues
 FM_BACKLOG_ROW_TIMEOUT_SECS=10   # seconds bounding each backlog row read (bin/fm-backlog-transition-lib.sh); nonpositive or invalid values fall back to 10; the first bound hit latches the sweep so later reads return immediately, each still naming its own item
 FM_BOOTSTRAP_DETECT_ONLY=0   # internal/read-only session-start mode: skip bootstrap's mutating sweeps and print advisory TANGLE wording
@@ -2476,6 +2528,7 @@ FM_WATCH_REARM_RETRY_MAX_MS=4000   # Pi/OpenCode adapter cap for exponential con
 FM_WATCH_REARM_RETRY_LIMIT=5   # Pi/OpenCode adapter launch-failure retries before surfacing restoration failure
 FM_WATCH_CYCLE_LOG_MAX_BYTES=262144   # size cap for the arm-owned watcher lifecycle ledger
 FM_WATCH_CYCLE_LOG_KEEP_LINES=1000   # newest complete lifecycle rows considered when the ledger is capped
+FM_WATCH_EXTENSION_LOG_KEEP_LINES=0   # opt-in Pi extension diagnostic log (state/.watch-extension.log); unset, empty, non-numeric, zero, or negative disables logging, a positive value keeps that many newest rows; logging never changes supervision behavior
 FM_WATCHER_STALE_GRACE=300   # defaults to FM_GUARD_GRACE if set, else the poll-derived grace (docs/turnend-guard.md "Guard grace and the poll cadence"); seconds before a fresh arm refuses a live holder's stale beacon (attached arms: FM_WATCHER_STALL_BOUND)
 FM_WATCHER_STALL_BOUND=       # live-holder stall bound; default and arm/re-arm behavior: docs/turnend-guard.md "Guard grace and the poll cadence"
 FM_SIGNAL_GRACE=30      # seconds to coalesce nearby status and turn-end signals into one wake

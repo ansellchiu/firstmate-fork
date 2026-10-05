@@ -114,7 +114,8 @@ start_worker() {
     export FM_REMOTE_JOB_STATE_ROOT="$state_root"
     export FM_REMOTE_JOB_PLATFORM_OVERRIDE=Linux
     export FM_REMOTE_JOB_ORPHAN_GRACE_SECONDS=1
-    # shellcheck source=bin/fm-remote-job-lib.sh
+    # Production libraries are linted independently by fm-lint.sh.
+    # shellcheck source=/dev/null
     . "$ROOT/bin/fm-remote-job-lib.sh"
     fm_remote_job_start_linux_worker "$root" "$account_home" >&2 || exit 1
     deadline=$(( $(date +%s) + 10 ))
@@ -227,3 +228,94 @@ pass "the reaper stops an abandoned worker's whole tree"
 out=$("$REAPER" 2>&1) || fail "a repeat reaper run failed: $out"
 assert_not_contains "$out" "$STALE" "the reaper reported an already-stopped worker"
 pass "the reaper is idempotent"
+
+# A watcher arm whose code root is gone is reaped only for the sweeping home.
+# Another existing home's arm, and an arm whose root still exists, stay up.
+OURS="$TMP_ROOT/arm-home-ours"
+THEIRS="$TMP_ROOT/arm-home-theirs"
+mkdir -p "$OURS" "$THEIRS"
+
+start_scoped_arm() { # <root> <home> <heartbeat> <stop> <pidfile>
+  local root=$1
+  mkdir -p "$root/bin"
+  cat > "$root/bin/fm-watch-arm.sh" <<'SH'
+#!/usr/bin/env bash
+trap '' TERM INT
+printf '%s\n' "$$" > "${FM_ARM_PIDFILE:?}"
+n=0
+end=$((SECONDS + 20))
+while [ ! -e "${FM_ARM_STOP:-}" ] && [ "$SECONDS" -lt "$end" ]; do
+  n=$((n + 1))
+  if ! printf '%s\n' "$n" > "${FM_ARM_HEARTBEAT:?}"; then
+    exit 0
+  fi
+  sleep 0.2
+done
+SH
+  chmod +x "$root/bin/fm-watch-arm.sh"
+  FM_HOME="$2" FM_ARM_HEARTBEAT="$3" FM_ARM_STOP="$4" FM_ARM_PIDFILE="$5" \
+    "$root/bin/fm-watch-arm.sh" --restart >/dev/null 2>&1 &
+  track "$!"
+  disown "$!" 2>/dev/null || true
+}
+
+wait_arm_pid() { # <pidfile>
+  local tries=0
+  while [ ! -s "$1" ] && [ "$tries" -lt 50 ]; do
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  [ -s "$1" ]
+}
+
+arm_advanced() { # <heartbeat> <previous>
+  local now
+  sleep 0.5
+  now=$(cat "$1")
+  [ "$now" != "$2" ]
+}
+
+LIVE_ROOT="$TMP_ROOT/arm-live-root"
+OURS_ROOT="$TMP_ROOT/arm-ours-root"
+THEIRS_ROOT="$TMP_ROOT/arm-theirs-root"
+LIVE_HB="$TMP_ROOT/arm-live.hb"
+OURS_HB="$TMP_ROOT/arm-ours.hb"
+THEIRS_HB="$TMP_ROOT/arm-theirs.hb"
+LIVE_STOP="$TMP_ROOT/arm-live.stop"
+OURS_STOP="$TMP_ROOT/arm-ours.stop"
+THEIRS_STOP="$TMP_ROOT/arm-theirs.stop"
+LIVE_PIDF="$TMP_ROOT/arm-live.pid"
+OURS_PIDF="$TMP_ROOT/arm-ours.pid"
+THEIRS_PIDF="$TMP_ROOT/arm-theirs.pid"
+
+start_scoped_arm "$LIVE_ROOT" "$OURS" "$LIVE_HB" "$LIVE_STOP" "$LIVE_PIDF"
+start_scoped_arm "$OURS_ROOT" "$OURS" "$OURS_HB" "$OURS_STOP" "$OURS_PIDF"
+start_scoped_arm "$THEIRS_ROOT" "$THEIRS" "$THEIRS_HB" "$THEIRS_STOP" "$THEIRS_PIDF"
+wait_arm_pid "$LIVE_PIDF" || fail "the live-root watch arm never published its pid"
+wait_arm_pid "$OURS_PIDF" || fail "this home's watch arm never published its pid"
+wait_arm_pid "$THEIRS_PIDF" || fail "the other home's watch arm never published its pid"
+OURS_ARM=$(cat "$OURS_PIDF")
+THEIRS_ARM=$(cat "$THEIRS_PIDF")
+LIVE_MARK=$(cat "$LIVE_HB")
+rm -rf "$OURS_ROOT" "$THEIRS_ROOT"
+
+out=$(FM_HOME="$OURS" "$REAPER" --dry-run 2>&1) || fail "the watch-arm dry run failed: $out"
+assert_contains "$out" "$OURS_ARM" "the dry run did not report this home's abandoned watch arm"
+assert_contains "$out" "would reap abandoned watcher arm" "the dry run did not mark the watch arm as a preview"
+assert_not_contains "$out" "$THEIRS_ARM" "the dry run reported another home's watch arm"
+arm_advanced "$OURS_HB" "$(cat "$OURS_HB")" || fail "the dry run stopped this home's watch arm"
+LIVE_MARK=$(cat "$LIVE_HB")
+THEIRS_MARK=$(cat "$THEIRS_HB")
+
+out=$(FM_HOME="$OURS" "$REAPER" 2>&1) || fail "the watch-arm reaper failed: $out"
+assert_contains "$out" "$OURS_ARM" "the reaper did not report this home's abandoned watch arm"
+assert_not_contains "$out" "$THEIRS_ARM" "the reaper reported another home's watch arm"
+OURS_AFTER=$(cat "$OURS_HB")
+sleep 0.5
+[ "$(cat "$OURS_HB")" = "$OURS_AFTER" ] || fail "this home's abandoned watch arm kept running"
+arm_advanced "$THEIRS_HB" "$THEIRS_MARK" || fail "the reaper stopped another home's watch arm"
+arm_advanced "$LIVE_HB" "$LIVE_MARK" || fail "the reaper stopped a watch arm whose code root still exists"
+printf 'stop\n' > "$LIVE_STOP"
+printf 'stop\n' > "$THEIRS_STOP"
+printf 'stop\n' > "$OURS_STOP"
+pass "the reaper stops this home's abandoned watch arm and leaves another home's arm and a live root"

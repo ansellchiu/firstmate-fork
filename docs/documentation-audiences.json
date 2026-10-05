@@ -401,6 +401,10 @@
       "audience": "operator-current"
     },
     {
+      "path": "docs/pi-headroom.md",
+      "audience": "operator-current"
+    },
+    {
       "path": "docs/pi-primary-growth.md",
       "audience": "maintainer-architecture"
     },
@@ -518,6 +522,10 @@
     },
     {
       "path": "docs/verification/public-followup.md",
+      "audience": "maintainer-verification"
+    },
+    {
+      "path": "docs/verification/pi-headroom.md",
       "audience": "maintainer-verification"
     },
     {

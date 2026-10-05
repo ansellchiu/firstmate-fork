@@ -399,6 +399,33 @@ test_matrix_cursor_reverse_video_placeholder_remnant() {
   pass "matrix: cursor's reverse-video placeholder remnant reads empty; real typed text stays pending"
 }
 
+test_matrix_cursor_busy_placeholder_row_reads_empty() {
+  # Real Grok 4.7 cursor-agent rows from the fm-restart-cursor-placeholder-s1
+  # captures, trimmed to the composer and its footer (rules shortened, the
+  # right-alignment gap shortened). A running turn draws its dim
+  # `ctrl+c to stop` token on the composer row itself; that row read `pending`
+  # and fm-secondmate-restart refused the mates with "composer visibly holds
+  # pending text".
+  local bg composer_idle composer_busy rules footer idle busy typed
+  bg="${ESC}[48;2;21;21;21m"
+  composer_idle=" ${ESC}[0m${bg} ${ESC}[0m${ESC}[2m${bg}→ ${ESC}[0m${ESC}[7m${bg}A${ESC}[0m${ESC}[2m${bg}dd a follow-up${ESC}[0m${bg}        ${ESC}[0m"
+  composer_busy="${composer_idle}${ESC}[2m${bg}ctrl+c to stop${ESC}[0m${bg} ${ESC}[0m"
+  rules=" ${ESC}[0m${ESC}[38;2;21;21;21m▄▄▄▄▄▄▄▄${ESC}[0m"
+  footer=$'\n'" ${ESC}[0m${ESC}[38;2;21;21;21m▀▀▀▀▀▀▀▀${ESC}[0m"$'\n'"  ${ESC}[0m${ESC}[2mGrok 4.7 256K Medium${ESC}[0m ${ESC}[0m${ESC}[2m·${ESC}[0m ${ESC}[0m${ESC}[2m86.5%${ESC}[0m        ${ESC}[0m${ESC}[38;5;5mRun Everything${ESC}[0m"$'\n'"  ${ESC}[0m${ESC}[2m~/wt · fm/s1${ESC}[0m"
+  idle=$'transcript\n\n'"${rules}"$'\n'"${composer_idle}${footer}"
+  busy=$'transcript\n\n'"${rules}"$'\n'"${composer_busy}${footer}"
+  assert_screen "cursor grok idle placeholder" empty "$CAPS_STYLED" "$idle"
+  assert_screen "cursor grok busy placeholder with ctrl+c to stop" empty "$CAPS_STYLED" "$busy"
+  assert_screen "cursor grok busy placeholder on zellij" empty "$CAPS_STYLED_NOID" "$busy"
+  # A genuinely typed follow-up is bright, so it survives stripping and stays
+  # pending beside the busy token, including text that ends in the token.
+  for typed in 'Add a follow-up' 'stop now ctrl+c to stop'; do
+    assert_screen "cursor grok typed '$typed' while busy" pending "$CAPS_STYLED" \
+      $'transcript\n\n'"${rules}"$'\n'" ${ESC}[0m${bg} ${ESC}[0m${ESC}[2m${bg}→ ${ESC}[0m${ESC}[38;2;224;222;244m${typed}${ESC}[0m${bg}        ${ESC}[0m${ESC}[2m${bg}ctrl+c to stop${ESC}[0m${footer}"
+  done
+  pass "matrix: cursor's placeholder row reads empty idle and busy; typed follow-ups stay pending"
+}
+
 test_matrix_herdr_halfblock_rule_bounds_bare_wrap() {
   # Herdr draws a composer's rules with half-block glyphs (▄ above, ▀ below)
   # rather than the box-drawing family. Without treating those as edges, a bare
@@ -731,6 +758,59 @@ test_matrix_grok_titled_bottom_border() {
   pass "matrix: grok's real oversized titled bottom is empty while typed and unproved panes stay safe"
 }
 
+test_matrix_claude_titled_top_rule() {
+  # A named Claude Code session draws its title into the composer's TOP rule
+  # (issues #5601 and #5558; observed on herdr as
+  # `─── Firstmate operational input 1790546042 ─`). The strict separator
+  # predicate rejects that row, so the pair never opened, the closing rule
+  # read as a lower unmatched separator, and a visibly empty composer read
+  # `unknown` on every cursorless backend, refusing steers, exit, and relaunch.
+  local rule title top bottom footer screen ansi typed claude_idle
+  local scrollback short nonascii flush blank
+  claude_idle=$(printf 'claude\tidle')
+  rule='────────────────────────────────────────────────────────────'
+  title=' Firstmate operational input 1790546042 '
+  top="${rule}───${title}─"
+  bottom="${rule}────────────────────────────────────────────"
+  footer='  ⏵⏵ bypass permissions on (shift+tab to cycle)'
+  screen="recap: earlier work"$'\n'"$top"$'\n❯'"$NBSP"$'\n'"$bottom"$'\n'"$footer"
+  ansi="${ESC}[38;2;128;130;131mrecap: earlier work${ESC}[0m"$'\n'
+  ansi+="${ESC}[0m${ESC}[38;2;121;129;134m${rule}─── ${ESC}[38;2;177;185;249m${title# }${ESC}[38;2;121;129;134m─${ESC}[0m"$'\n'
+  ansi+="${ESC}[0m${ESC}[38;2;128;130;131m❯${NBSP}${ESC}[0m"$'\n'
+  ansi+="${ESC}[0m${ESC}[38;2;121;129;134m${bottom}${ESC}[0m"$'\n'"$footer"
+  assert_screen "titled claude idle on herdr" empty "$CAPS_STYLED" "$screen" '' "$claude_idle"
+  assert_screen "titled claude idle on herdr (ansi)" empty "$CAPS_STYLED" "$ansi" '' "$claude_idle"
+  assert_screen "titled claude idle on zellij (ansi)" empty "$CAPS_STYLED_NOID" "$ansi"
+  assert_screen "titled claude idle on cmux/orca" empty "$CAPS_PLAIN" "$screen"
+  assert_screen "titled claude idle on tmux" empty "$CAPS_TMUX" "$ansi" 2 probe-absent
+  typed="$top"$'\n❯ fix the login bug\n'"$bottom"$'\n'"$footer"
+  assert_screen "titled claude typed on herdr" pending "$CAPS_STYLED" "$typed" '' "$claude_idle"
+  assert_screen "titled claude typed on zellij" pending "$CAPS_STYLED_NOID" "$typed"
+  assert_screen "titled claude typed on tmux" pending "$CAPS_TMUX" "$typed" 1 probe-absent
+  assert_screen "titled claude typed on plain backends" unknown "$CAPS_PLAIN" "$typed"
+  # The staleness rule still holds: a titled sandwich stranded in scrollback,
+  # with transcript rows between it and a lower unmatched rule, stays unknown.
+  scrollback="$top"$'\n❯'"$NBSP"$'\n'"$bottom"$'\nlater transcript output\n'"$bottom"$'\nmore output'
+  assert_screen "titled sandwich in scrollback" unknown "$CAPS_STYLED_NOID" "$scrollback"
+  # Width is proven, not assumed: a titled rule narrower than its closing rule
+  # is not that composer's top edge.
+  short="${rule}${title}─"$'\n❯'"$NBSP"$'\n'"$bottom"
+  assert_screen "mismatched titled rule width" unknown "$CAPS_STYLED_NOID" "$short"
+  # A non-ASCII title leaves residue and refuses rather than guessing width.
+  nonascii="${rule}─── ✳ Firstmate operational input 179054604 ─"$'\n❯'"$NBSP"$'\n'"$bottom"
+  assert_screen "non-ASCII titled rule" unknown "$CAPS_STYLED_NOID" "$nonascii"
+  # The rule must open with the strict separator's dash run.
+  flush=" Firstmate operational input 1790546042 ${rule}────"$'\n❯'"$NBSP"$'\n'"$bottom"
+  assert_screen "title flush at the rule's start" unknown "$CAPS_STYLED_NOID" "$flush"
+  # The strict blank-row posture is untouched: no glyph row, no proof.
+  blank="$top"$'\n\n'"$bottom"
+  assert_screen "titled rule over a blank row" unknown "$CAPS_STYLED_NOID" "$blank"
+  # The untitled pair keeps its verdict alongside the new shape.
+  assert_screen "untitled claude idle on herdr" empty "$CAPS_STYLED" \
+    "$bottom"$'\n❯'"$NBSP"$'\n'"$bottom"$'\n'"$footer" '' "$claude_idle"
+  pass "matrix: claude's titled top rule proves an idle composer empty and a draft pending (#5601, #5558)"
+}
+
 test_matrix_kimi_bordered_shell_glyph_box() {
   # Kimi's bordered `│ > │` composer - the shape fm-spawn.sh's retired
   # spawn-local regex used to own. Now the shared owner proves it everywhere,
@@ -975,6 +1055,7 @@ test_composer_footer_zone_refuses_rather_than_allows
 test_matrix_codex_dim_hint_row
 test_matrix_muse_truecolor_glyph_survives_signal_loss
 test_matrix_cursor_reverse_video_placeholder_remnant
+test_matrix_cursor_busy_placeholder_row_reads_empty
 test_matrix_herdr_halfblock_rule_bounds_bare_wrap
 test_matrix_omp_status_row_bounds_bare_composer
 test_matrix_codex_idle_starfield_furniture
@@ -982,6 +1063,7 @@ test_matrix_pi_separated_needs_identity
 test_matrix_pi_dollar_status_footer_is_empty
 test_matrix_opencode_leftbar_signals
 test_matrix_grok_titled_bottom_border
+test_matrix_claude_titled_top_rule
 test_matrix_kimi_bordered_shell_glyph_box
 test_matrix_claude_inside_zellij_ansi_dump
 test_strict_blank_row_divergence

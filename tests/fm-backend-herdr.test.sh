@@ -314,7 +314,13 @@ test_version_check_refuses_old_protocol() {
 test_version_check_refuses_missing_herdr() {
   local dir out status
   dir="$TMP_ROOT/version-missing"; mkdir -p "$dir/empty-fakebin"
-  out=$( PATH="$dir/empty-fakebin:/usr/bin:/bin" \
+  # Hermetic PATH: the fakebin carries only bash (so the inner `bash -c`
+  # still resolves) and no system dir, so a real herdr installed under
+  # /usr/bin (or /bin -> usr/bin) cannot leak into this "not installed"
+  # simulation. fm_backend_herdr_tool_check needs no external tool on this
+  # path: `command -v` is a builtin and it short-circuits on herdr first.
+  ln -sf "$(command -v bash)" "$dir/empty-fakebin/bash"
+  out=$( PATH="$dir/empty-fakebin" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_version_check' "$ROOT" 2>&1 )
   status=$?
   [ "$status" -ne 0 ] || fail "version_check should refuse when herdr is not installed"
@@ -4694,9 +4700,9 @@ test_send_text_submit_idle_native_pending_plus_rendered_busy_is_queued() {
 # reports a cursor pane `blocked` in EVERY state - idle, mid-turn, and after -
 # so the idle-baseline native path is structurally unreachable and every typed
 # send lands in the composer branch. Cursor's mid-turn composer row renders its own
-# `Add a follow-up` placeholder beside a right-aligned `ctrl+c to stop`, so the
-# content verdict is `pending` on a composer holding no user text, and every
-# typed steer reported delivery unconfirmed on a message that had actually landed.
+# `Add a follow-up` placeholder beside a right-aligned `ctrl+c to stop`. That row
+# holds no user text and reads `empty`, so it proves nothing about whether a
+# typed steer landed; delivery is confirmed from the rendered footer instead.
 # The bytes below are the real captures from that pane.
 
 # The idle capture: no busy token anywhere, which is the pre-Enter baseline.
@@ -4717,21 +4723,25 @@ herdr_cursor_midturn_ansi() {
   printf '%b' ' \033[0m\033[38;2;21;21;21m▄▄▄▄▄▄▄▄▄▄\033[0m\r\n \033[0m\033[48;2;21;21;21m \033[0m\033[2m\033[48;2;21;21;21m→ \033[0m\033[7m\033[48;2;21;21;21mA\033[0m\033[2m\033[48;2;21;21;21mdd a follow-up\033[0m\033[48;2;21;21;21m                   \033[0m\033[2m\033[48;2;21;21;21mctrl+c to stop\033[0m\033[48;2;21;21;21m \033[0m\r\n \033[0m\033[38;2;21;21;21m▀▀▀▀▀▀▀▀▀▀\033[0m\r\n  \033[0m\033[38;5;4m1 task\033[0m\r\n  \033[0m\033[2mCursor Grok 4.5 High\033[0m \033[0m\033[2m·\033[0m \033[0m\033[2m7%%\033[0m           \033[0m\033[38;5;5mRun Everything\033[0m\r\n  \033[0m\033[2m~/.treehouse/curhd-ae68cd/1/curhd · 39418af\033[0m\r\n'
 }
 
-# Non-vacuity anchor for the two submit tests below: the real mid-turn capture
-# genuinely reads `pending`, so the confirmation those tests assert can only be
-# coming from the rendered-footer transition and never from a softened composer
-# verdict. The composer verdict is deliberately NOT relaxed - a right-aligned
-# status token on the composer row is content the shared classifier must keep
-# treating as content for every other caller.
-test_composer_state_cursor_midturn_row_reads_pending() {
+# The mid-turn row with our typed text still held in the composer beside the
+# busy token: bright text, so the composer reads `pending`. The submit tests
+# below use it so their confirmation can only come from the rendered footer.
+herdr_cursor_midturn_typed_ansi() {
+  printf '%b' ' \033[0m\033[38;2;21;21;21m▄▄▄▄▄▄▄▄▄▄\033[0m\r\n \033[0m\033[48;2;21;21;21m \033[0m\033[2m\033[48;2;21;21;21m→ \033[0m\033[38;2;224;222;244m\033[48;2;21;21;21mhello captain\033[0m\033[48;2;21;21;21m                     \033[0m\033[2m\033[48;2;21;21;21mctrl+c to stop\033[0m\033[48;2;21;21;21m \033[0m\r\n \033[0m\033[38;2;21;21;21m▀▀▀▀▀▀▀▀▀▀\033[0m\r\n  \033[0m\033[38;5;4m1 task\033[0m\r\n  \033[0m\033[2mCursor Grok 4.5 High\033[0m \033[0m\033[2m·\033[0m \033[0m\033[2m7%%\033[0m           \033[0m\033[38;5;5mRun Everything\033[0m\r\n  \033[0m\033[2m~/.treehouse/curhd-ae68cd/1/curhd · 39418af\033[0m\r\n'
+}
+
+# The real mid-turn capture holds only cursor's placeholder beside its dim
+# busy token, so it reads `empty`: fm-secondmate-restart must not refuse a mate
+# whose composer is untouched just because a turn is running.
+test_composer_state_cursor_midturn_row_reads_empty() {
   local dir log resp fb out
   dir="$TMP_ROOT/composer-cursor-midturn"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
   herdr_cursor_midturn_ansi > "$resp/1.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state default:w1:p2' "$ROOT" )
-  [ "$out" = pending ] || fail "cursor's mid-turn composer row carries a busy token and must stay 'pending' as composer CONTENT, got '$out'"
-  pass "fm_backend_herdr_composer_state: cursor's mid-turn placeholder-plus-busy-token row reads pending (why delivery needs a separate signal)"
+  [ "$out" = empty ] || fail "cursor's mid-turn placeholder-plus-busy-token row holds no user text and must read 'empty', got '$out'"
+  pass "fm_backend_herdr_composer_state: cursor's mid-turn placeholder-plus-busy-token row reads empty"
 }
 
 test_rendered_busy_state_reads_the_cursor_busy_token() {
@@ -4763,13 +4773,13 @@ test_send_text_submit_confirms_never_idle_native_state_via_footer_transition() {
   #    mid-turn before our Enter
   # 4: pane read - the pre-Enter composer baseline
   # 5: send-keys enter
-  # 6: pane read - composer content mid-turn: placeholder plus busy token
+  # 6: pane read - composer content mid-turn: our text beside the busy token
   # 7: pane read - rendered footer now busy: an idle-to-busy transition ACROSS
   #    our Enter, which is the submission proof
   printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/2.out"
   herdr_cursor_idle_plain > "$resp/3.out"
   herdr_cursor_idle_plain > "$resp/4.out"
-  herdr_cursor_midturn_ansi > "$resp/6.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/6.out"
   herdr_cursor_midturn_plain > "$resp/7.out"
   herdr_submit_identity_prefix "$resp" codex
   fb=$(make_herdr_fakebin "$dir")
@@ -4789,9 +4799,9 @@ test_send_text_submit_never_idle_native_state_keeps_pending_without_a_transition
   # borrowing someone else's turn as proof of our delivery.
   printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/2.out"
   herdr_cursor_midturn_plain > "$resp/3.out"
-  herdr_cursor_midturn_ansi > "$resp/4.out"
-  herdr_cursor_midturn_ansi > "$resp/6.out"
-  herdr_cursor_midturn_ansi > "$resp/8.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/4.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/6.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/8.out"
   herdr_submit_identity_prefix "$resp" codex
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
@@ -5197,6 +5207,37 @@ test_send_text_submit_claude_slash_popup_composer_is_still_proven_and_submitted(
     || fail "the payload proof must use the visible viewport"
   [ "$(grep -c $'\x1f''--lines' "$log")" -eq 0 ] || fail "no composer read may be a bounded --lines tail"
   pass "fm_backend_herdr_send_text_submit: a typed slash command hidden behind its popup is still proven and submitted"
+}
+
+# Live Claude Code 2.1.283 draws a recognized typed slash command in muted
+# truecolor grey (38;2;112;112;112, luminance 112), below the grok-tuned
+# dark-foreground ghost threshold. Claude's own ghost suggestion is SGR-2 dim,
+# so the Claude payload proof must not strip the grey command and judge the
+# typed /exit unsent (the fm-control exit breakage, reproduced live).
+test_send_text_submit_claude_grey_slash_command_is_proven_and_submitted() {
+  local dir log resp fb out enter_count text rule head
+  dir="$TMP_ROOT/submit-claude-grey-slash"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  text='/exit'
+  herdr_submit_claude_prefix "$resp" "$text"
+  rule=$(printf '%0.s\xe2\x94\x80' $(seq 1 60))
+  head=$(printf '%0.s\xe2\x94\x80' $(seq 1 19))
+  {
+    printf '  \x1b[0m\x1b[38;2;112;112;112m/\x1b[0m\x1b[1m\x1b[38;2;112;112;112mexit\x1b[0m\x1b[38;2;112;112;112m    Exit the CLI\x1b[0m\n'
+    printf '\x1b[0m\x1b[38;2;121;129;134m%s Firstmate operational input 1790546042 \xe2\x94\x80\x1b[0m\n' "$head"
+    printf '\xe2\x9d\xaf\xc2\xa0\x1b[0m\x1b[38;2;112;112;112m/exit\x1b[0m\n'
+    printf '\x1b[0m\x1b[38;2;121;129;134m%s\x1b[0m\n' "$rule"
+    printf '  \x1b[0m\x1b[38;2;86;93;96m\xe2\x8f\xb5\xe2\x8f\xb5 bypass permissions on\x1b[0m\n'
+  } > "$resp/4.out"
+  printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' > "$resp/5.out"
+  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/7.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
+  [ "$out" = empty ] || fail "a typed /exit drawn in Claude's grey slash-command colour must be proven and submitted, got '$out'"
+  enter_count=$(grep -c $'\x1f''pane'$'\x1f''send-keys'$'\x1f''w1:p2'$'\x1f''enter' "$log")
+  [ "$enter_count" -eq 1 ] || fail "the proven grey slash command should be submitted once, sent $enter_count Enter(s)"
+  [ "$(herdr_ctrl_u_count "$log")" -eq 0 ] || fail "a proven grey slash command must not be cleared"
+  pass "fm_backend_herdr_send_text_submit: a typed slash command Claude draws in muted truecolor grey is proven and submitted"
 }
 
 test_send_text_submit_lone_paste_placeholder_submits_the_long_payload() {
@@ -6348,7 +6389,7 @@ test_send_text_submit_preexisting_working_does_not_confirm_failed_enter
 test_send_text_submit_idle_baseline_does_not_confirm_failed_enter
 test_send_text_submit_idle_native_empty_composer_confirms_delivery
 test_send_text_submit_idle_native_pending_plus_rendered_busy_is_queued
-test_composer_state_cursor_midturn_row_reads_pending
+test_composer_state_cursor_midturn_row_reads_empty
 test_rendered_busy_state_reads_the_cursor_busy_token
 test_send_text_submit_confirms_never_idle_native_state_via_footer_transition
 test_send_text_submit_never_idle_native_state_keeps_pending_without_a_transition
@@ -6370,6 +6411,7 @@ test_send_text_submit_accepts_marked_payloads_whose_read_back_drops_u2063
 test_send_text_submit_refuses_marked_digest_missing_its_head
 test_composer_state_claude_slash_popup_pushes_composer_above_tail_window
 test_send_text_submit_claude_slash_popup_composer_is_still_proven_and_submitted
+test_send_text_submit_claude_grey_slash_command_is_proven_and_submitted
 test_send_text_submit_lone_paste_placeholder_submits_the_long_payload
 test_send_text_submit_multiline_paste_placeholder_submits_the_long_payload
 test_send_text_submit_refuses_placeholder_followed_by_a_literal_remainder

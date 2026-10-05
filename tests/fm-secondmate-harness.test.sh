@@ -453,7 +453,7 @@ test_inheritable_config_single_owner_and_divergence() {
 
   # 1. FM_INHERITABLE_CONFIG is defined in bin/fm-config-inherit-lib.sh as the single owner.
   # Verify default items are all present in FM_INHERITABLE_CONFIG.
-  for item in crew-dispatch.json crew-harness backlog-backend backend herdr-presentation-spaces startup-memory-budget trace-context av-inject; do
+  for item in crew-dispatch.json crew-harness backlog-backend backend herdr-presentation-spaces startup-memory-budget trace-context av-inject secret-backend; do
     case " $FM_INHERITABLE_CONFIG " in
       *" $item "*) : ;;
       *) fail "default FM_INHERITABLE_CONFIG missing item: $item" ;;

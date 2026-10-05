@@ -15,7 +15,9 @@
 # found while taking that lock was left by a drain that died mid-write; each
 # locked drain rotates such leftovers away before doing anything else.
 # FM_STATUS_PRESENTATION_LOCK_TIMEOUT sets the positive whole-second wait for
-# presentation-path locks (default 10); queue mutation locks remain blocking.
+# presentation-path and acknowledgement locks (default 10).
+# An acknowledgement that cannot take a lock in time consumes nothing and exits
+# 1 with an ACKNOWLEDGEMENT SKIPPED line, so the same command can be re-run.
 set -u
 
 SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)"
@@ -270,7 +272,8 @@ acknowledge_inactive_outcomes() { # <mode> <newline-separated-fingerprints>
   local mode=$1 fingerprints=$2 fingerprint
   while IFS= read -r fingerprint; do
     [ -n "$fingerprint" ] || continue
-    "$SCRIPT_DIR/fm-inactive-reconcile.sh" "$mode" "$fingerprint" || return 1
+    FM_INACTIVE_ACK_LOCK_TIMEOUT=$PRESENTATION_LOCK_TIMEOUT \
+      "$SCRIPT_DIR/fm-inactive-reconcile.sh" "$mode" "$fingerprint" || return $?
   done <<< "$fingerprints"
 }
 
@@ -468,7 +471,7 @@ EOF
 # common case.
 print_open_decisions_section() {
   local snapshot=${1:-} open task key verb note line item_bytes=220 global_bytes=4000
-  local output='' used=0 shown=0 omitted=0 bytes
+  local output='' used=0 shown=0 omitted=0 bytes omitted_keys='' key_label
 
   if [ -n "$snapshot" ]; then
     open=$(scan_open_decisions_snapshot "$STATE" "$snapshot") || return 1
@@ -490,6 +493,14 @@ print_open_decisions_section() {
     bytes=$(( ${#line} + 1 ))
     if [ $((used + bytes)) -gt "$global_bytes" ]; then
       omitted=$((omitted + 1))
+      # Name every omitted key so a byte cap never silently drops a decision.
+      if [ "$key" = default ]; then
+        key_label="$task [key=default]"
+      else
+        key_label="$task [key=$key]"
+      fi
+      omitted_keys="${omitted_keys}${key_label}
+"
       continue
     fi
     output="$output$line
@@ -504,7 +515,13 @@ EOF
   printf 'OPEN DECISIONS (still open, folded from the durable status logs - not just the latest line):\n' || return 1
   printf '%s' "$output" || return 1
   if [ "$omitted" -gt 0 ]; then
-    printf 'OPEN DECISIONS: %d more omitted (byte cap)\n' "$omitted" || return 1
+    printf 'OPEN DECISIONS: %d more omitted (byte cap):\n' "$omitted" || return 1
+    while IFS= read -r key_label || [ -n "$key_label" ]; do
+      [ -n "$key_label" ] || continue
+      printf 'OPEN DECISIONS: omitted %s\n' "$key_label" || return 1
+    done <<EOF
+$omitted_keys
+EOF
   fi
   # Answerer-closes hint, printed at exactly the moment an answer gets written:
   # the send that answers a listed decision also closes it, so closure never
@@ -759,8 +776,7 @@ print_status_sections() {
   if ! {
     print_unread_status_section "$snapshot" \
       && print_status_outcome_backstop_section "$snapshot" \
-      && print_open_decisions_section "$snapshot" \
-      && print_record_divergence_section
+      && print_open_decisions_section "$snapshot"
   } > "$prepared"; then
     rm -f -- "$prepared"
     return 1
@@ -808,6 +824,10 @@ print_status_presentation() {  # [<deduped-raw-rows>]
   fi
   if [ "$rc" -eq 0 ] && [ -n "$snapshot" ]; then print_status_sections "$snapshot" "$fully_presented" || rc=1; fi
   fm_lock_release "$lock"
+  # Outside the lock: it asks the backlog tool (up to FM_DIVERGENCE_TIMEOUT) and
+  # touches no cursor, so holding the lock across it only made every other
+  # drain wait behind a slow backlog.
+  if [ "$rc" -eq 0 ] && [ -n "$snapshot" ]; then print_record_divergence_section || rc=1; fi
   return "$rc"
 }
 
@@ -823,17 +843,25 @@ cleanup() {
   exit "$status"
 }
 
+# An acknowledgement refuses rather than waits behind a live holder: nothing
+# was consumed, so the rows stay durable and the same command can be re-run.
+ack_lock_skipped() {
+  printf 'wake drain: ACKNOWLEDGEMENT SKIPPED: queue lock remains held by live pid %s after %ss; nothing was consumed, re-run the same --ack-through command.\n' \
+    "${FM_LOCK_HELD_PID:-unknown}" "$PRESENTATION_LOCK_TIMEOUT" >&2
+  exit 1
+}
+
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if [ -n "$ACK_THROUGH" ]; then
-  fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
-elif fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT"; then
+if fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT"; then
   :
 else
   lock_rc=$?
-  if [ "$lock_rc" -eq 124 ]; then
+  if [ "$lock_rc" -eq 124 ] && [ -n "$ACK_THROUGH" ]; then
+    ack_lock_skipped
+  elif [ "$lock_rc" -eq 124 ]; then
     printf 'WAKE DRAIN SKIPPED: queue lock remains held by live pid %s after %ss; retry on the next drain.\n' \
       "${FM_LOCK_HELD_PID:-unknown}" "$PRESENTATION_LOCK_TIMEOUT"
     exit 0
@@ -885,12 +913,17 @@ if [ -n "$ACK_THROUGH" ]; then
   fi
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
   DRAIN_LOCK_HELD=false
-  if ! acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
-    || ! acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS"; then
+  { acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
+    && acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS"; } || {
+    [ "$?" -ne 124 ] || exit 1
     echo "wake drain: inactive outcome receipt could not be recorded safely" >&2
     exit 1
-  fi
-  fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
+  }
+  fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT" || {
+    [ "$?" -ne 124 ] || ack_lock_skipped
+    echo "wake drain: queue lock could not be acquired safely" >&2
+    exit 1
+  }
   DRAIN_LOCK_HELD=true
   DRAIN_TMP=$(mktemp "$STATE/.wake-queue.ack.XXXXXX") || exit 1
   chmod 0600 "$DRAIN_TMP" || exit 1
