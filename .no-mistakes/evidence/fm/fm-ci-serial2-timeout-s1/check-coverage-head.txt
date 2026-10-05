@@ -1,0 +1,3 @@
+== HEAD 5c8acef3: --check-coverage
+FM_TEST_COVERAGE ok total=274 parallel=24 parallel_max_ms=665545 parallel_imbalance_ms=2 parallel_unhinted=0 serial=233 serial_shards=10 serial_unhinted=29 serial_max_ms=1094547 serial_budget_ms=1200000 herdr=17
+exit=0

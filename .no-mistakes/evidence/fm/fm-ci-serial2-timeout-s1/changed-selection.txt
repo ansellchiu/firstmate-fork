@@ -1,0 +1,4 @@
+$ (scratch copy of HEAD; one-line edit to tests/fm-supervision-host.test.sh) bin/fm-test-run.sh --list --changed --base HEAD~1
+tests/fm-supervision-host.test.sh
+tests/fm-supervision-host-engine.test.sh
+exit=0

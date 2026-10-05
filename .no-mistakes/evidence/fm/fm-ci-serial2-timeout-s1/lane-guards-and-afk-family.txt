@@ -1,0 +1,18 @@
+$ bin/fm-test-run.sh --list --lane portable-serial-2of9
+fm-test-run: lane 'portable-serial-2of9' asks for 9 portable serial shards but this runner is configured for 10 (see --list-lanes)
+exit=2
+$ bin/fm-test-run.sh --list --lane portable-serial-11of10
+fm-test-run: lane 'portable-serial-11of10' shard index is outside 1..10 (see --list-lanes)
+exit=2
+$ bin/fm-test-run.sh --list --lane portable-serial-0of10
+fm-test-run: lane 'portable-serial-0of10' shard index is outside 1..10 (see --list-lanes)
+exit=2
+
+$ bin/fm-test-run.sh --family afk --list
+tests/fm-afk-contract.test.sh
+tests/fm-afk-inject-e2e.test.sh
+tests/fm-afk-return.test.sh
+tests/fm-host-mirror.test.sh
+tests/fm-supervision-host-engine.test.sh
+tests/fm-supervision-host.test.sh
+exit=0
