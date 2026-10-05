@@ -8,7 +8,9 @@
 #   DOUBLE_CLAIM <worktree> <meta> <meta>...  one copy recorded by several state/*.meta
 #   OUT_OF_ISOLATION <task> <pid> <agent> <cwd>  a recorded worker in this home, a
 #                                                project clone, or its repository's primary checkout
-#   AUDIT_ERROR <pid> <reason>                  an unreadable worker process
+#   AUDIT_ERROR <pid> <reason>                  an unreadable worker process, including an
+#                                               agent in a primary whose environment (task
+#                                               identity) the OS hides, as macOS does
 #   HELD_LEASE <slot> <holder> <return-command> a slot a spawn stepped out of because
 #                                               another task record held it: leased with
 #                                               holder label fm-held:<holder-id>
@@ -102,21 +104,26 @@ escapes=$(
       environment=$(tr '\0' ' ' < "/proc/$pid/environ")
     else
       environment=$(ps -Eww -o command= -p "$pid" 2>/dev/null)
+      # macOS strips other processes' environments: -E then adds nothing to the command line.
+      [ "$environment" != "$(ps -ww -o command= -p "$pid" 2>/dev/null)" ] || environment=unreadable
     fi
     if [ -z "$environment" ]; then
       kill -0 "$pid" 2>/dev/null && printf 'AUDIT_ERROR %s cannot-read-environment\n' "$pid"
       continue
     fi
-    task=$(printf '%s\n' "$environment" | tr ' ' '\n' | sed -n 's/^FM_TASK_ID=//p' | head -1)
-    fm_task_id_creation_valid "$task" || continue
-    case " $environment " in
-      (*" FM_TASK_INBOX=$state_real/$task.inbox "*) ;;
-      (*) continue ;;
-    esac
-    meta="$STATE/$task.meta"
-    [ -f "$meta" ] || continue
-    kind=$(grep -m1 '^kind=' "$meta" | cut -d= -f2-)
-    [ "$kind" != secondmate ] || continue
+    meta=/dev/null task=unattributed
+    if [ "$environment" != unreadable ]; then
+      task=$(printf '%s\n' "$environment" | tr ' ' '\n' | sed -n 's/^FM_TASK_ID=//p' | head -1)
+      fm_task_id_creation_valid "$task" || continue
+      case " $environment " in
+        (*" FM_TASK_INBOX=$state_real/$task.inbox "*) ;;
+        (*) continue ;;
+      esac
+      meta="$STATE/$task.meta"
+      [ -f "$meta" ] || continue
+      kind=$(grep -m1 '^kind=' "$meta" | cut -d= -f2-)
+      [ "$kind" != secondmate ] || continue
+    fi
     cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || cwd=''
     if [ -z "$cwd" ]; then
       cwd=$(lsof -p "$pid" -a -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)
@@ -133,6 +140,11 @@ escapes=$(
     for primary in "${primaries[@]}"; do
       case "$cwd" in ("$primary"|"$primary"/*) escaped=1; break ;; esac
     done
+    if [ "$task" = unattributed ]; then
+      # No task identity to read, so an agent in a primary cannot be cleared as interactive.
+      [ "$escaped" = 0 ] || printf 'AUDIT_ERROR %s cannot-read-environment agent=%s cwd=%s\n' "$pid" "${comm##*/}" "$cwd"
+      continue
+    fi
     project=$(grep -m1 '^project=' "$meta" | cut -d= -f2-)
     if [ "$escaped" = 0 ] && [ -n "$project" ]; then
       git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null) &&
