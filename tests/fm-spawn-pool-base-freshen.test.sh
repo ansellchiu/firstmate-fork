@@ -768,6 +768,42 @@ test_pool_slot_recorded_by_another_task_is_refused() {
 
 # Homes may reuse a task id, so a registered home's record of the same id still
 # holds the slot even when the slot carries no claim naming that home.
+# A holder whose endpoint is a shell-only husk (its worker is gone, recovery
+# pending) does not block a different task; a holder whose endpoint reads as
+# a live agent still does.
+test_pool_slot_held_by_a_husk_is_not_refused() {
+  local rec id out status real
+  id='pool-slot-husk-r1'
+  rec=$(make_case slot-husk "$id")
+  read_case_record "$rec"
+  lay_out_as_pool_slot
+  printf 'backend=tmux\nkind=ship\nwindow=firstmate:fm-husk-holder-r1\nproject=%s\nworktree=%s\n' \
+    "$PROJECT_DIR" "$POOL_DIR" > "$HOME_DIR/state/husk-holder-r1.meta"
+  printf 'task=husk-holder-r1\nhome=%s\n' "$HOME_DIR" > "$SLOT_CLAIM"
+  real="$FAKEBIN_DIR/tmux.fixture"
+  mv "$FAKEBIN_DIR/tmux" "$real"
+  cat > "$FAKEBIN_DIR/tmux" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"#{pane_current_command}"*) printf '%s\\n' "\${FM_FAKE_HOLDER_COMMAND:-zsh}"; exit 0 ;;
+esac
+exec "$real" "\$@"
+SH
+  chmod +x "$FAKEBIN_DIR/tmux"
+  export FM_FAKE_DUPLICATE_WINDOW=fm-husk-holder-r1
+
+  out=$(FM_FAKE_HOLDER_COMMAND=claude run_spawn "$id" --scout 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "spawn launched into a slot whose holder still reads as a live agent"
+  assert_contains "$out" "still recorded by" "a live holder was not named"
+
+  out=$(run_spawn "$id" --scout 2>&1)
+  status=$?
+  unset FM_FAKE_DUPLICATE_WINDOW
+  expect_code 0 "$status" "a husk holder blocked a different task's spawn"$'\n'"$out"
+  pass "a slot held only by a proven-husk record is reusable while a live holder still blocks"
+}
+
 test_pool_slot_recorded_by_a_registered_home_is_refused() {
   local rec id out status mate
   id='pool-slot-held-elsewhere-r1'
@@ -823,6 +859,7 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
+test_pool_slot_held_by_a_husk_is_not_refused
 test_pool_slot_recorded_by_a_registered_home_is_refused
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
 test_linked_spawning_home_rejects_primary_before_refresh
