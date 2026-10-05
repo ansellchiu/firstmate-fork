@@ -211,8 +211,8 @@
 #   second --force. Its ONLY effect is to lift the structural receipt gate below,
 #   which otherwise refuses a ship task with no completion receipt, and only
 #   when teardown itself confirms live that the task never started: no
-#   completion receipt exists, the status log carries no done: or failed:
-#   declaration, the worktree is clean (crew_is_never_started in
+#   completion receipt exists, the status log carries no event and no pr= is
+#   recorded, the worktree is clean (crew_is_never_started in
 #   bin/fm-classify-lib.sh, the same check the watcher applies), and HEAD has
 #   no commits beyond the dispatch_base= SHA bin/fm-spawn.sh recorded. Commits
 #   that already landed on main still count as commits beyond that base. It

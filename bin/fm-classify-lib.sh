@@ -2810,8 +2810,8 @@ stale_underlying_state_sig() {  # <task> <state> <pane-hash>
   printf '%s\t%s\t%s' "$pane_hash" "$mtime" "$sig"
 }
 
-# 0 if crew <task> never genuinely started (no working: status line, no status
-# history beyond launch, no committed branch or changes, no active pipeline, not a secondmate).
+# 0 if crew <task> never genuinely started (no status event at all, no recorded
+# PR, no committed branch or changes, no active pipeline, not a secondmate).
 # 1 if the task shows positive evidence of real work, suppressing auto-standdown.
 crew_is_never_started() {  # <task> <state>
   local task=$1 state=$2 meta statusf kind wt proj dirty unpushed unmerged default_ref
@@ -2823,16 +2823,12 @@ crew_is_never_started() {  # <task> <state>
   kind=$(grep '^kind=' "$meta" 2>/dev/null | tail -1 | cut -d= -f2- || true)
   [ "$kind" != secondmate ] || return 1
 
-  # 2. Status history: never any working: line, and no non-launch progress lines
+  # 2. A recorded PR, or any status event at all, means the worker started.
+  # Matching on any non-blank line, not a state prefix, keeps stamped lines
+  # ("needs-decision [at=N]: ...") and resolved/unknown states counted.
+  ! grep -q '^pr=.' "$meta" 2>/dev/null || return 1
   statusf="$state/$task.status"
-  if [ -f "$statusf" ]; then
-    if grep -qE '^[[:space:]]*working:' "$statusf" 2>/dev/null; then
-      return 1
-    fi
-    if grep -qE '^[[:space:]]*(done|failed|needs-decision|blocked|paused):' "$statusf" 2>/dev/null; then
-      return 1
-    fi
-  fi
+  ! grep -q '[^[:space:]]' "$statusf" 2>/dev/null || return 1
 
   # 3. No in-flight pipeline (after the cheap status grep, so a declared line costs no crew-state read)
   [ "$(crew_absorb_class "$task")" != working ] || return 1
