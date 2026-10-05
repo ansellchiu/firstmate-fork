@@ -48,6 +48,7 @@ config/turnend-churn-absorb  optional presence flag opting this home into the de
 config/wedge-defer-parked-gate  optional presence flag opting this home into the default-off deferral of a wedge escalation for a lane parked at a validation gate awaiting the supervisor's own still-open decision; LOCAL, gitignored, and not inherited; see docs/configuration.md "Parked-gate wait deferral"
 config/cmux-socket-password  optional cmux control-socket password; LOCAL, gitignored; read fresh on every cmux CLI call and passed through without ever overriding an operator's own ambient CMUX_SOCKET_PASSWORD when absent (docs/cmux-backend.md "Setup")
 config/wedge-alarm  optional away-mode wedge-alarm active-alert directives; LOCAL, gitignored; absent means auto (macOS Notification Center when available); see docs/wedge-alarm.md
+config/burn-watch.json  optional lane burn-watch thresholds and monitored windows; LOCAL, gitignored; absent uses built-in defaults; see docs/configuration.md "Lane burn watch"
 config/watched-tools.json  optional list of the tools this home depends on, read by the update check armed with bin/fm-tool-update-check.sh; LOCAL, gitignored, firstmate-maintained but human-editable, and NOT inherited by secondmate homes; see docs/configuration.md "Watched tool updates"
 config/x-mode.env    generated Relay watcher cadence; LOCAL, gitignored; source before arming watcher when present
 data/                personal fleet records; LOCAL, gitignored as a whole
@@ -99,6 +100,7 @@ state/               runtime records and signals; gitignored
   .pi-auto-afk-observations  append-only record of the Pi idle observer's countdown starts, cancellations, and would-have-entered expiries; present only when config/pi-auto-afk arms it, never away-posture state, and safe to delete
   x-watch.check.sh   generated Relay poll shim; present only when opted in (section 14)
   value-ledger.check.sh  generated Plan payback daily poll shim and its .check-trust binding; present only after bin/fm-value-ledger.sh arm; schema: docs/configuration.md "Plan payback ledger"
+  burn-watch.check.sh  generated lane burn-watch poll shim and its .check-trust binding; present only after bin/fm-burn-watch.sh arm; its .burn-watch-prev sample and .burn-watch-alerts record keep deltas and once-per-crossing alerts (docs/configuration.md "Lane burn watch")
   tool-updates.check.sh  generated watched-tool update poll shim and its .check-trust binding; present only after bin/fm-tool-update-check.sh arm; its report record .tool-updates is what keeps one pending update from being reported on every poll
   mail.check.sh      generated received-mail poll shim and its .check-trust binding; present only after bin/fm-mail-check.sh arm; report record .mail-check (mail schema: docs/configuration.md "Mail plane")
   .mail-seen .mail-woken .mail-retry .mail-retry-pos .mail-turn .mail-seen.lock  mail-plane poll cursor, emission journal, transient-fetch retry set, retry-scan position, contended-slot turn flag, and overlapping-poll lock; written only by bin/fm-mail.sh (mail schema: docs/configuration.md "Mail plane")

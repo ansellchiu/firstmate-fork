@@ -145,6 +145,9 @@ CYCLE_LOG_LOCK="$STATE/.watch-cycle-exits.lock"
 CYCLE_LOG_MAX_BYTES=${FM_WATCH_CYCLE_LOG_MAX_BYTES:-262144}
 CYCLE_LOG_KEEP_LINES=${FM_WATCH_CYCLE_LOG_KEEP_LINES:-1000}
 ARM_PID=${BASHPID:-$$}
+STDERR_LOG="$STATE/.watch-cycle-stderr.log"
+STDERR_LOG_LOCK="$STATE/.watch-cycle-stderr.lock"
+STDERR_TAIL_LINES=20
 case "$CYCLE_LOG_MAX_BYTES" in ''|*[!0-9]*|0) CYCLE_LOG_MAX_BYTES=262144 ;; esac
 case "$CYCLE_LOG_KEEP_LINES" in ''|*[!0-9]*|0) CYCLE_LOG_KEEP_LINES=1000 ;; esac
 
@@ -627,13 +630,46 @@ fi
 # wake exit propagates out so the harness re-notifies firstmate.
 child=
 child_out=
+# The stderr capture lives outside $STATE so a watcher that exits because its
+# state directory vanished can still have its message passed through.
+child_err=
 cleanup_child() {
   if [ -n "$child" ] && fm_pid_alive "$child"; then
     kill -TERM "$child" 2>/dev/null || true
   fi
-  if [ -n "$child_out" ]; then
-    rm -f "$child_out" 2>/dev/null || true
+}
+
+# Pass the watcher's captured stderr through as it was before the capture, and
+# on a nonzero exit keep a bounded tail so a silent exit stays diagnosable.
+finish_child_stderr() {
+  local rc=${1:-0} size tmp i=0 locked=0
+  if [ "$rc" -ne 0 ] && [ -s "$child_err" ]; then
+    until fm_lock_try_acquire "$STDERR_LOG_LOCK" && locked=1; do
+      [ "$i" -lt 20 ] || break
+      sleep 0.02
+      i=$((i + 1))
+    done
   fi
+  if [ "$locked" -eq 1 ]; then
+    { printf 'watcher_pid=%s ended_at=%s rc=%s\n' "$child" "$(date +%s)" "$rc"
+      tail -n "$STDERR_TAIL_LINES" "$child_err" 2>/dev/null; } >> "$STDERR_LOG" 2>/dev/null || true
+    size=$(wc -c < "$STDERR_LOG" 2>/dev/null | tr -d '[:space:]')
+    case "$size" in
+      ''|*[!0-9]*) ;;
+      *)
+        if [ "$size" -ge "$CYCLE_LOG_MAX_BYTES" ]; then
+          tmp="$STDERR_LOG.tmp.$ARM_PID"
+          tail -c "$CYCLE_LOG_MAX_BYTES" "$STDERR_LOG" > "$tmp" 2>/dev/null \
+            && mv -f "$tmp" "$STDERR_LOG" 2>/dev/null
+          rm -f "$tmp" 2>/dev/null || true
+        fi
+        ;;
+    esac
+    fm_lock_release "$STDERR_LOG_LOCK"
+  fi
+  [ -z "$child_err" ] || cat "$child_err" >&2 2>/dev/null || true
+  rm -f "$child_out" ${child_err:+"$child_err"} 2>/dev/null || true
+  child_err=
 }
 
 # shellcheck disable=SC2329 # Invoked indirectly by the signal traps below.
@@ -654,10 +690,12 @@ handle_arm_signal() {
       fi
       sleep 0.02
     done
+  fi
+  if [ -n "$child" ]; then
     wait "$child" 2>/dev/null || true
   fi
   cycle_log_append "$rc" "$signal" arm-interrupted none
-  cleanup_child
+  finish_child_stderr "$rc"
   exit "$rc"
 }
 
@@ -669,14 +707,17 @@ child_out=$(mktemp "$STATE/.watch-arm-output.XXXXXX") || {
   echo "watcher: FAILED - no live watcher with a fresh beacon"
   exit 1
 }
+child_err=$(mktemp "${TMPDIR:-/tmp}/fm-watch-arm-err.XXXXXX") || child_err=
 # date(1) exposes whole seconds. Keep the configured confirmation budget from
 # collapsing when startup begins just before the next second boundary.
 deadline=$(( $(date +%s) + CONFIRM_TIMEOUT + 1 ))
+if [ -n "$child_err" ]; then exec 3>"$child_err"; else exec 3>&2; fi
 if [ -n "${FM_WATCH_PREDECESSOR_ARM_PID:-}" ]; then
-  FM_WATCH_HANDLING_SUCCESSOR=1 "$WATCH" >"$child_out" &
+  FM_WATCH_HANDLING_SUCCESSOR=1 "$WATCH" >"$child_out" 2>&3 3>&- &
 else
-  "$WATCH" >"$child_out" &
+  "$WATCH" >"$child_out" 2>&3 3>&- &
 fi
+exec 3>&-
 child=$!
 cycle_begin "$child" started "$(fm_pid_identity "$child" 2>/dev/null || true)"
 child_done=0
@@ -688,7 +729,7 @@ owned_child_finished() {
     reason_type=$(watch_output_reason_type "$child_out")
     cycle_log_append "$rc" "$signal" "$reason_type" none
     print_watch_output "$child_out"
-    rm -f "$child_out" 2>/dev/null || true
+    finish_child_stderr
     child=
     child_out=
     return 0
@@ -698,7 +739,7 @@ owned_child_finished() {
     if wait_for_healthy_successor; then
       cycle_log_append "$rc" "$signal" unexpected-clean-exit "attached:$HEALTHY_PID"
       print_watch_output "$child_out"
-      rm -f "$child_out" 2>/dev/null || true
+      finish_child_stderr
       child=
       child_out=
       cycle_mark_predecessor_successor "attached:$HEALTHY_PID"
@@ -708,7 +749,7 @@ owned_child_finished() {
       return $?
     fi
     print_watch_output "$child_out"
-    rm -f "$child_out" 2>/dev/null || true
+    finish_child_stderr
     child=
     child_out=
     if close_unobserved_cycle; then
@@ -726,7 +767,7 @@ owned_child_finished() {
   if ! grep -q '^watcher: FAILED' "$child_out" 2>/dev/null; then
     echo "watcher: FAILED - watcher cycle exited $rc without an actionable reason"
   fi
-  rm -f "$child_out" 2>/dev/null || true
+  finish_child_stderr "$rc"
   child=
   child_out=
   status=$rc
@@ -752,6 +793,7 @@ while :; do
       if ! handling_generation=$(handling_successor_generation); then
         cleanup_child
         wait "$child" 2>/dev/null || true
+        finish_child_stderr 1
         cycle_log_append 1 none handling-handoff-failed none
         echo "watcher: FAILED - established successor could not inspect handling state"
         exit 1
@@ -790,6 +832,7 @@ print_watch_output "$child_out"
 cleanup_child
 wait "$child" 2>/dev/null
 rc=$?
+finish_child_stderr "$rc"
 cycle_log_append "$rc" "$(cycle_signal_name "$rc")" confirmation-timeout none
 echo "watcher: FAILED - no live watcher with a fresh beacon"
 exit 1

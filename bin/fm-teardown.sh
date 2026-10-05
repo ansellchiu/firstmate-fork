@@ -304,8 +304,10 @@
 #     log in a pruned no-mistakes gate worktree). bin/fm-remote-job-reap-orphans.sh
 #     owns that sweep and its safety rule; it never touches a worker whose code
 #     root still exists, so the account's healthy LaunchAgent worker and every
-#     live remote secondmate worker are out of scope. Best effort: a sweep
-#     failure never blocks this teardown.
+#     live remote secondmate worker are out of scope. The same sweep also
+#     stops this home's watcher arms whose code root is gone, so teardown
+#     passes its resolved FM_HOME to it. Best effort: a sweep failure never
+#     blocks this teardown.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -3717,9 +3719,10 @@ elif [ "$KIND" != secondmate ]; then
   reap_task_worktree_processes tasktmp "$TASK_TMP"
 fi
 
-# Fix 3 (see script header): sweep remote job workers abandoned by an already
-# pruned code root. Best effort - a sweep failure never blocks this teardown.
-"$SCRIPT_DIR/fm-remote-job-reap-orphans.sh" >&2 || true
+# Fix 3 (see script header): sweep remote job workers and this home's watcher
+# arms abandoned by an already pruned code root. Best effort - a sweep failure
+# never blocks this teardown.
+FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-remote-job-reap-orphans.sh" >&2 || true
 
 # Best-effort: drop the local task branch so the shared repo does not accumulate refs.
 if [ "$BACKEND" = orca ] && [ "$KIND" != secondmate ]; then
