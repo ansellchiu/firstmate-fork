@@ -1,0 +1,30 @@
+== variant=incident  meta:
+window=lab:fm-fm-dispatch-model-id-validation-s1
+endpoint_task_id=fm-dispatch-model-id-validation-s1
+worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.ZPF8Yy/wt
+project=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.ZPF8Yy/projects/demo
+kind=ship
+mode=local-only
+spawn_gen=1
+dispatch_base=16ce424a33a8e9c5e4c417a9c8c3a803d0b6c4d5
+pr=https://github.com/ansellchiu/firstmate-fork/pull/33
+== status:
+needs-decision [at=1791218000] [key=ci-1]: CI failed on PR 33, retry or fix?
+resolved [at=1791218932] [key=ci-1]: answered: fix
+== classifier probe before watcher: crew-state: state: unknown · source: pane · harness state unavailable (unknown missing) | absorb=none | never-started=YES
+== round 1 watcher said: 
+== round 2 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1
+== round 3 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1 (idle 2s, possible wedge, escalation 1)
+== round 4 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1 (idle 1s, possible wedge, escalation 2)
+== round 5 watcher said: check: auto-standdown: task fm-dispatch-model-id-validation-s1 stood down (login gating); brief preserved at data/fm-dispatch-model-id-validation-s1/brief.md
+== after: meta present? NO  status present? NO
+== escalation count: 
+== standdown log: 
+== backlog:
+# Backlog
+
+## In flight
+## Queued
+- [ ] fm-dispatch-model-id-validation-s1 - model id validation
+  Auto-standdown: login gating
+## Done

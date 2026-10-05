@@ -1,0 +1,30 @@
+== variant=incident  meta:
+window=lab:fm-fm-dispatch-model-id-validation-s1
+endpoint_task_id=fm-dispatch-model-id-validation-s1
+worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.rq0c9r/wt
+project=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.rq0c9r/projects/demo
+kind=ship
+mode=local-only
+spawn_gen=1
+dispatch_base=57bf916901c11a13f654df75345f6c6188c56249
+pr=https://github.com/ansellchiu/firstmate-fork/pull/33
+== status:
+needs-decision [at=1791218000] [key=ci-1]: CI failed on PR 33, retry or fix?
+resolved [at=1791218932] [key=ci-1]: answered: fix
+== classifier probe before watcher: crew-state: state: unknown · source: pane · harness state unavailable (unknown missing) | absorb=none | never-started=no
+== round 1 watcher said: 
+== round 2 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1
+== round 3 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1 (idle 2s, possible wedge, escalation 1)
+== round 4 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1 (idle 2s, possible wedge, escalation 2)
+== round 5 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1 (idle 1s, possible wedge, escalation 3, demand-deep-inspection: same pane has wedge-escalated 3 times in a row - do not re-absorb on the run-step/pane state alone)
+== round 6 watcher said: stale: lab:fm-fm-dispatch-model-id-validation-s1 (idle 2s, possible wedge, escalation 4, demand-deep-inspection: same pane has wedge-escalated 4 times in a row - do not re-absorb on the run-step/pane state alone)
+== after: meta present? yes  status present? yes
+== escalation count: 4
+== standdown log: 
+== backlog:
+# Backlog
+
+## In flight
+- [ ] fm-dispatch-model-id-validation-s1 - model id validation (since 2026-10-06)
+## Queued
+## Done

@@ -1,0 +1,11 @@
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFUSED: ship task fm-dispatch-model-id-validation-s1 has no completion receipt (state/fm-dispatch-model-id-validation-s1.receipt).
+Every landed ship task records one; run bin/fm-receipt.sh upgrade-landing --task fm-dispatch-model-id-validation-s1 --pr-url https://github.com/ansellchiu/firstmate-fork/pull/33 (PR tasks) or re-run bin/fm-merge-local.sh fm-dispatch-model-id-validation-s1 (local-only) to write it, or use --force after explicit approval to discard the record.
+teardown rc=1
+meta present? yes; status present? yes
