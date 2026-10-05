@@ -287,7 +287,10 @@ An ordinary presentation drain bounds both its initial queue-lock acquire and it
 | Initial queue lock | One PID-naming advisory, and the whole drain is skipped before any claim or mutation. |
 | Status-presentation lock | One such advisory after raw wake presentation, and status annotations, sections, and cursors are left retriable on the next drain. |
 
-Acknowledgement invocations and every other mutation-critical queue-lock acquire retain blocking semantics, so acknowledgement atomicity is unchanged.
+An acknowledgement invocation bounds its queue-lock acquires and its inactive-outcome receipt lock at the same deadline.
+When a live holder outlasts it, the acknowledgement prints one `ACKNOWLEDGEMENT SKIPPED` line naming the holder, consumes nothing, and exits 1, so the same `--ack-through` command can be re-run and acknowledgement atomicity is unchanged.
+The RECORD DIVERGENCE backlog check runs after the status-presentation lock is released, so a slow backlog tool never extends the hold.
+Every other mutation-critical queue-lock acquire retains blocking semantics.
 
 ### Guard counts for branch-held rows
 
@@ -404,6 +407,9 @@ Each record includes:
 - Successor disposition.
 
 The file is size-capped through `FM_WATCH_CYCLE_LOG_MAX_BYTES` and `FM_WATCH_CYCLE_LOG_KEEP_LINES`.
+An owning arm captures the watcher's stderr and passes it through to its own stderr when the cycle ends.
+When the cycle exits nonzero, the arm also appends a header line with the watcher PID and exit code, plus the last 20 stderr lines, to `state/.watch-cycle-stderr.log`.
+That file is capped at `FM_WATCH_CYCLE_LOG_MAX_BYTES`.
 `state/.watch-triage.log` remains only the watcher's bounded absorbed-wake debug log and carries no lifecycle semantics.
 
 ### Grace, beacon, and stop signals

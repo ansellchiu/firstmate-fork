@@ -4700,9 +4700,9 @@ test_send_text_submit_idle_native_pending_plus_rendered_busy_is_queued() {
 # reports a cursor pane `blocked` in EVERY state - idle, mid-turn, and after -
 # so the idle-baseline native path is structurally unreachable and every typed
 # send lands in the composer branch. Cursor's mid-turn composer row renders its own
-# `Add a follow-up` placeholder beside a right-aligned `ctrl+c to stop`, so the
-# content verdict is `pending` on a composer holding no user text, and every
-# typed steer reported delivery unconfirmed on a message that had actually landed.
+# `Add a follow-up` placeholder beside a right-aligned `ctrl+c to stop`. That row
+# holds no user text and reads `empty`, so it proves nothing about whether a
+# typed steer landed; delivery is confirmed from the rendered footer instead.
 # The bytes below are the real captures from that pane.
 
 # The idle capture: no busy token anywhere, which is the pre-Enter baseline.
@@ -4723,21 +4723,25 @@ herdr_cursor_midturn_ansi() {
   printf '%b' ' \033[0m\033[38;2;21;21;21m▄▄▄▄▄▄▄▄▄▄\033[0m\r\n \033[0m\033[48;2;21;21;21m \033[0m\033[2m\033[48;2;21;21;21m→ \033[0m\033[7m\033[48;2;21;21;21mA\033[0m\033[2m\033[48;2;21;21;21mdd a follow-up\033[0m\033[48;2;21;21;21m                   \033[0m\033[2m\033[48;2;21;21;21mctrl+c to stop\033[0m\033[48;2;21;21;21m \033[0m\r\n \033[0m\033[38;2;21;21;21m▀▀▀▀▀▀▀▀▀▀\033[0m\r\n  \033[0m\033[38;5;4m1 task\033[0m\r\n  \033[0m\033[2mCursor Grok 4.5 High\033[0m \033[0m\033[2m·\033[0m \033[0m\033[2m7%%\033[0m           \033[0m\033[38;5;5mRun Everything\033[0m\r\n  \033[0m\033[2m~/.treehouse/curhd-ae68cd/1/curhd · 39418af\033[0m\r\n'
 }
 
-# Non-vacuity anchor for the two submit tests below: the real mid-turn capture
-# genuinely reads `pending`, so the confirmation those tests assert can only be
-# coming from the rendered-footer transition and never from a softened composer
-# verdict. The composer verdict is deliberately NOT relaxed - a right-aligned
-# status token on the composer row is content the shared classifier must keep
-# treating as content for every other caller.
-test_composer_state_cursor_midturn_row_reads_pending() {
+# The mid-turn row with our typed text still held in the composer beside the
+# busy token: bright text, so the composer reads `pending`. The submit tests
+# below use it so their confirmation can only come from the rendered footer.
+herdr_cursor_midturn_typed_ansi() {
+  printf '%b' ' \033[0m\033[38;2;21;21;21m▄▄▄▄▄▄▄▄▄▄\033[0m\r\n \033[0m\033[48;2;21;21;21m \033[0m\033[2m\033[48;2;21;21;21m→ \033[0m\033[38;2;224;222;244m\033[48;2;21;21;21mhello captain\033[0m\033[48;2;21;21;21m                     \033[0m\033[2m\033[48;2;21;21;21mctrl+c to stop\033[0m\033[48;2;21;21;21m \033[0m\r\n \033[0m\033[38;2;21;21;21m▀▀▀▀▀▀▀▀▀▀\033[0m\r\n  \033[0m\033[38;5;4m1 task\033[0m\r\n  \033[0m\033[2mCursor Grok 4.5 High\033[0m \033[0m\033[2m·\033[0m \033[0m\033[2m7%%\033[0m           \033[0m\033[38;5;5mRun Everything\033[0m\r\n  \033[0m\033[2m~/.treehouse/curhd-ae68cd/1/curhd · 39418af\033[0m\r\n'
+}
+
+# The real mid-turn capture holds only cursor's placeholder beside its dim
+# busy token, so it reads `empty`: fm-secondmate-restart must not refuse a mate
+# whose composer is untouched just because a turn is running.
+test_composer_state_cursor_midturn_row_reads_empty() {
   local dir log resp fb out
   dir="$TMP_ROOT/composer-cursor-midturn"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
   herdr_cursor_midturn_ansi > "$resp/1.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_composer_state default:w1:p2' "$ROOT" )
-  [ "$out" = pending ] || fail "cursor's mid-turn composer row carries a busy token and must stay 'pending' as composer CONTENT, got '$out'"
-  pass "fm_backend_herdr_composer_state: cursor's mid-turn placeholder-plus-busy-token row reads pending (why delivery needs a separate signal)"
+  [ "$out" = empty ] || fail "cursor's mid-turn placeholder-plus-busy-token row holds no user text and must read 'empty', got '$out'"
+  pass "fm_backend_herdr_composer_state: cursor's mid-turn placeholder-plus-busy-token row reads empty"
 }
 
 test_rendered_busy_state_reads_the_cursor_busy_token() {
@@ -4769,13 +4773,13 @@ test_send_text_submit_confirms_never_idle_native_state_via_footer_transition() {
   #    mid-turn before our Enter
   # 4: pane read - the pre-Enter composer baseline
   # 5: send-keys enter
-  # 6: pane read - composer content mid-turn: placeholder plus busy token
+  # 6: pane read - composer content mid-turn: our text beside the busy token
   # 7: pane read - rendered footer now busy: an idle-to-busy transition ACROSS
   #    our Enter, which is the submission proof
   printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/2.out"
   herdr_cursor_idle_plain > "$resp/3.out"
   herdr_cursor_idle_plain > "$resp/4.out"
-  herdr_cursor_midturn_ansi > "$resp/6.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/6.out"
   herdr_cursor_midturn_plain > "$resp/7.out"
   herdr_submit_identity_prefix "$resp" codex
   fb=$(make_herdr_fakebin "$dir")
@@ -4795,9 +4799,9 @@ test_send_text_submit_never_idle_native_state_keeps_pending_without_a_transition
   # borrowing someone else's turn as proof of our delivery.
   printf '{"result":{"agent":{"agent_status":"blocked"}}}\n' > "$resp/2.out"
   herdr_cursor_midturn_plain > "$resp/3.out"
-  herdr_cursor_midturn_ansi > "$resp/4.out"
-  herdr_cursor_midturn_ansi > "$resp/6.out"
-  herdr_cursor_midturn_ansi > "$resp/8.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/4.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/6.out"
+  herdr_cursor_midturn_typed_ansi > "$resp/8.out"
   herdr_submit_identity_prefix "$resp" codex
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
@@ -6385,7 +6389,7 @@ test_send_text_submit_preexisting_working_does_not_confirm_failed_enter
 test_send_text_submit_idle_baseline_does_not_confirm_failed_enter
 test_send_text_submit_idle_native_empty_composer_confirms_delivery
 test_send_text_submit_idle_native_pending_plus_rendered_busy_is_queued
-test_composer_state_cursor_midturn_row_reads_pending
+test_composer_state_cursor_midturn_row_reads_empty
 test_rendered_busy_state_reads_the_cursor_busy_token
 test_send_text_submit_confirms_never_idle_native_state_via_footer_transition
 test_send_text_submit_never_idle_native_state_keeps_pending_without_a_transition

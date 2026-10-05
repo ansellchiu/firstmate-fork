@@ -47,7 +47,7 @@ Submission also uses an idle-to-busy transition.
 Match stable token `ctrl+c to stop`, never spinner verbs that changed from `Working` to `Running` between turns.
 
 Confirmation is verified only on tmux and Herdr.
-Herdr reports Cursor `blocked` in every state, so its native idle path is unreachable; the composer path sees the mid-turn placeholder beside `ctrl+c to stop` as pending.
+Herdr reports Cursor `blocked` in every state, so its native idle path is unreachable; the composer path drops the dim `ctrl+c to stop` token from the mid-turn placeholder row, so that row reads empty while typed text beside it stays pending.
 `../../../bin/backends/herdr.sh` baselines before Enter and confirms the footer transition, so an already-busy pane cannot confirm.
 
 Zellij, cmux, and Orca do not consult that footer.
