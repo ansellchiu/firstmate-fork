@@ -100,7 +100,7 @@ cleanup_workers
 # macOS hides other processes' environments: ps -E prints only the command line.
 add_process hidden-primary "$case_dir/clone" cursor-agent cursor-agent
 add_process hidden-isolated "$case_dir/isolated" cursor-agent cursor-agent
-for pid in $(cat "$case_dir/pids"); do "$real_ps" -ww -o command= -p "$pid" > "$case_dir/env-$pid"; done
+while read -r pid; do "$real_ps" -ww -o command= -p "$pid" > "$case_dir/env-$pid"; done < "$case_dir/pids"
 hidden_pid=$(head -1 "$case_dir/pids")
 set +e
 out=$(FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
@@ -164,8 +164,8 @@ for mode in failed invalid; do
   set -e
   expect_code 1 "$status" "a $mode project query cannot report clean"
   case "$mode" in
-    failed) reason=status-failed ;;
-    invalid) reason=invalid-status ;;
+    failed) reason='status-failed' ;;
+    invalid) reason='invalid-status' ;;
   esac
   assert_contains "$out" "AUDIT_ERROR held-lease-scan-unavailable $reason $home/projects/demo" "a $mode query identifies the unavailable project"
   assert_contains "$out" "HELD_LEASE $slot fm-held:parked-holder treehouse return '$slot'" 'other project leases are still reported'

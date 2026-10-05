@@ -797,10 +797,10 @@ SH
 # slot stays exactly as it was, is never handed out again, and no process
 # started afterwards has a working directory under it.
 test_leaving_a_held_slot_keeps_every_process_out_of_it() {
-  command -v treehouse >/dev/null 2>&1 && command -v lsof >/dev/null 2>&1 || {
+  if ! command -v treehouse >/dev/null 2>&1 || ! command -v lsof >/dev/null 2>&1; then
     echo "ok - skipped: treehouse or lsof is not installed"
     return 0
-  }
+  fi
   local dir repo pool held cmd out
   dir="$TMP_ROOT/leave-slot"
   repo="$dir/r"
@@ -817,7 +817,7 @@ touch KEEPME
 $(bash -c ". '$ROOT/bin/fm-wake-lib.sh'; fm_treehouse_leave_slot_command '$held' parked-holder")
 EOS
   ) >/dev/null 2>&1
-  pool=$(ls -d "$dir"/pool/.treehouse/*/1/r 2>/dev/null | head -1)
+  pool=$(find "$dir"/pool/.treehouse -maxdepth 3 -path '*/1/r' -type d 2>/dev/null | head -1)
   [ -n "$pool" ] || fail "the real-treehouse fixture did not create a slot"
   [ -e "$pool/KEEPME" ] || fail "leaving the slot reset or removed its contents"
   out=$(cd "$repo" && TREEHOUSE_ROOT="$dir/pool" TERM=dumb treehouse get <<'EOS' 2>/dev/null
