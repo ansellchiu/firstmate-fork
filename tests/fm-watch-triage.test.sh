@@ -4806,6 +4806,30 @@ SH
   pass "stale auto-standdown tears down never-started gated worker, preserves brief, requeues in backlog with note"
 }
 
+test_never_started_respects_any_status_event_or_recorded_pr() {
+  local dir state task
+  dir=$(make_case never-started-guards); state="$dir/state"; task="started"
+  export FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh"
+  export FM_FAKE_CREW_STATE='state: unknown · source: none'
+  printf 'window=test:fm-started\nendpoint_task_id=%s\nkind=ship\n' "$task" > "$state/$task.meta"
+  : > "$state/$task.status"
+  crew_is_never_started "$task" "$state" || fail "an empty status and no PR was not classified never-started"
+
+  # Stamped lines, as every worker and status_stamp_line writes them.
+  printf 'needs-decision [at=1791218000] [key=ci-1]: CI choice\nresolved [at=1791218932] [key=ci-1]: answered\n' > "$state/$task.status"
+  if crew_is_never_started "$task" "$state"; then fail "stamped status events were classified never-started"; fi
+  printf 'note\n' > "$state/$task.status"
+  if crew_is_never_started "$task" "$state"; then fail "an unrecognized status event was classified never-started"; fi
+  printf 'pr: https://github.com/example/repo/pull/33\n' > "$state/$task.status"
+  if crew_is_never_started "$task" "$state"; then fail "a PR url in status was classified never-started"; fi
+
+  : > "$state/$task.status"
+  printf 'pr=https://github.com/example/repo/pull/33\n' >> "$state/$task.meta"
+  if crew_is_never_started "$task" "$state"; then fail "a recorded pr= was classified never-started"; fi
+  unset FM_FAKE_CREW_STATE
+  pass "never-started classification refuses a task with any status event or a recorded PR"
+}
+
 test_stale_escalation_resets_when_status_state_changes() {
   local dir state fakebin data out capture_file window task key pane_hash sig pid
   dir=$(make_case stale-reset-status); state="$dir/state"; fakebin="$dir/fakebin"; data="$dir/data"
@@ -7462,6 +7486,7 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold
 test_wedge_escalation_resets_when_pane_becomes_active
 test_stale_auto_standdown_tears_down_requeues_and_notes_on_threshold
+test_never_started_respects_any_status_event_or_recorded_pr
 test_stale_escalation_resets_when_status_state_changes
 test_stale_escalation_suppresses_standdown_when_task_has_committed_work
 test_gone_endpoint_reports_once_instead_of_escalating_forever
