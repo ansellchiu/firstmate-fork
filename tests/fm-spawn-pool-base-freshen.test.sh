@@ -745,6 +745,38 @@ test_pool_slot_claim_follows_the_spawn_outcome() {
   pass "a Treehouse slot claim names the launched task, refuses when unclaimable, and is dropped by a locked abort"
 }
 
+# A second managed slot in the same pool, and a tmux wrapper that answers the
+# pane's cwd from a sequence: the Nth `treehouse get` typed into the pane lands
+# in the Nth path (the last repeats), standing in for the pool handing out slots.
+add_second_slot() {
+  SLOT2_DIR="$CASE_DIR/slots/2/project"
+  SLOT2_CLAIM="$CASE_DIR/slots/2/.fm-slot-owner"
+  mkdir -p "$CASE_DIR/slots/2"
+  git -C "$PROJECT_DIR" worktree add --quiet --detach "$SLOT2_DIR" "$INITIAL_SHA"
+}
+
+install_slot_sequence() {  # <path>...
+  local inner="$FAKEBIN_DIR/tmux.seq$$-$RANDOM"
+  mv "$FAKEBIN_DIR/tmux" "$inner"
+  : > "$CASE_DIR/get-count"
+  printf '%s\n' "$@" > "$CASE_DIR/slot-sequence"
+  cat > "$FAKEBIN_DIR/tmux" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  *"treehouse get"*) printf 'x\\n' >> "$CASE_DIR/get-count" ;;
+  *"#{pane_current_path}"*)
+    n=\$(wc -l < "$CASE_DIR/get-count" | tr -d ' ')
+    total=\$(wc -l < "$CASE_DIR/slot-sequence" | tr -d ' ')
+    [ "\$n" -le "\$total" ] || n=\$total
+    [ "\$n" -ge 1 ] || n=1
+    sed -n "\${n}p" "$CASE_DIR/slot-sequence"
+    exit 0 ;;
+esac
+exec "$inner" "\$@"
+SH
+  chmod +x "$FAKEBIN_DIR/tmux"
+}
+
 # A slot another task's record still holds is refused, whatever state that task
 # is in, and the refusal leaves its claim and the slot untouched.
 test_pool_slot_recorded_by_another_task_is_refused() {
@@ -755,15 +787,45 @@ test_pool_slot_recorded_by_another_task_is_refused() {
   lay_out_as_pool_slot
   printf 'kind=ship\nworktree=%s\n' "$POOL_DIR" > "$HOME_DIR/state/parked-holder-r1.meta"
   printf 'task=parked-holder-r1\nhome=%s\n' "$HOME_DIR" > "$SLOT_CLAIM"
+  add_second_slot
+  printf 'kind=ship\nworktree=%s\n' "$SLOT2_DIR" > "$HOME_DIR/state/parked-holder-r2.meta"
+  printf 'task=parked-holder-r2\nhome=%s\n' "$HOME_DIR" > "$SLOT2_CLAIM"
+  install_slot_sequence "$POOL_DIR" "$SLOT2_DIR" "$POOL_DIR" "$SLOT2_DIR" "$POOL_DIR"
   out=$(run_spawn "$id" --scout)
   status=$?
   [ "$status" -ne 0 ] || fail "spawn launched into a slot another task's record holds: $out"
-  assert_contains "$out" "/state/parked-holder-r1.meta; refusing" \
-    "spawn did not name the task holding the slot"
+  assert_contains "$out" "no unheld Treehouse pool slot was available" \
+    "spawn did not report that no unheld slot was available"
+  assert_contains "$out" "/state/parked-holder-r" "spawn did not name a task holding the slot"
   [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for a held slot"
   grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" \
     || fail "spawn overwrote the holder's slot claim: $(cat "$SLOT_CLAIM")"
-  pass "a slot another task's record still holds is refused without touching its claim"
+  grep -Fxq 'task=parked-holder-r2' "$SLOT2_CLAIM" \
+    || fail "spawn overwrote the second holder's slot claim: $(cat "$SLOT2_CLAIM")"
+  pass "when every slot is held, spawn refuses after bounded retries without touching any claim"
+}
+
+# The pool handing out a slot a different record holds is not fatal: the held
+# slot is left alone and the next free slot is taken, so two concurrent
+# recoveries end on distinct slots.
+test_pool_slot_held_elsewhere_moves_to_a_free_slot() {
+  local rec id out status
+  id='pool-slot-retry-r1'
+  rec=$(make_case slot-retry "$id")
+  read_case_record "$rec"
+  lay_out_as_pool_slot
+  printf 'kind=ship\nworktree=%s\n' "$POOL_DIR" > "$HOME_DIR/state/parked-holder-r1.meta"
+  printf 'task=parked-holder-r1\nhome=%s\n' "$HOME_DIR" > "$SLOT_CLAIM"
+  add_second_slot
+  install_slot_sequence "$POOL_DIR" "$SLOT2_DIR"
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  expect_code 0 "$status" "spawn did not move on to the free slot"$'\n'"$out"
+  assert_grep "worktree=$SLOT2_DIR" "$HOME_DIR/state/$id.meta" "the spawn did not record the free slot"
+  grep -Fxq "task=$id" "$SLOT2_CLAIM" || fail "the free slot was not claimed by the new task"
+  grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" || fail "the held slot's claim was rewritten"
+  grep -Fq "worktree=$POOL_DIR" "$HOME_DIR/state/parked-holder-r1.meta" || fail "the holder's record was rewritten"
+  pass "a held slot is left alone and the spawn takes the next free slot"
 }
 
 test_pool_slot_held_by_a_shell_only_task_is_refused() {
@@ -793,20 +855,25 @@ esac
 exec "$real" "\$@"
 SH
   chmod +x "$FAKEBIN_DIR/tmux"
+  add_second_slot
+  printf 'kind=ship\nworktree=%s\n' "$SLOT2_DIR" > "$HOME_DIR/state/second-holder-r1.meta"
+  printf 'task=second-holder-r1\nhome=%s\n' "$HOME_DIR" > "$SLOT2_CLAIM"
   export FM_FAKE_DUPLICATE_WINDOW="fm-$holder"
   state=$(PATH="$FAKEBIN_DIR:$PATH" bash -c '. "$1/bin/fm-backend.sh"; fm_backend_source tmux; fm_backend_agent_state tmux "$2"' \
     _ "$ROOT" "firstmate:fm-$holder")
   [ "$state" = dead ] || fail "the holder fixture is not shell-only: $state"
   before=$(git -C "$POOL_DIR" rev-parse HEAD)
 
+  install_slot_sequence "$POOL_DIR" "$SLOT2_DIR" "$POOL_DIR" "$SLOT2_DIR" "$POOL_DIR"
   out=$(run_spawn "$id" --scout 2>&1)
   status=$?
   [ "$status" -ne 0 ] || fail "a different task launched into the shell-only holder's slot: $out"
-  assert_contains "$out" "/state/$holder.meta; refusing" "spawn did not name the shell-only holder"
+  assert_contains "$out" "holder-r1.meta" "spawn did not name a holder"
   [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for the held slot"
   grep -Fxq "task=$holder" "$SLOT_CLAIM" || fail "spawn overwrote the holder's slot claim"
   [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$before" ] || fail "refused spawn moved the holder's HEAD"
 
+  printf '%s\n' "$POOL_DIR" > "$CASE_DIR/slot-sequence"
   out=$(FM_FAKE_LAUNCH_LOG="$CASE_DIR/relaunch.log" fm_test_run_spawn "$HOME_DIR" "$POOL_DIR" "$FAKEBIN_DIR" "$holder" --relaunch)
   status=$?
   unset FM_FAKE_DUPLICATE_WINDOW
@@ -830,10 +897,13 @@ test_pool_slot_recorded_by_a_registered_home_is_refused() {
   printf 'kind=ship\nworktree=%s\n' "$POOL_DIR" > "$mate/state/$id.meta"
   printf -- '- mate - mate home (home: %s; scope: all; projects: project; added 2026-01-01)\n' "$mate" \
     > "$HOME_DIR/data/secondmates.md"
+  add_second_slot
+  printf 'kind=ship\nworktree=%s\n' "$SLOT2_DIR" > "$mate/state/other-$id.meta"
+  install_slot_sequence "$POOL_DIR" "$SLOT2_DIR" "$POOL_DIR" "$SLOT2_DIR" "$POOL_DIR"
   out=$(run_spawn "$id" --scout)
   status=$?
   [ "$status" -ne 0 ] || fail "spawn launched into a slot a registered home's same-id record holds: $out"
-  assert_contains "$out" "/mate-home/state/$id.meta; refusing" \
+  assert_contains "$out" "/mate-home/state/" \
     "spawn did not name the registered home's record holding the slot"
   [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for a held slot"
   [ ! -e "$SLOT_CLAIM" ] || fail "spawn claimed a slot another home's record holds: $(cat "$SLOT_CLAIM")"
@@ -874,6 +944,7 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
+test_pool_slot_held_elsewhere_moves_to_a_free_slot
 test_pool_slot_held_by_a_shell_only_task_is_refused
 test_pool_slot_recorded_by_a_registered_home_is_refused
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome
