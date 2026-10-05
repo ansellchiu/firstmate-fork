@@ -1,0 +1,21 @@
+== HEAD b6088db0: covering tests, 5 repeated runs
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi retries a verified successor that failed during wake delivery without waiting for settlement
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+run 1 exit=0
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi retries a verified successor that failed during wake delivery without waiting for settlement
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+run 2 exit=0
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi retries a verified successor that failed during wake delivery without waiting for settlement
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+run 3 exit=0
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi retries a verified successor that failed during wake delivery without waiting for settlement
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+run 4 exit=0
+ok - Pi scheduled retry starts a fresh arm instead of stalling on a dead child
+ok - Pi retries a verified successor that failed during wake delivery without waiting for settlement
+ok - Pi repair starts a fresh arm instead of no-opping on a dead child
+run 5 exit=0

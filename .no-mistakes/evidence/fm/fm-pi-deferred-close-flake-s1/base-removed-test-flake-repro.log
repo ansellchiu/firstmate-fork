@@ -1,0 +1,17 @@
+== base 516e892f removed test, unmodified, 3 runs
+ok - Pi deferred close starts a fresh arm instead of stalling on a dead child
+exit=0
+ok - Pi deferred close starts a fresh arm instead of stalling on a dead child
+exit=0
+ok - Pi deferred close starts a fresh arm instead of stalling on a dead child
+exit=0
+== base 516e892f removed test, retry arm (#3) exit delayed 1s (simulated loaded runner), 3 runs
+    at file:///private/tmp/fm-base.7nejLC/tests/[eval1]:53:9
+
+Node.js v26.3.0: expected exit 0, got 1
+    at file:///private/tmp/fm-base.7nejLC/tests/[eval1]:53:9
+
+Node.js v26.3.0: expected exit 0, got 1
+    at file:///private/tmp/fm-base.7nejLC/tests/[eval1]:53:9
+
+Node.js v26.3.0: expected exit 0, got 1
