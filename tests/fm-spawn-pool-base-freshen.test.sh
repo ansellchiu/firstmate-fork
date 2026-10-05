@@ -763,8 +763,10 @@ install_slot_sequence() {  # <path>...
   cat > "$FAKEBIN_DIR/tmux" <<SH
 #!/usr/bin/env bash
 case "\$*" in
-  *"treehouse get"*) printf 'x\\n' >> "$CASE_DIR/get-count" ;;
+  *"treehouse get"*) printf 'x\\n' >> "$CASE_DIR/get-count"; rm -f "$CASE_DIR/left-slot" ;;
+  *"treehouse lease "*) printf '%s\\n' "\$*" >> "$CASE_DIR/lease-log"; : > "$CASE_DIR/left-slot" ;;
   *"#{pane_current_path}"*)
+    [ ! -e "$CASE_DIR/left-slot" ] || { printf '%s\\n' "$PROJECT_DIR"; exit 0; }
     n=\$(wc -l < "$CASE_DIR/get-count" | tr -d ' ')
     total=\$(wc -l < "$CASE_DIR/slot-sequence" | tr -d ' ')
     [ "\$n" -le "\$total" ] || n=\$total
@@ -775,6 +777,45 @@ esac
 exec "$inner" "\$@"
 SH
   chmod +x "$FAKEBIN_DIR/tmux"
+}
+
+# With the real Treehouse: after the retry's leave-the-slot command, the held
+# slot stays exactly as it was, is never handed out again, and no process
+# started afterwards has a working directory under it.
+test_leaving_a_held_slot_keeps_every_process_out_of_it() {
+  command -v treehouse >/dev/null 2>&1 && command -v lsof >/dev/null 2>&1 || {
+    echo "ok - skipped: treehouse or lsof is not installed"
+    return 0
+  }
+  local dir repo pool held cmd out
+  dir="$TMP_ROOT/leave-slot"
+  repo="$dir/r"
+  mkdir -p "$dir"
+  git init --quiet -b main "$repo"
+  git -C "$repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+  (
+    cd "$repo" || exit 1
+    export TREEHOUSE_ROOT="$dir/pool" TERM=dumb
+    held=$(treehouse get --lease 2>/dev/null) || exit 1
+    treehouse return "$held" >/dev/null 2>&1
+    treehouse get <<EOS >/dev/null 2>&1
+touch KEEPME
+$(bash -c ". '$ROOT/bin/fm-wake-lib.sh'; fm_treehouse_leave_slot_command \"\$PWD\"")
+EOS
+  ) >/dev/null 2>&1
+  pool=$(ls -d "$dir"/pool/.treehouse/*/1/r 2>/dev/null | head -1)
+  [ -n "$pool" ] || fail "the real-treehouse fixture did not create a slot"
+  [ -e "$pool/KEEPME" ] || fail "leaving the slot reset or removed its contents"
+  out=$(cd "$repo" && TREEHOUSE_ROOT="$dir/pool" TERM=dumb treehouse get <<'EOS' 2>/dev/null
+pwd -P
+lsof -a -d cwd -Fn | sed -n 's/^n//p'
+exit
+EOS
+)
+  pool=$(cd "$pool" && pwd -P)
+  assert_contains "$out" "/2/r" "the pool handed the leased slot out again instead of a free one"
+  assert_not_contains "$out" "$pool" "a process still has the held slot as its working directory"
+  pass "leaving a held slot keeps every later process out of it and the pool away from it"
 }
 
 # A slot another task's record still holds is refused, whatever state that task
@@ -822,6 +863,8 @@ test_pool_slot_held_elsewhere_moves_to_a_free_slot() {
   status=$?
   expect_code 0 "$status" "spawn did not move on to the free slot"$'\n'"$out"
   assert_grep "worktree=$SLOT2_DIR" "$HOME_DIR/state/$id.meta" "the spawn did not record the free slot"
+  grep -Fq "treehouse lease '1' && exit" "$CASE_DIR/lease-log" \
+    || fail "the pane was not told to lease the held slot and exit its subshell: $(cat "$CASE_DIR/lease-log" 2>/dev/null)"
   grep -Fxq "task=$id" "$SLOT2_CLAIM" || fail "the free slot was not claimed by the new task"
   grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" || fail "the held slot's claim was rewritten"
   grep -Fq "worktree=$POOL_DIR" "$HOME_DIR/state/parked-holder-r1.meta" || fail "the holder's record was rewritten"
@@ -945,6 +988,7 @@ test_cross_clone_pool_slot_claim_follows_the_spawn_outcome() {
 test_pool_slot_claim_follows_the_spawn_outcome
 test_pool_slot_recorded_by_another_task_is_refused
 test_pool_slot_held_elsewhere_moves_to_a_free_slot
+test_leaving_a_held_slot_keeps_every_process_out_of_it
 test_pool_slot_held_by_a_shell_only_task_is_refused
 test_pool_slot_recorded_by_a_registered_home_is_refused
 test_cross_clone_pool_slot_claim_follows_the_spawn_outcome

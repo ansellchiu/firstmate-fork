@@ -4641,9 +4641,9 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
     # through metadata publication, so no other spawn or return sees a half-claim.
     if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
       # A slot the pool hands out while a DIFFERENT task's record still holds it
-      # is left alone - never claimed, its record untouched - and the pane asks
-      # the pool for another one from inside the held slot's subshell, which the
-      # pool counts as in use. Bounded, then a refusal naming the held slot.
+      # is left alone - never claimed, its record untouched. The pane leases it
+      # state-only and exits its subshell, so nothing of this task stays in it,
+      # then asks the pool again. Bounded, then a refusal naming the held slot.
       spawn_slot_held_by
       if [ -n "$SPAWN_SLOT_HELD_BY" ]; then
         if [ "$slot_attempt" -ge 3 ]; then
@@ -4652,6 +4652,19 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
         fi
         slot_attempt=$((slot_attempt + 1))
         slot_avoid=$(real_path_or_raw "$WT")
+        spawn_send_text_line "$WT_TARGET" "$(fm_treehouse_leave_slot_command "$WT")" || {
+          echo "error: could not tell the pane to leave held Treehouse pool slot $WT; refusing to launch $ID; inspect window $T" >&2
+          exit 1
+        }
+        for _ in $(seq 1 30); do
+          p=$(spawn_current_path "$WT_TARGET" || true)
+          [ -z "$p" ] || [ "$(real_path_or_raw "$p")" != "$slot_avoid" ] || { sleep 1; continue; }
+          break
+        done
+        if [ -n "$p" ] && [ "$(real_path_or_raw "$p")" = "$slot_avoid" ]; then
+          echo "error: the pane did not leave held Treehouse pool slot $WT; refusing to launch $ID while a process of this task still sits in a copy another record holds; inspect window $T" >&2
+          exit 1
+        fi
         continue
       fi
       if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then

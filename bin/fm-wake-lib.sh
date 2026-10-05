@@ -1777,6 +1777,18 @@ fm_treehouse_slot_record_claimants() {  # <state-dir> <worktree> <task-id>
   done | sort -u
 }
 
+# The pane command that fully leaves a pool slot the spawn must not take.
+# `treehouse lease` is state-only (it never resets or cleans the copy) and keeps
+# every later `get` from handing the slot out until its holder's own cleanup
+# returns it; the exit then ends the subshell, so no process of the new task
+# keeps the slot as its working directory and the supervisor does not return it.
+fm_treehouse_leave_slot_command() {  # <worktree>
+  local slot name
+  slot=$(CDPATH='' cd -- "$1" 2>/dev/null && pwd -P) || return 1
+  name=$(basename "$(dirname "$slot")")
+  printf "treehouse lease '%s' && exit\n" "${name//\'/}"
+}
+
 # Drop a task's own claim once its slot is back in the pool. Never removes
 # another task's claim, so a misdirected release cannot strip the evidence that
 # protects the slot's real owner.
