@@ -1,0 +1,81 @@
+$ bin/fm-test-run.sh --list-lanes
+portable-parallel-1
+portable-parallel-2
+portable-serial
+portable-serial-1of10
+portable-serial-2of10
+portable-serial-3of10
+portable-serial-4of10
+portable-serial-5of10
+portable-serial-6of10
+portable-serial-7of10
+portable-serial-8of10
+portable-serial-9of10
+portable-serial-10of10
+real-herdr-gated
+
+# per-shard membership and modeled hint sum (ms) from the runner hint table
+awk: newline in string tests/fm-watch-triag... at source line 1
+awk: newline in string tests/fm-watch-triag... at source line 1
+awk: newline in string tests/fm-watch-triag... at source line 1
+shard 1: scripts=11 hint_sum_ms=0 
+awk: newline in string tests/fm-supervision... at source line 1
+awk: newline in string tests/fm-supervision... at source line 1
+awk: newline in string tests/fm-supervision... at source line 1
+shard 2: scripts=19 hint_sum_ms=0 fm-supervision-host-engine.test.sh 
+awk: newline in string tests/fm-supervision... at source line 1
+awk: newline in string tests/fm-supervision... at source line 1
+awk: newline in string tests/fm-supervision... at source line 1
+shard 3: scripts=19 hint_sum_ms=0 fm-supervision-host.test.sh 
+awk: newline in string tests/fm-public-foll... at source line 1
+awk: newline in string tests/fm-public-foll... at source line 1
+awk: newline in string tests/fm-public-foll... at source line 1
+shard 4: scripts=26 hint_sum_ms=0 
+awk: newline in string tests/fm-session-sta... at source line 1
+awk: newline in string tests/fm-session-sta... at source line 1
+awk: newline in string tests/fm-session-sta... at source line 1
+shard 5: scripts=25 hint_sum_ms=0 
+awk: newline in string tests/fm-remote-seco... at source line 1
+awk: newline in string tests/fm-remote-seco... at source line 1
+awk: newline in string tests/fm-remote-seco... at source line 1
+shard 6: scripts=27 hint_sum_ms=0 
+awk: newline in string tests/fm-pr-check-se... at source line 1
+awk: newline in string tests/fm-pr-check-se... at source line 1
+awk: newline in string tests/fm-pr-check-se... at source line 1
+shard 7: scripts=26 hint_sum_ms=0 
+awk: newline in string tests/fm-procevent.t... at source line 1
+awk: newline in string tests/fm-procevent.t... at source line 1
+awk: newline in string tests/fm-procevent.t... at source line 1
+shard 8: scripts=26 hint_sum_ms=0 
+awk: newline in string tests/fm-backlog-ato... at source line 1
+awk: newline in string tests/fm-backlog-ato... at source line 1
+awk: newline in string tests/fm-backlog-ato... at source line 1
+shard 9: scripts=27 hint_sum_ms=0 
+awk: newline in string tests/fm-teardown.te... at source line 1
+awk: newline in string tests/fm-teardown.te... at source line 1
+awk: newline in string tests/fm-teardown.te... at source line 1
+shard 10: scripts=27 hint_sum_ms=0 
+
+$ bin/fm-test-run.sh --list --lane portable-serial-2of9
+fm-test-run: lane 'portable-serial-2of9' asks for 9 portable serial shards but this runner is configured for 10 (see --list-lanes)
+exit=2
+$ bin/fm-test-run.sh --list --lane portable-serial-11of10
+fm-test-run: lane 'portable-serial-11of10' shard index is outside 1..10 (see --list-lanes)
+exit=2
+$ bin/fm-test-run.sh --check-coverage
+FM_TEST_COVERAGE ok total=274 parallel=24 parallel_max_ms=665545 parallel_imbalance_ms=2 parallel_unhinted=0 serial=233 serial_shards=10 serial_unhinted=29 serial_max_ms=1094547 serial_budget_ms=1200000 herdr=17
+exit=0
+# per-shard membership and modeled hint sum (ms), unhinted scripts counted at 0
+shard 1: scripts=11 hint_sum_ms=1094547
+shard 2: scripts=19 hint_sum_ms=1004531 tests/fm-supervision-host-engine.test.sh
+shard 3: scripts=19 hint_sum_ms=1004526 tests/fm-supervision-host.test.sh
+shard 4: scripts=26 hint_sum_ms=914520
+shard 5: scripts=25 hint_sum_ms=914508
+shard 6: scripts=27 hint_sum_ms=959541
+shard 7: scripts=26 hint_sum_ms=959540
+shard 8: scripts=26 hint_sum_ms=959547
+shard 9: scripts=27 hint_sum_ms=914521
+shard 10: scripts=27 hint_sum_ms=914508
+
+# every portable serial script appears in exactly one shard
+union=233 serial_total=233

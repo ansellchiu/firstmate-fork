@@ -1,0 +1,6 @@
+# case invocations in base list vs first/second half (case-function names)
+base=      74 first=      58 second=      16 overlap=       0 diff_vs_base=       0
+
+# pass lines emitted by each half in the real run
+tests/fm-supervision-host-engine.test.sh 16
+tests/fm-supervision-host.test.sh 58
