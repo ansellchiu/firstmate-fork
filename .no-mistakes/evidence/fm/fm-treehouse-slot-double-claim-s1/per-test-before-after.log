@@ -1,0 +1,16 @@
+base test_pool_slot_recorded_by_another_task_is_refused exit=1
+not ok - spawn launched into a slot another task's record holds: warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-spawn-
+head test_pool_slot_recorded_by_another_task_is_refused exit=0
+ok - when every slot is held, spawn refuses after bounded retries without touching any claim
+base test_pool_slot_held_elsewhere_moves_to_a_free_slot exit=1
+not ok - the spawn did not record the free slot
+head test_pool_slot_held_elsewhere_moves_to_a_free_slot exit=0
+ok - a held slot is left alone and the spawn takes the next free slot
+base test_pool_slot_held_by_a_shell_only_task_is_refused exit=1
+not ok - a different task launched into the shell-only holder's slot: warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-s
+head test_pool_slot_held_by_a_shell_only_task_is_refused exit=0
+ok - a shell-only holder blocks another task while its own relaunch preserves the copy
+base test_pool_slot_recorded_by_a_registered_home_is_refused exit=1
+not ok - spawn launched into a slot a registered home's same-id record holds: warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000g
+head test_pool_slot_recorded_by_a_registered_home_is_refused exit=0
+ok - a slot a registered home's same-id record holds is refused

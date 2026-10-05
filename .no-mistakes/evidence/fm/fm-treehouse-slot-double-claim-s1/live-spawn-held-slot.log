@@ -1,0 +1,32 @@
+## real treehouse status before spawning newb-b (holder-a's window killed; its record still names slot 1)
+base  main  (repository default)
+1     available    <lab>/pool/.treehouse/demo-fdeaff/1/demo  (detached)
+## state/holder-a.meta
+worktree=<lab>/pool/.treehouse/demo-fdeaff/1/demo
+## $ FM_HOME=<lab> bin/fm-spawn.sh newb-b <lab>/projects/demo --scout --harness codex
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <lab>
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+warning: the portfolio attention limit could not be checked for demo (fm-fleet-snapshot: portfolio classification failed: the project registry data/projects.md is absent; register this home's projects before trusting the portfolio); dispatching anyway - confirm the captain is not already carrying too many projects
+spawned newb-b harness=codex kind=scout window=primary:fm-newb-b worktree=<lab>/pool/.treehouse/demo-fdeaff/2/demo
+exit=0
+## worktree= values after
+<lab>/state/holder-a.meta:worktree=<lab>/pool/.treehouse/demo-fdeaff/1/demo
+<lab>/state/newb-b.meta:worktree=<lab>/pool/.treehouse/demo-fdeaff/2/demo
+## slot owner claims
+<lab>/pool/.treehouse/demo-fdeaff/1/.fm-slot-owner: task=holder-a
+<lab>/pool/.treehouse/demo-fdeaff/2/.fm-slot-owner: task=newb-b
+## treehouse status after
+base  main  (repository default)
+1     in-use       <lab>/pool/.treehouse/demo-fdeaff/1/demo  (detached)
+                   zsh (415), treehouse (2403)
+2     in-use       <lab>/pool/.treehouse/demo-fdeaff/2/demo  (detached)
+                   zsh (2446), codex (4151)
+## $ FM_HOME=<lab> bin/fm-slot-audit.sh  (on the live lab after the spawns)
+OUT_OF_ISOLATION newb-b 19470 codex <lab>/pool/.treehouse/demo-fdeaff/2/demo
+exit=1

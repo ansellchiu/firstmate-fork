@@ -1,0 +1,8 @@
+## newb-b agent quit; pane is shell-only: zsh
+## $ FM_HOME=<lab> bin/fm-spawn.sh newb-b --relaunch --harness codex
+fm-gate-refuse: gate agent lifecycle permitted only against lab home <lab>
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+spawned newb-b harness=codex kind=scout window=primary:fm-newb-b worktree=<lab>/pool/.treehouse/demo-fdeaff/2/demo
+exit=0
+<lab>/state/newb-b.meta:worktree=<lab>/pool/.treehouse/demo-fdeaff/2/demo
+task=newb-b

@@ -1,0 +1,14 @@
+## lab worker processes (pid comm, FM_TASK_ID set per worker)
+ 6368 <lab>/cursor-agent/versions/1/node
+ 6370 <lab>/bin/codex
+ 6372 <lab>/bin/claude
+ 6374 <lab>/bin/grok
+## $ FM_HOME=<lab>/home bin/fm-slot-audit.sh
+DOUBLE_CLAIM <lab>/pool/1/repo <lab>/home/state/alpha.meta <lab>/home/state/beta.meta
+OUT_OF_ISOLATION cur 6368 fm- <lab>/home/projects/demo
+OUT_OF_ISOLATION cx 6370 fm- <lab>/home
+OUT_OF_ISOLATION gk 6374 fm- <lab>/home
+exit=1
+## after reconciling: stale beta.meta removed, out-of-isolation workers exited
+## $ FM_HOME=<lab>/home bin/fm-slot-audit.sh
+exit=0
