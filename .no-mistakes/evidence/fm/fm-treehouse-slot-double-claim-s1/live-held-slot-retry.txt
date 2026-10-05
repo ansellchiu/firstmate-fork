@@ -1,0 +1,42 @@
+## treehouse status after task-b spawn
+base  main  (repository default)
+1     leased       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/demo  (detached)  (held by fm-held:task-a)
+2     in-use       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/2/demo  (detached)
+                   zsh (62924), sleep (65725)
+## processes with cwd under held slot 1 (/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/demo):
+(none)
+## task-b pane transcript
+treehouse get
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9
+wrxsi/pool/.treehouse/demo-1e1e16/1/demo. Type 'exit' to return.
+achiu@achiu-macbook demo % treehouse lease '1' --lease-holder 'fm-held:task-a' &
+& exit
+🌳 Leased worktree 1 at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.
+9wrxsi/pool/.treehouse/demo-1e1e16/1/demo. Run 'treehouse return /var/folders/52
+/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/de
+mo' to release it.
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/d
+emo-1e1e16/1/demo
+🌳 Not returning /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/
+pool/.treehouse/demo-1e1e16/1/demo to the pool: owner precondition failed: it is
+ now durably leased (holder: "fm-held:task-a"); leaving it exactly as it is.
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9
+wrxsi/pool/.treehouse/demo-1e1e16/2/demo. Type 'exit' to return.
+achiu@achiu-macbook demo % cd -- '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs
+340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/2/demo'
+achiu@achiu-macbook demo % export GOTMPDIR=/tmp/fm-task-b/gotmp
+export COMPACT_ADVISER_DISABLE=1
+export FM_TASK_ID=task-b
+achiu@achiu-macbook demo % export COMPACT_ADVISER_DISABLE=1
+export FM_TASK_ID=task-b
+achiu@achiu-macbook demo % export FM_TASK_ID=task-b
+achiu@achiu-macbook demo % . '/tmp/fm-task-b+ca874ab66bf9d7fa355161ae49e43a547c4
+b04af4e6a0ebcda1e2510feff6e42/launch.s1791240393.60100.14108.sh'
+## fm-slot-audit.sh
+audit-exit=0
+
+NOTE: the audit run above omitted TREEHOUSE_ROOT, so it queried the default pool rather than the lab pool; see live-audit-held-lease.txt for the audit against the lab pool.

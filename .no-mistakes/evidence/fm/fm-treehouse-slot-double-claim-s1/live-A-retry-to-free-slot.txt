@@ -1,0 +1,22 @@
+## live scenario A: pool hands out held slot 1 -> spawn leaves it and lands on another slot
+$ grep worktree= state/liveretry.meta
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/2/demo
+$ cat state/holder1.meta (untouched holder record)
+kind=ship
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/1/demo
+project=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.eYqwpP/projects/demo
+$ treehouse status --json (lab pool)
+{"name":"1","status":"leased","lease_holder":"fm-held:holder1"}
+{"name":"2","status":"in-use","lease_holder":""}
+{"name":"3","status":"leased","lease_holder":"setup"}
+{"name":"4","status":"leased","lease_holder":"setup"}
+{"name":"5","status":"leased","lease_holder":"setup"}
+$ lsof processes with cwd under held slot 1 (/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/1/demo):
+0
+$ fm-liveretry pane process tree cwd:
+43240 -zsh /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/projects/demo
+46801 treehouse /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/projects/demo
+$ bin/fm-slot-audit.sh (FM_HOME=lab)
+HELD_LEASE /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/1/demo fm-held:holder1 treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/1/demo'
+OUT_OF_ISOLATION liveretry 52997 claude /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/2/demo
+audit exit=1

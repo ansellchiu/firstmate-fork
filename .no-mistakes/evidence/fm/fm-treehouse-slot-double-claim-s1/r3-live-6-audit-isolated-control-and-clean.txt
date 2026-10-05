@@ -1,0 +1,6 @@
+## control: cursor-agent worker of task-b in a disposable linked worktree OUTSIDE the home (like a real ~/.treehouse slot): /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab-out.xzKWZb/iso
+  pid=76877 args=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/agentbin/cursor-agent 600 cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab-out.xzKWZb/iso
+## reconciliation: operator runs the audit's printed command: treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo'
+🌳 Worktree returned to pool.
+## $ fm-slot-audit.sh (no double claims, no held leases; only the isolated worker live)
+audit exit=0

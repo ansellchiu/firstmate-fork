@@ -1,0 +1,13 @@
+## live scenario E: a real cursor-agent worker process (task escapee) whose cwd is the home's project clone, beside a real claude worker spawned into pool slot 5
+$ ps -o pid,comm -p <escapee>
+83900 /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/bin/cursor-agent
+$ escapee env/cwd
+FM_TASK_ID=escapee
+FM_TASK_INBOX=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/state/escapee.inbox
+cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo
+$ lab claude worker (spawned by fm-spawn into slot 5):
+90660 claude cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/5/demo
+$ bin/fm-slot-audit.sh | grep -v HELD_LEASE
+DOUBLE_CLAIM /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/5/demo /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/state/labretry83932.meta /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/state/stale-claimant.meta
+OUT_OF_ISOLATION escapee 83900 fol /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo
+audit exit=

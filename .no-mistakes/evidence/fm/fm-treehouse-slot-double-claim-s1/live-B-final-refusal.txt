@@ -1,0 +1,28 @@
+## live scenario B: every free slot recorded by a stopped holder -> spawn refuses after bounded retries
+error: no unheld Treehouse pool slot was available for labrefuse34959 after 4 tries; the last slot /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo is still recorded by /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/state/stopped4.meta and is left alone. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window primary:fm-labrefuse34959
+$ tmux list-windows (refused task window kept open for inspection)
+primary:bash pane_path=/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M472WG11SH6A7NZZKHE7GWYQ
+primary:fm-labrefuse34959 pane_path=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo
+$ every process in the fm-labrefuse34959 pane tree and its cwd
+40348 -zsh cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo
+$ any process system-wide with cwd under the pool slots (/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493):
+count=0
+$ treehouse status --json
+{"name":"1","status":"leased","lease_holder":"fm-held:stopped1"}
+{"name":"2","status":"leased","lease_holder":"fm-held:stopped2"}
+{"name":"3","status":"leased","lease_holder":"fm-held:stopped3"}
+{"name":"4","status":"leased","lease_holder":"fm-held:stopped4"}
+{"name":"5","status":"leased","lease_holder":"setup"}
+$ holder records untouched:
+stopped1.meta: kind=ship worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/1/demo project=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo status=stopped 
+stopped2.meta: kind=ship worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/2/demo project=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo status=stopped 
+stopped3.meta: kind=ship worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/3/demo project=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo status=stopped 
+stopped4.meta: kind=ship worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo project=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/projects/demo status=stopped 
+(eval):13: no matches found: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/*/.fm-slot-owner
+$ new task meta present? none; slot owner claims: none
+$ bin/fm-slot-audit.sh
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/1/demo fm-held:stopped1 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/1/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/2/demo fm-held:stopped2 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/2/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/3/demo fm-held:stopped3 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/3/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo fm-held:stopped4 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo'
+audit exit=1

@@ -1,0 +1,6 @@
+## macOS 26.7: worker launched as: env FM_TASK_ID=task-b FM_TASK_INBOX=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/state/task-b.inbox /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/bin/cursor-agent 600 (cwd = project clone)
+pid=90738 cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/projects/demo
+$ ps -Eww -o command= -p 90738   # the audit's only macOS environment source
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/bin/cursor-agent 600
+$ FM_HOME=$LAB TREEHOUSE_ROOT=$LAB/pool bin/fm-slot-audit.sh
+exit=0  (expected: OUT_OF_ISOLATION task-b 90738 cursor-agent ... and exit 1)

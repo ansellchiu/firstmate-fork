@@ -1,0 +1,4 @@
+## PATH with treehouse but without jq: command -v jq -> '', treehouse -> '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/nojq/treehouse'
+## $ fm-slot-audit.sh
+AUDIT_ERROR held-lease-scan-unavailable jq-missing
+audit exit=1

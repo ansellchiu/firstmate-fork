@@ -4,4 +4,3 @@ ok - audit converges to clean after conflicting record and workers are removed
 ok - audit reports an unavailable held-lease dependency
 ok - audit reports held-slot leases with the exact manual return command
 ok - audit reports failed and malformed project queries without losing sibling leases
-exit=0

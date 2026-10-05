@@ -1,0 +1,15 @@
+## setup artifact run: lease already present in an aliased (/var vs /private) treehouse state; task-c spawn output
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.9wrxsi
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: the pane did not leave held Treehouse pool slot /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/demo; refusing to launch task-c while a process of this task still sits in a copy another record holds; inspect window primary:fm-task-c
+exit=1
+## task-c pane
+treehouse get
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/
+fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/demo. Type 'exit' to return.
+achiu@achiu-macbook demo % treehouse lease '1' --lease-holder 'fm-held:task-a' &
+& exit
+worktree 1 is already leased (holder: "fm-held:task-a")
+achiu@achiu-macbook demo %

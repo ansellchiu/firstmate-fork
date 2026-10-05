@@ -32,4 +32,3 @@ ok - work inside a submodule is still refused as uncommitted work, not called st
 ok - a stale pin carrying real work is refused conservatively, never called stale
 ok - a stale pin beside other dirt yields the conservative refusal alone, with no stale-pin line
 # all fm-spawn-pool-base-freshen tests passed
-exit=0

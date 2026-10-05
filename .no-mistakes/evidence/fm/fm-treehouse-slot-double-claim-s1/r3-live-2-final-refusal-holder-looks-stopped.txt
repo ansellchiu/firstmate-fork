@@ -1,0 +1,35 @@
+## setup: task-b's agent killed and its treehouse subshell exited; its pane is shell-only (zsh) in the project, record still names slot 2. Pool max_trees=2, slot 1 leased fm-held:task-a.
+  window bash cwd=/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M472WG11SH6A7NZZKHE7GWYQ cmd=bash
+  window fm-task-b cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo cmd=zsh
+## $ fm-spawn.sh task-c <lab>/projects/demo --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: treehouse get did not enter an isolated worktree within 60s (last seen '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo': it is the spawning project itself; spawning project '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo'); inspect window primary:fm-task-c
+## task-c record published? none
+## task-b record (untouched)
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+kind=scout
+## treehouse status after
+base  main  (repository default)
+1     leased       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo  (detached)  (held by fm-held:task-a)
+2     leased       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo  (detached)  (held by fm-held:task-b)
+## refused task window kept open:
+  window bash cwd=/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M472WG11SH6A7NZZKHE7GWYQ cmd=bash
+  window fm-task-b cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo cmd=zsh
+  window fm-task-c cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo cmd=zsh
+## processes whose cwd is under any pool slot (/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse):
+  (end)
+## task-c pane transcript
+treehouse get
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo. Type 'exit' to return.
+achiu@achiu-macbook demo % treehouse lease '2' --lease-holder 'fm-held:task-b' &
+& exit
+🌳 Leased worktree 2 at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo. Run 'treehouse return /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo' to release it.
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+🌳 Not returning /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo to the pool: owner precondition failed: it is now durably leased (holder: "fm-held:task-b"); leaving it exactly as it is.
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+all 2 worktrees are in use or dirty (max_trees = 2). Run 'treehouse status' to see details, or increase max_trees in treehouse.toml
+achiu@achiu-macbook demo % 

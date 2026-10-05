@@ -1,0 +1,19 @@
+## live scenarios D/E: audit on lab B (one worker in a disposable slot, one cursor-agent worker in the project clone, two records sharing slot 5)
+$ grep worktree= state/*.meta
+state/stopped1.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/1/demo
+state/labretry83932.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/5/demo
+state/stale-claimant.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/5/demo
+state/stopped2.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/2/demo
+state/stopped3.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/3/demo
+state/stopped4.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo
+$ ps for workers:
+9513 /Users/achiu/.local/bin/cursor-agent --use-system-ca /Users/achiu/.local/share/cursor-agent/versions/2026.10.01-e373342/index.js --trust --yolo --model cursor-grok-4.5-high --workspace /Users/achiu/.treehouse/firstmate-4122da/16/firstmate ⁣FIRSTMATE_OP: v1 launch-brief: # Current worker role contract
+You are a crewmate: an autonomous worker agent managed by firstmate.
+This section establishes your current identity before every project or task instruction below and supersedes any conflicting role identity in those instructions.
+$ bin/fm-slot-audit.sh
+DOUBLE_CLAIM /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/5/demo /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/state/labretry83932.meta /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/home/state/stale-claimant.meta
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/1/demo fm-held:stopped1 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/1/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/2/demo fm-held:stopped2 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/2/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/3/demo fm-held:stopped3 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/3/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo fm-held:stopped4 treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-labroot.6VcWqm/th/.treehouse/demo-a62493/4/demo'
+audit exit=1

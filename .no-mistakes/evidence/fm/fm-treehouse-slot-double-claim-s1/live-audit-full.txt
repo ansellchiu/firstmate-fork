@@ -1,0 +1,10 @@
+## state/*.meta worktree= values
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/state/legacy-x.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/state/task-b.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/state/task-a.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/1/demo
+
+$ FM_HOME=$LAB TREEHOUSE_ROOT=$LAB/pool bin/fm-slot-audit.sh
+DOUBLE_CLAIM /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/state/legacy-x.meta /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/state/task-b.meta
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/1/demo fm-held:task-a treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/1/demo'
+HELD_LEASE /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo fm-held:task-b treehouse return '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo'
+exit=1

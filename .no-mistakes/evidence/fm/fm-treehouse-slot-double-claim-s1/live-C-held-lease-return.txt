@@ -1,0 +1,11 @@
+## live scenario C: run the exact return command the audit printed
+$ treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.eYqwpP/th/.treehouse/demo-6dcce9/1/demo'
+🌳 Worktree returned to pool.
+$ treehouse status
+{"name":"1","status":"available","lease_holder":""}
+{"name":"2","status":"in-use","lease_holder":""}
+{"name":"3","status":"leased","lease_holder":"setup"}
+{"name":"4","status":"leased","lease_holder":"setup"}
+{"name":"5","status":"leased","lease_holder":"setup"}
+$ fm-slot-audit.sh | grep -c HELD_LEASE
+0

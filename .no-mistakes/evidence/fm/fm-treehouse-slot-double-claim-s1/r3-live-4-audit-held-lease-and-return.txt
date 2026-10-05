@@ -1,0 +1,14 @@
+## $ fm-slot-audit.sh  (FM_HOME=lab, TREEHOUSE_ROOT=lab pool)
+HELD_LEASE /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo fm-held:task-a treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo'
+HELD_LEASE /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo fm-held:task-b treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo'
+audit exit=1
+## operator runs the printed command for task-a's slot: treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo'
+🌳 Worktree returned to pool.
+## treehouse status
+base  main  (repository default)
+1     available    /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo  (detached)
+2     leased       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo  (detached)  (held by fm-held:task-b)
+                   zsh (4978), sleep (33843)
+## re-run audit
+HELD_LEASE /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo fm-held:task-b treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo'
+audit exit=1

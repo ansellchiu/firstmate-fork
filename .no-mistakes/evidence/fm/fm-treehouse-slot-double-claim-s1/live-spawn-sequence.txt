@@ -1,0 +1,16 @@
+## fm-spawn.sh task-a <lab>/projects/demo --scout (lab, real tmux+treehouse)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS
+spawned task-a harness=cursor-agent kind=scout window=primary:fm-task-a worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/1/demo
+exit=0
+## fm-spawn.sh task-b <lab>/projects/demo --scout (lab, real tmux+treehouse)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS
+spawned task-b harness=cursor-agent kind=scout window=primary:fm-task-b worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo
+exit=0
+## fm-spawn.sh task-c <lab>/projects/demo --scout (lab, real tmux+treehouse)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS
+error: treehouse get did not enter an isolated worktree within 60s (last seen '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/projects/demo': it is the spawning project itself; spawning project '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/projects/demo'); inspect window primary:fm-task-c
+exit=1
+## fm-spawn.sh task-d <lab>/projects/demo --scout (lab, real tmux+treehouse)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS
+error: treehouse get did not enter an isolated worktree within 60s (last seen '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/projects/demo': it is the spawning project itself; spawning project '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/projects/demo'); inspect window primary:fm-task-d
+exit=1

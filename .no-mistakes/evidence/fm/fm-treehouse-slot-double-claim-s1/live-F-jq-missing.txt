@@ -1,0 +1,5 @@
+## live scenario F: treehouse present, jq absent -> held-lease scan cannot report clean
+$ ls nojq-path | grep -c jq: 0
+$ PATH=<no jq, real treehouse> bin/fm-slot-audit.sh
+AUDIT_ERROR held-lease-scan-unavailable jq-missing
+audit exit=1

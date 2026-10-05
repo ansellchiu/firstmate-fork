@@ -1,0 +1,8 @@
+## setup: task-b's record holds slot 2 (now leased fm-held:task-b by task-c's refused spawn); the operator puts task-b's shell-only pane back in its recorded worktree
+  task-b pane cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo cmd=zsh
+## $ fm-spawn.sh task-b --relaunch
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR
+spawned task-b harness=cursor-agent kind=scout window=primary:fm-task-b worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+## task-b record
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+  task-b pane cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo cmd=sleep

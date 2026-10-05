@@ -1,0 +1,20 @@
+## setup: legacy records task-x.meta (worktree= symlink alias of slot 2, trailing slash) and task-d.meta also name task-b's slot 2
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/state/task-b.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/state/task-d.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/state/task-x.meta:worktree=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/alias-slot2/
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/state/task-a.meta:worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo
+## setup: live workers launched as <lab>/agentbin/cursor-agent (symlink to /bin/sleep) with FM_TASK_ID/FM_TASK_INBOX set -- one in the project clone, one in the home root, one (control) in isolated slot 1
+  pid=69924 args=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/agentbin/cursor-agent 600 cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo
+  pid=69926 args=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/agentbin/cursor-agent 600 cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR
+  pid=69927 args=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/agentbin/cursor-agent 600 cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo
+## what macOS exposes of pid 69924's environment: ps -Eww -o command= -p 69924
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR/agentbin/cursor-agent 600
+## $ fm-slot-audit.sh
+DOUBLE_CLAIM /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/state/task-b.meta /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/state/task-d.meta /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/state/task-x.meta
+HELD_LEASE /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo fm-held:task-b treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo'
+AUDIT_ERROR 69924 cannot-read-environment agent= cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/projects/demo
+AUDIT_ERROR 69926 cannot-read-environment agent= cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR
+AUDIT_ERROR 69927 cannot-read-environment agent= cwd=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo
+audit exit=1
+{"name":"1","status":"available","lease_holder":""}
+{"name":"2","status":"leased","lease_holder":"fm-held:task-b"}

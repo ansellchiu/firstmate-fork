@@ -1,0 +1,51 @@
+## setup: task-a spawned into slot 1, its agent killed and its treehouse subshell exited (endpoint gone); its record still names slot 1
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo
+## treehouse status before
+base  main  (repository default)
+1     available    /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo  (detached)
+## $ fm-spawn.sh task-b <lab>/projects/demo --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DbFONR
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+spawned task-b harness=cursor-agent kind=scout window=primary:fm-task-b worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+exit=
+## task-b record
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo
+## task-a record (untouched)
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo
+kind=scout
+## treehouse status after
+base  main  (repository default)
+1     leased       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo  (detached)  (held by fm-held:task-a)
+2     in-use       /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo  (detached)
+                   zsh (9901), sleep (13262)
+## processes whose cwd is under held slot 1 (/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo):
+  (end)
+## task-b pane transcript
+treehouse get
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo. Type 'exit' to return.
+achiu@achiu-macbook demo % treehouse lease '1' --lease-holder 'fm-held:task-a' &
+& exit
+🌳 Leased worktree 1 at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo. Run 'treehouse return /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo' to release it.
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo
+🌳 Not returning /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/1/demo to the pool: owner precondition failed: it is now durably leased (holder: "fm-held:task-a"); leaving it exactly as it is.
+achiu@achiu-macbook demo % treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo. Type 'exit' to return.
+achiu@achiu-macbook demo % cd -- '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs
+340000gn/T/fm-lab.DbFONR/pool/.treehouse/demo-eab7e0/2/demo'
+achiu@achiu-macbook demo % export GOTMPDIR=/tmp/fm-task-b/gotmp
+export COMPACT_ADVISER_DISABLE=1                                                
+export FM_TASK_ID=task-b
+achiu@achiu-macbook demo % export COMPACT_ADVISER_DISABLE=1
+export FM_TASK_ID=task-b                                                        
+achiu@achiu-macbook demo % export FM_TASK_ID=task-b
+achiu@achiu-macbook demo % . '/tmp/fm-task-b+7977b01da67dd4be6c19f0168e525ba8d60
+377ea362de3d4205c0804e9826296/launch.s1791242150.4413.22335.sh'

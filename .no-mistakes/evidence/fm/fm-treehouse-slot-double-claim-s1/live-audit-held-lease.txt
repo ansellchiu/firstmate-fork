@@ -1,0 +1,3 @@
+## fm-slot-audit.sh (TREEHOUSE_ROOT=lab pool)
+HELD_LEASE /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/demo fm-held:task-a treehouse return '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.9wrxsi/pool/.treehouse/demo-1e1e16/1/demo'
+audit-exit=1

@@ -1,0 +1,14 @@
+task-e recorded worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/3/demo (agent killed -> pane shell-only, record still holds the slot)
+$ fm-spawn.sh task-e --relaunch --harness '<lab>/bin/cursor-agent 3600'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS
+spawned task-e harness=cursor-agent kind=scout window=primary:fm-task-e worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/3/demo
+exit=0
+worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/3/demo
+bash bash /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M472WG11SH6A7NZZKHE7GWYQ
+fm-task-e sleep /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/3/demo
+escapee sleep /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/projects/demo
+base  main  (repository default)
+1     leased       /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/1/demo  (detached)  (held by fm-held:task-a)
+2     leased       /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/2/demo  (detached)  (held by fm-held:task-b)
+3     in-use       /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.h2BuGS/pool/.treehouse/demo-d92603/3/demo  (detached)
+                   zsh (14287), sleep (25606)
