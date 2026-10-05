@@ -1,0 +1,12 @@
+## target
+ok - a record that becomes unreadable reads as changed and gets looked at
+ok - a batched presentation carries the changed-record rehydration line
+ok - heartbeat wakes validate and advance streaks while other wakes reset them
+ok - check-kind and uncertain events are never folded into the batch and ring verbatim
+ok - an absorbed batch stays quiet when due and rolls into bounded local telemetry
+ok - an immediate wake carries any pending batch out with it, so no burst is stranded
+ok - with batching disabled, an already-absorbed event stays absorbed
+ok - batching is presentation-only and never writes the durable wake queue
+## base (same new test, pre-fix lib)
+ok - only certified-routine signal/stale/heartbeat evidence is batchable
+not ok - heartbeat wake failed to validate, advance, or reset its streak

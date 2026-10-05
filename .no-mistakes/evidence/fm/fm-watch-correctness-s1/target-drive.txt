@@ -1,0 +1,10 @@
+=== Scenario A: stale-sig removed when a stale pane is cleared as provably working (/Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M46BQ4ZCM1YN52AAAJMXYH5R)
+before: 1 stale-sig file(s)
+.stale-test_fm-stalesig now = 1c1d461327aad12a2b07356d7d63adff (pane hash 1c1d461327aad12a2b07356d7d63adff)
+RESULT A: stale-sig removed
+--- watcher stderr/stdout mentioning stale-sig:
+=== Scenario B: corrupt .heartbeat-streak values, AFK absent (absorbed heartbeat path)
+AFK=0 streak='1 2' -> watcher alive, streak now '1'; output: 
+AFK=0 streak='abc' -> watcher alive, streak now '1'; output: 
+AFK=0 streak='' -> watcher alive, streak now '1'; output: 
+AFK=0 streak='08x' -> watcher alive, streak now '1'; output: 

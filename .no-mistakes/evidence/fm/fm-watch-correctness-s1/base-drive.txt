@@ -1,0 +1,11 @@
+=== Scenario A: stale-sig removed when a stale pane is cleared as provably working (/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base)
+before: 1 stale-sig file(s)
+.stale-test_fm-stalesig now = 1c1d461327aad12a2b07356d7d63adff (pane hash 1c1d461327aad12a2b07356d7d63adff)
+RESULT A: stale-sig STILL PRESENT
+--- watcher stderr/stdout mentioning stale-sig:
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 2051: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fmval-drive.XUzTBK/stalesig/state/.stale-sig-test_fm-stalesig: Permission denied
+=== Scenario B: corrupt .heartbeat-streak values, AFK absent (absorbed heartbeat path)
+AFK=0 streak='1 2' -> watcher DEAD, streak now '1 2'; output: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3744: [: 1 2: integer expected|/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3745: 1 2: arithmetic syntax error in expression (error token is "2")|
+AFK=0 streak='abc' -> watcher DEAD, streak now 'abc'; output: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3744: [: abc: integer expected|/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3745: abc: unbound variable|
+AFK=0 streak='' -> watcher alive, streak now '1'; output: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3744: [: : integer expected|/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3744: [: : integer expected|
+AFK=0 streak='08x' -> watcher DEAD, streak now '08x'; output: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3744: [: 08x: integer expected|/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fmval.BsTrxJ/base/bin/fm-watch.sh: line 3745: 08x: value too great for base (error token is "08x")|
