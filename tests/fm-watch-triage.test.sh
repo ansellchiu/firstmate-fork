@@ -6745,6 +6745,29 @@ test_heartbeat_no_change_absorbed() {
   pass "a heartbeat with no captain-relevant change is absorbed and backs off the cadence"
 }
 
+test_heartbeat_corrupt_streak_treated_as_zero() {
+  local dir state fakebin out pid i
+  dir=$(make_case heartbeat-bad-streak); state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
+  printf 'working: routine heartbeat history\n' > "$state/routine.status"
+  printf '%s' "$(seen_sig "$state/routine.status")" > "$state/.seen-routine_status"
+  # A garbled streak that is a syntax error in shell arithmetic.
+  printf '1 2' > "$state/.heartbeat-streak"
+  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 FM_WAKE_BATCH_WINDOW=1 "$WATCH" > "$out" 2>&1 &
+  pid=$!
+  i=0
+  while [ "$i" -lt 200 ]; do
+    [ "$(cat "$state/.heartbeat-streak" 2>/dev/null)" = 1 ] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  kill -0 "$pid" 2>/dev/null || fail "watcher died on a corrupt heartbeat streak: $(cat "$out")"
+  reap "$pid"
+  [ "$(cat "$state/.heartbeat-streak")" = 1 ] || fail "corrupt heartbeat streak was not treated as 0"
+  pass "a corrupt heartbeat streak is treated as 0 instead of killing the watcher"
+}
+
 test_heartbeat_backstop_surfaces_a_masked_status() {
   local dir state fakebin out sig pid
   dir=$(make_case heartbeat-masked); state="$dir/state"; fakebin="$dir/fakebin"
@@ -7511,6 +7534,7 @@ test_machine_load_alarm_surfaces_once_then_rearms
 test_machine_load_spike_is_not_an_alarm
 test_machine_load_guard_can_be_disabled
 test_heartbeat_no_change_absorbed
+test_heartbeat_corrupt_streak_treated_as_zero
 test_heartbeat_backstop_surfaces_unsurfaced_status
 test_heartbeat_backstop_honors_daemon_catchall_marker
 test_heartbeat_backstop_surfaces_a_masked_status
