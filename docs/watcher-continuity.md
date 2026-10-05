@@ -450,7 +450,7 @@ The same suite covers ordinary same-process session replacement for `/new`, `/re
 - Terminal quit still refusing late rearm.
 - A mid-restore marker advance that delivers the wake with no rejection appendix, offers it to an accepting supervision branch like a confirmed delivery, and records the attempt and the confirm result in the bounded extension log when opted in.
 - A failed confirmation for a stale successor that spares a newer arm started by a repair.
-- A repair, a scheduled retry, and a deferred close over a dead-but-unclosed arm child that each start a fresh arm instead of stalling.
+- A repair and a scheduled retry over a dead-but-unclosed arm child that each start a fresh arm instead of stalling.
 
 It also drives the catch-up burst end to end against the real close handlers: a burst delivers one follow-up while every durable row stays queued, folding stops at its bound and at a settle that proves the run idle with nothing queued while a busy, queued-message, or predicate-less settle leaves it armed, a notification after an intervening drain claims no folded cycles, and a count that stalls, fails, or comes back uncountable still delivers the wake without a number.
 

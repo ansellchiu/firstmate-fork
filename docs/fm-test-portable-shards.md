@@ -21,8 +21,10 @@ A failed script's duration is excluded even when its lane uploaded an artifact.
 In particular, run 36664663190's serial 5 finished in 22m15s with an assertion failure, not a timeout; treating that as a healthy whole-lane sample would hide the failure.
 Collect successful per-script measurements for every member before calculating a split.
 
-`tests/fm-supervision-host.test.sh` uses 789123 ms from run 36669175457, after the merged [host runtime fix](https://github.com/kunchenguid/firstmate/pull/6179), rather than its pre-fix maximum of 1065298 ms.
-That post-fix value has only one sample in this baseline, so further green runs must establish its variance.
+The supervision host suite runs as two scripts: `tests/fm-supervision-host.test.sh` runs the first half of its cases, and `tests/fm-supervision-host-engine.test.sh` sources it to run the second.
+Whole, it took 646673 to 1698546 ms in serial 2 of `ansellchiu/firstmate-fork` CI runs on 2026-10-04 and 2026-10-05, so on a slow runner it alone left no room under the job cap.
+Its per-case times scaled together by up to about three times between runners, so the variance comes from the runner rather than from one slow or hung case.
+The two hints, 834000 and 866000 ms, are the slowest per-half sums of completed case markers across seven of those jobs, including four cancelled at the cap after the suite itself passed.
 The native-Windows-only `tests/fm-pi-windows-shell-invocation.test.sh` retains its separate 5121 ms measurement from 2026-09-06T21:02Z instead of a portable capability skip.
 The session-start hint retains its pre-optimization maximum until CI measures the shorter fixture-only home-summary bound; do not discount a local speedup from CI packing weights.
 
@@ -113,7 +115,7 @@ No fast mode, path skips, or paid runner provisioning is part of this layout.
 
 The longer-term performance objective remains a complete green run under fifteen minutes including start delay, but the current watch-triage floor alone exceeds that objective.
 The immediate packing target is the runner's modeled script budget, not a claim that more shards alone can make an indivisible script faster.
-The layout uses fourteen long-lived Linux jobs (nine serial, two parallel, Herdr, two lint), plus short checks and macOS; insufficient shared account capacity can erase the packing gain.
+The layout uses fifteen long-lived Linux jobs (ten serial, two parallel, Herdr, two lint), plus short checks and macOS; insufficient shared account capacity can erase the packing gain.
 Compare complete before/after runs, preserve cancelled and partial-run evidence, and measure a representative normal-run sample before claiming a P95 improvement.
 The workflow retains per-PR supersession without cancelling main pushes or changing the compliance workflow's event semantics.
 
