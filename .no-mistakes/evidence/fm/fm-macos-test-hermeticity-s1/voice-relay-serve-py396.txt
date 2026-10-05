@@ -1,0 +1,6 @@
+$ printf '' | /usr/bin/python3 bin/fm-voice-relay.py --home $LAB --serve   (HEAD)
+FMVOICE1fm-voice-relay: ModuleNotFoundError: No module named 'aws_sdk_bedrock_runtime'
+exit=2
+$ printf '' | /usr/bin/python3 bin/fm-voice-relay.py --home $LAB --serve   (BASE)
+FMVOICE1fm-voice-relay: ModuleNotFoundError: No module named 'aws_sdk_bedrock_runtime'
+exit=2

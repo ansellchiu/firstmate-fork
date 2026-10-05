@@ -1,0 +1,16 @@
+ok - the backlog and the state directory always come from the same home
+ok - a finished task's pull request is neither counted nor named
+ok - a deny substring on an open title removes its pull request and says so
+ok - an unknown read scope refuses instead of widening
+ok - the configured read scope is honoured
+ok - handover queues the request for firstmate and wakes it exactly once
+ok - the reader and the queue resolve the state directory the same way
+ok - an empty request is refused rather than queued as a blank note
+ok - a home with no records answers nothing rather than failing
+ok - a spoken turn goes out and comes back: the records answer, firstmate gets the work
+ok - a model session that ends mid-conversation costs one turn, not the relay
+ok - a desynchronised uplink is named to the client before the goodbye, not only to stderr
+ok - the desktop's own check answers from the records and times it from the talk end
+ok - a reply that arrives before the end of the clip is named as an unusable clock
+all voice relay cases passed
+exit=0

@@ -1,0 +1,4 @@
+# unknown pane state, server-state probe stubbed (as the test does):
+unreadable
+# same, probe NOT stubbed (real herdr on PATH, no such session):
+missing

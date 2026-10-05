@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<stdin>", line 133, in <module>
+  File "/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-base.LGPJ0p/bin/fm-voice-relay.py", line 399, in __init__
+    self._lock = asyncio.Lock()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/locks.py", line 81, in __init__
+    self._loop = events.get_event_loop()
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/asyncio/events.py", line 642, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+not ok - credential reuse
