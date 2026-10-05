@@ -959,6 +959,63 @@
       "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
     },
     {
+      "id": "portable-serial-ten-shards",
+      "area": "Repo checks",
+      "paths": [
+        ".github/workflows/ci.yml",
+        "bin/fm-test-run.sh",
+        "CONTRIBUTING.md",
+        "docs/fm-test-portable-shards.md"
+      ],
+      "intent": "Keep ten portable serial shards, with matching runner and workflow counts and required-check documentation, so the measured supervision host half-suite weights fit the packing budget under the 30-minute job cap; preserve those weights when reconciling upstream estimate-table changes.",
+      "provenance": {
+        "commits": [
+          "5ced6bd8",
+          "9338906d"
+        ]
+      },
+      "upstreamEquivalent": "unknown",
+      "disposition": "retain"
+    },
+    {
+      "id": "supervision-host-suite-split",
+      "area": "Repo checks",
+      "paths": [
+        "tests/fm-supervision-host.test.sh",
+        "tests/fm-supervision-host-engine.test.sh",
+        "bin/fm-test-run.sh",
+        "docs/fm-test-portable-shards.md",
+        "docs/supervision-host.md",
+        "docs/verification/supervision.md"
+      ],
+      "intent": "Run every supervision host case exactly once across run_first_half and run_second_half on separate serial shards, keeping fixtures and case definitions in the original script; select both scripts when their shared owner changes and retain both verification entry points. Reconcile upstream case-list additions into the appropriate half without losing or duplicating coverage.",
+      "provenance": {
+        "commits": [
+          "5ced6bd8",
+          "5c8acef3"
+        ]
+      },
+      "upstreamEquivalent": "unknown",
+      "disposition": "retain"
+    },
+    {
+      "id": "pi-deferred-close-test-removal",
+      "area": "Watcher continuity",
+      "paths": [
+        "tests/fm-pi-watch-extension.test.sh",
+        "docs/watcher-continuity.md"
+      ],
+      "intent": "Keep the upstream test_pi_deferred_close_starts_fresh_arm_over_dead_child removed because it assumes retry waits for delivery to settle, contrary to the retained pi-primary-growth immediate bounded retry design. Preserve test_pi_successor_failure_during_delivery_is_retried_without_waiting and test_pi_scheduled_retry_starts_fresh_arm_over_dead_child as coverage of the fork's retry and dead-child guarantees, and keep the documented coverage aligned.",
+      "provenance": {
+        "commits": [
+          "b6088db0",
+          "c1f59ab0"
+        ]
+      },
+      "upstreamEquivalent": "unknown",
+      "disposition": "retain"
+    },
+    {
       "id": "residual-private-drift",
       "area": "Residual",
       "paths": [

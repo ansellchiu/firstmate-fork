@@ -291,6 +291,33 @@ wiring_harness() {  # <state> <script>
   ' _ "$ROOT" "$state" "$script"
 }
 
+test_heartbeat_wake_validates_streak() {
+  local state
+  CASE_N=$((CASE_N + 1))
+  state=$(new_state)
+  FM_WAKE_BATCH_WINDOW=0 wiring_harness "$state" "$(cat <<'SH'
+    for value in missing '' nonsense '1 2' 4; do
+      if [ "$value" = missing ]; then
+        rm -f "$STATE/.heartbeat-streak"
+      else
+        printf '%s' "$value" > "$STATE/.heartbeat-streak"
+      fi
+      expected=1
+      [ "$value" != 4 ] || expected=5
+      wake heartbeat
+      [ "$(cat "$STATE/.heartbeat-streak")" = "$expected" ] || exit 1
+    done
+    wake 'signal: alpha.status'
+    [ "$(cat "$STATE/.heartbeat-streak")" = 0 ] || exit 1
+SH
+  )" || fail "heartbeat wake failed to validate, advance, or reset its streak"
+  [ "$(grep -c '^heartbeat$' "$state/wakes")" = 5 ] \
+    || fail "heartbeat wake did not reach delivery for every streak value"
+  grep -Fxq 'signal: alpha.status' "$state/wakes" \
+    || fail "non-heartbeat wake did not reach delivery"
+  pass "heartbeat wakes validate and advance streaks while other wakes reset them"
+}
+
 test_immediate_events_are_never_folded_into_the_batch() {
   local state wakes
   CASE_N=$((CASE_N + 1))
@@ -411,6 +438,7 @@ test_a_corrupt_window_marker_surfaces_instead_of_holding
 test_only_changed_active_records_are_rehydrated
 test_an_unreadable_record_reads_as_changed
 test_a_batched_presentation_carries_its_rehydration_line
+test_heartbeat_wake_validates_streak
 test_immediate_events_are_never_folded_into_the_batch
 test_due_absorbed_events_roll_into_local_telemetry_without_a_wake
 test_an_immediate_wake_carries_a_pending_batch_out_with_it

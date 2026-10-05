@@ -122,6 +122,13 @@ $summary"
   return 0
 }
 
+heartbeat_streak() {
+  local v
+  v=$(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0)
+  case "$v" in ''|*[!0-9]*) v=0 ;; esac
+  echo "$v"
+}
+
 # The one choke point every actionable wake passes through: it settles the
 # heartbeat streak, folds any pending routine batch in ahead of the reason, then
 # hands the final text to wake_deliver, which owns output and exit. Splitting
@@ -130,7 +137,7 @@ $summary"
 wake() {
   local pending
   case "$1" in
-    heartbeat*) echo $(( $(cat "$STATE/.heartbeat-streak" 2>/dev/null || echo 0) + 1 )) > "$STATE/.heartbeat-streak" ;;
+    heartbeat*) echo $(( $(heartbeat_streak) + 1 )) > "$STATE/.heartbeat-streak" ;;
     *) echo 0 > "$STATE/.heartbeat-streak" ;;
   esac
   # A batched presentation is already a complete summary; only an ordinary
