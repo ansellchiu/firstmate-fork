@@ -108,9 +108,26 @@ pass 'audit converges to clean after conflicting record and workers are removed'
 cat > "$case_dir/bin/treehouse" <<'SH'
 #!/usr/bin/env bash
 [ "$1 $2" = "status --json" ] || exit 1
+case "$PWD:${AUDIT_STATUS_MODE:-ok}" in
+  */demo:failed) exit 1 ;;
+  */demo:invalid) printf 'invalid json\n'; exit 0 ;;
+esac
 printf '[{"name":"1","path":"%s","status":"leased","lease_holder":"fm-held:parked-holder"},{"name":"2","path":"/x/2/r","status":"leased","lease_holder":"someone-else"}]\n' "$AUDIT_FIXTURE/pool/1/repo"
 SH
 chmod +x "$case_dir/bin/treehouse"
+mkdir -p "$case_dir/no-jq"
+for tool in bash dirname uname mkdir grep cut sort awk tr cat; do
+  ln -s "$(command -v "$tool")" "$case_dir/no-jq/$tool"
+done
+ln -s "$case_dir/bin/ps" "$case_dir/no-jq/ps"
+ln -s "$case_dir/bin/treehouse" "$case_dir/no-jq/treehouse"
+set +e
+out=$(FM_HOME="$home" PATH="$case_dir/no-jq" "$(command -v bash)" "$ROOT/bin/fm-slot-audit.sh")
+status=$?
+set -e
+expect_code 1 "$status" 'missing jq cannot report clean when treehouse is present'
+assert_contains "$out" 'AUDIT_ERROR held-lease-scan-unavailable jq-missing' 'missing jq reports an explicit scan error'
+pass 'audit reports an unavailable held-lease dependency'
 command -v jq >/dev/null 2>&1 || { echo "ok - skipped held-lease report: jq is not installed"; exit 0; }
 set +e
 out=$(FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
@@ -120,3 +137,18 @@ expect_code 1 "$status" 'a held-slot lease is reported'
 assert_contains "$out" "HELD_LEASE $slot fm-held:parked-holder treehouse return '$slot'" 'the lease line carries the holder and the exact manual return command'
 assert_not_contains "$out" "someone-else" 'a lease without the fm-held label is not reported'
 pass 'audit reports held-slot leases with the exact manual return command'
+mkdir -p "$home/projects/working"
+for mode in failed invalid; do
+  set +e
+  out=$(AUDIT_STATUS_MODE="$mode" FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
+  status=$?
+  set -e
+  expect_code 1 "$status" "a $mode project query cannot report clean"
+  case "$mode" in
+    failed) reason=status-failed ;;
+    invalid) reason=invalid-status ;;
+  esac
+  assert_contains "$out" "AUDIT_ERROR held-lease-scan-unavailable $reason $home/projects/demo" "a $mode query identifies the unavailable project"
+  assert_contains "$out" "HELD_LEASE $slot fm-held:parked-holder treehouse return '$slot'" 'other project leases are still reported'
+done
+pass 'audit reports failed and malformed project queries without losing sibling leases'

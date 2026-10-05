@@ -146,12 +146,24 @@ escapes=$(
 )
 
 leases=$(
-  command -v treehouse >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || exit 0
+  command -v treehouse >/dev/null 2>&1 || exit 0
+  command -v jq >/dev/null 2>&1 || {
+    printf 'AUDIT_ERROR held-lease-scan-unavailable jq-missing\n'
+    exit 1
+  }
   for project in "${FM_PROJECTS_OVERRIDE:-$root/projects}"/*; do
     [ -d "$project" ] || continue
-    (cd "$project" && treehouse status --json 2>/dev/null) || continue
-  done | jq -r '.[]? | select((.lease_holder // "") | startswith("fm-held:")) |
-    "HELD_LEASE \(.path) \(.lease_holder) treehouse return \u0027\(.path)\u0027"' | sort -u
+    status=$(cd "$project" && treehouse status --json 2>/dev/null) || {
+      printf 'AUDIT_ERROR held-lease-scan-unavailable status-failed %s\n' "$project"
+      continue
+    }
+    report=$(printf '%s\n' "$status" | jq -r '.[]? | select((.lease_holder // "") | startswith("fm-held:")) |
+      "HELD_LEASE \(.path) \(.lease_holder) treehouse return \u0027\(.path)\u0027"' 2>/dev/null) || {
+      printf 'AUDIT_ERROR held-lease-scan-unavailable invalid-status %s\n' "$project"
+      continue
+    }
+    [ -z "$report" ] || printf '%s\n' "$report"
+  done | sort -u
 )
 
 [ -z "$claims" ] || printf '%s\n' "$claims"
