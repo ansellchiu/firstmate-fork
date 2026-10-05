@@ -407,6 +407,9 @@ Each record includes:
 - Successor disposition.
 
 The file is size-capped through `FM_WATCH_CYCLE_LOG_MAX_BYTES` and `FM_WATCH_CYCLE_LOG_KEEP_LINES`.
+An owning arm captures the watcher's stderr and passes it through to its own stderr when the cycle ends.
+When the cycle exits nonzero, the arm also appends a header line with the watcher PID and exit code, plus the last 20 stderr lines, to `state/.watch-cycle-stderr.log`.
+That file is capped at `FM_WATCH_CYCLE_LOG_MAX_BYTES`.
 `state/.watch-triage.log` remains only the watcher's bounded absorbed-wake debug log and carries no lifecycle semantics.
 
 ### Grace, beacon, and stop signals
