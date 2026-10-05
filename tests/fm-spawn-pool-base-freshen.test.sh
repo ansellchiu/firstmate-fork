@@ -854,6 +854,11 @@ test_pool_slot_recorded_by_another_task_is_refused() {
   assert_contains "$out" "no unheld Treehouse pool slot was available" \
     "spawn did not report that no unheld slot was available"
   assert_contains "$out" "/state/parked-holder-r" "spawn did not name a task holding the slot"
+  [ "$(wc -l < "$CASE_DIR/lease-log" | tr -d ' ')" = 4 ] \
+    || fail "spawn did not step out of every held slot, the last one included: $(cat "$CASE_DIR/lease-log")"
+  grep -Fq "treehouse lease '2' --lease-holder" "$CASE_DIR/lease-log" \
+    || fail "the refusal left the pane inside the last held slot: $(tail -1 "$CASE_DIR/lease-log")"
+  [ -e "$CASE_DIR/left-slot" ] || fail "the refused task's pane was not out of the held slot"
   [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "spawn published a record for a held slot"
   grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" \
     || fail "spawn overwrote the holder's slot claim: $(cat "$SLOT_CLAIM")"
@@ -974,6 +979,7 @@ SH
   [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$before" ] || fail "refused spawn moved the holder's HEAD"
 
   printf '%s\n' "$POOL_DIR" > "$CASE_DIR/slot-sequence"
+  rm -f "$CASE_DIR/left-slot"
   out=$(FM_FAKE_LAUNCH_LOG="$CASE_DIR/relaunch.log" fm_test_run_spawn "$HOME_DIR" "$POOL_DIR" "$FAKEBIN_DIR" "$holder" --relaunch)
   status=$?
   unset FM_FAKE_DUPLICATE_WINDOW

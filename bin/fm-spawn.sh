@@ -4512,6 +4512,27 @@ spawn_slot_held_by() {
   SPAWN_SLOT_HELD_BY=$(printf '%s' "$SPAWN_SLOT_HELD_BY" | paste -sd, -)
 }
 
+# Step the pane out of a held pool slot: lease it state-only under a holder
+# label and exit the subshell, so no process of this task keeps the copy as its
+# working directory, then wait for the pane to be back in the project.
+spawn_leave_held_slot() {
+  spawn_send_text_line "$WT_TARGET" "$(fm_treehouse_leave_slot_command "$WT" "$(basename "${SPAWN_SLOT_HELD_BY%%,*}" .meta)")" || {
+    echo "error: could not tell the pane to leave held Treehouse pool slot $WT; refusing to launch $ID; inspect window $T" >&2
+    exit 1
+  }
+  for _ in $(seq 1 30); do
+    p=$(spawn_current_path "$WT_TARGET" || true)
+    if [ -n "$p" ] && [ "$(real_path_or_raw "$p")" = "$PROJ_ABS_REAL" ]; then
+      break
+    fi
+    sleep 1
+  done
+  if [ -z "$p" ] || [ "$(real_path_or_raw "$p")" != "$PROJ_ABS_REAL" ]; then
+    echo "error: the pane did not leave held Treehouse pool slot $WT; refusing to launch $ID while a process of this task still sits in a copy another record holds; inspect window $T" >&2
+    exit 1
+  fi
+}
+
 spawn_refuse_held_slot() {
   spawn_slot_held_by
   [ -z "$SPAWN_SLOT_HELD_BY" ] || {
@@ -4647,26 +4668,13 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
       spawn_slot_held_by
       if [ -n "$SPAWN_SLOT_HELD_BY" ]; then
         if [ "$slot_attempt" -ge 3 ]; then
+          spawn_leave_held_slot
           echo "error: no unheld Treehouse pool slot was available for $ID after $((slot_attempt + 1)) tries; the last slot $WT is still recorded by $SPAWN_SLOT_HELD_BY and is left alone. Reconcile with bin/fm-slot-audit.sh, then respawn; inspect window $T" >&2
           exit 1
         fi
         slot_attempt=$((slot_attempt + 1))
         slot_avoid=$(real_path_or_raw "$WT")
-        spawn_send_text_line "$WT_TARGET" "$(fm_treehouse_leave_slot_command "$WT" "$(basename "${SPAWN_SLOT_HELD_BY%%,*}" .meta)")" || {
-          echo "error: could not tell the pane to leave held Treehouse pool slot $WT; refusing to launch $ID; inspect window $T" >&2
-          exit 1
-        }
-        for _ in $(seq 1 30); do
-          p=$(spawn_current_path "$WT_TARGET" || true)
-          if [ -n "$p" ] && [ "$(real_path_or_raw "$p")" = "$PROJ_ABS_REAL" ]; then
-            break
-          fi
-          sleep 1
-        done
-        if [ -z "$p" ] || [ "$(real_path_or_raw "$p")" != "$PROJ_ABS_REAL" ]; then
-          echo "error: the pane did not leave held Treehouse pool slot $WT; refusing to launch $ID while a process of this task still sits in a copy another record holds; inspect window $T" >&2
-          exit 1
-        fi
+        spawn_leave_held_slot
         continue
       fi
       if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
