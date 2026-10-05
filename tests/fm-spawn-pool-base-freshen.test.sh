@@ -800,7 +800,7 @@ test_leaving_a_held_slot_keeps_every_process_out_of_it() {
     treehouse return "$held" >/dev/null 2>&1
     treehouse get <<EOS >/dev/null 2>&1
 touch KEEPME
-$(bash -c ". '$ROOT/bin/fm-wake-lib.sh'; fm_treehouse_leave_slot_command \"\$PWD\"")
+$(bash -c ". '$ROOT/bin/fm-wake-lib.sh'; fm_treehouse_leave_slot_command '$held' parked-holder")
 EOS
   ) >/dev/null 2>&1
   pool=$(ls -d "$dir"/pool/.treehouse/*/1/r 2>/dev/null | head -1)
@@ -814,6 +814,8 @@ EOS
 )
   pool=$(cd "$pool" && pwd -P)
   assert_contains "$out" "/2/r" "the pool handed the leased slot out again instead of a free one"
+  assert_contains "$(cd "$repo" && TREEHOUSE_ROOT="$dir/pool" treehouse status --json 2>/dev/null)" "fm-held:parked-holder" \
+    "the held slot's lease does not carry the holder label"
   assert_not_contains "$out" "$pool" "a process still has the held slot as its working directory"
   pass "leaving a held slot keeps every later process out of it and the pool away from it"
 }
@@ -863,7 +865,7 @@ test_pool_slot_held_elsewhere_moves_to_a_free_slot() {
   status=$?
   expect_code 0 "$status" "spawn did not move on to the free slot"$'\n'"$out"
   assert_grep "worktree=$SLOT2_DIR" "$HOME_DIR/state/$id.meta" "the spawn did not record the free slot"
-  grep -Fq "treehouse lease '1' && exit" "$CASE_DIR/lease-log" \
+  grep -Fq "treehouse lease '1' --lease-holder 'fm-held:parked-holder-r1' && exit" "$CASE_DIR/lease-log" \
     || fail "the pane was not told to lease the held slot and exit its subshell: $(cat "$CASE_DIR/lease-log" 2>/dev/null)"
   grep -Fxq "task=$id" "$SLOT2_CLAIM" || fail "the free slot was not claimed by the new task"
   grep -Fxq 'task=parked-holder-r1' "$SLOT_CLAIM" || fail "the held slot's claim was rewritten"

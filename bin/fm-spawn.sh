@@ -4652,7 +4652,7 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
         fi
         slot_attempt=$((slot_attempt + 1))
         slot_avoid=$(real_path_or_raw "$WT")
-        spawn_send_text_line "$WT_TARGET" "$(fm_treehouse_leave_slot_command "$WT")" || {
+        spawn_send_text_line "$WT_TARGET" "$(fm_treehouse_leave_slot_command "$WT" "$(basename "${SPAWN_SLOT_HELD_BY%%,*}" .meta)")" || {
           echo "error: could not tell the pane to leave held Treehouse pool slot $WT; refusing to launch $ID; inspect window $T" >&2
           exit 1
         }

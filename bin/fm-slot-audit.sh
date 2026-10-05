@@ -9,6 +9,9 @@
 #   OUT_OF_ISOLATION <task> <pid> <agent> <cwd>  a recorded worker in this home, a
 #                                                project clone, or its repository's primary checkout
 #   AUDIT_ERROR <pid> <reason>                  an unreadable worker process
+#   HELD_LEASE <slot> <holder> <return-command> a slot a spawn stepped out of because
+#                                               another task record held it: leased with
+#                                               holder label fm-held:<holder-id>
 # Exits 0 when clean, 1 when anything is reported.
 #
 # Covered layouts: this home, its projects/ clones (FM_PROJECTS_OVERRIDE when set), and
@@ -25,6 +28,10 @@
 #      bin/fm-teardown.sh, which leaves a slot another task's claim holds.
 #   2. For each OUT_OF_ISOLATION agent, interrupt or exit it with bin/fm-control.sh
 #      for its task before any git runs in that pane; never drive it in place.
+#      A HELD_LEASE is not returned automatically: once the holder named in its label is
+#      cleaned up (or its record is gone), run the printed `treehouse return <slot>`
+#      yourself, or the slot stays out of the pool. Returning it at teardown is
+#      follow-up work.
 #   3. Re-run this script until it is clean. bin/fm-spawn.sh refuses new work into
 #      any slot a record still holds, so no new double claim is created meanwhile.
 set -u
@@ -138,6 +145,16 @@ escapes=$(
   done
 )
 
+leases=$(
+  command -v treehouse >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || exit 0
+  for project in "${FM_PROJECTS_OVERRIDE:-$root/projects}"/*; do
+    [ -d "$project" ] || continue
+    (cd "$project" && treehouse status --json 2>/dev/null) || continue
+  done | jq -r '.[]? | select((.lease_holder // "") | startswith("fm-held:")) |
+    "HELD_LEASE \(.path) \(.lease_holder) treehouse return \u0027\(.path)\u0027"' | sort -u
+)
+
 [ -z "$claims" ] || printf '%s\n' "$claims"
+[ -z "$leases" ] || printf '%s\n' "$leases"
 [ -z "$escapes" ] || printf '%s\n' "$escapes"
-[ -z "$claims$escapes" ]
+[ -z "$claims$escapes$leases" ]

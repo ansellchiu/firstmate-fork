@@ -105,3 +105,18 @@ set -e
 expect_code 0 "$status" 'a single claimant and no escaped workers is clean'
 [ -z "$out" ] || fail "clean audit emitted output: $out"
 pass 'audit converges to clean after conflicting record and workers are removed'
+cat > "$case_dir/bin/treehouse" <<'SH'
+#!/usr/bin/env bash
+[ "$1 $2" = "status --json" ] || exit 1
+printf '[{"name":"1","path":"%s","status":"leased","lease_holder":"fm-held:parked-holder"},{"name":"2","path":"/x/2/r","status":"leased","lease_holder":"someone-else"}]\n' "$AUDIT_FIXTURE/pool/1/repo"
+SH
+chmod +x "$case_dir/bin/treehouse"
+command -v jq >/dev/null 2>&1 || { echo "ok - skipped held-lease report: jq is not installed"; exit 0; }
+set +e
+out=$(FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
+status=$?
+set -e
+expect_code 1 "$status" 'a held-slot lease is reported'
+assert_contains "$out" "HELD_LEASE $slot fm-held:parked-holder treehouse return '$slot'" 'the lease line carries the holder and the exact manual return command'
+assert_not_contains "$out" "someone-else" 'a lease without the fm-held label is not reported'
+pass 'audit reports held-slot leases with the exact manual return command'
