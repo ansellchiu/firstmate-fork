@@ -1376,11 +1376,11 @@ test_dispatch_model_catalog_validation() {
   add_real_jq "$fakebin"
   cat > "$fakebin/cursor-agent" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' 'Available models' 'cursor-grok-4.5-high - Grok' 'cursor-grok-4.5-high-fast - Grok'
+printf '%s\n' 'Available models' 'auto - Auto' 'gpt-5.3-codex - Codex' 'cursor-grok-4.5-high-fast - Grok' 'claude-sonnet - Sonnet' 'gpt-5.3-codex-low - Codex' 'gpt-5.3-codex-fast - Codex' 'cursor-grok-4.5-high - Grok'
 SH
   cat > "$fakebin/agy" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' 'gemini-3.8-flash-medium Gemini'
+printf '%s\n' 'auto Auto' 'claude-sonnet Sonnet' 'gemini-3.8-flash-medium Gemini' 'gpt-5.3-codex Codex' 'gpt-5.3-codex-low Codex' 'gpt-5.3-codex-fast Codex'
 SH
   chmod +x "$fakebin/cursor-agent" "$fakebin/agy"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
@@ -1389,8 +1389,12 @@ SH
     'catalog validation reports unknown configured models'
   assert_contains "$out" 'cursor/cursor-grok-4.5-medium' \
     'catalog validation names the cursor entry and bad model'
+  assert_contains "$out" 'cursor/cursor-grok-4.5-medium (valid: cursor-grok-4.5-high, cursor-grok-4.5-high-fast,' \
+    'cursor suggestions rank the nearest ids ahead of unordered unrelated models'
   assert_contains "$out" 'agy/gemini-3.8-flash' \
     'agy base model plus effort is checked against its suffixed catalog id'
+  assert_contains "$out" 'agy/gemini-3.8-flash (valid: gemini-3.8-flash-medium,' \
+    'agy suggestions rank the nearest id ahead of unordered unrelated models'
   pass 'bootstrap validates configured models against live agy and Cursor catalogs'
 }
 

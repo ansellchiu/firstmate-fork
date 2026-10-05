@@ -1140,11 +1140,19 @@ crew_dispatch_validate() {
       elif (catalog($p.harness) | index($p.model)) != null then true
       elif $p.harness == "agy" and ($p.effort != null) and (catalog($p.harness) | index(($p.model) + "-" + ($p.effort))) != null then true
       else false end;
+    def common_prefix_length($a; $b):
+      ($a | explode) as $left | ($b | explode) as $right
+      | reduce range(0; ([($left | length), ($right | length)] | min)) as $i
+          (0; if . == $i and $left[$i] == $right[$i] then . + 1 else . end);
+    def nearest_models($p):
+      catalog($p.harness)
+      | sort_by(-common_prefix_length(.; $p.model), ((length - ($p.model | length)) | fabs), .)
+      | .[0:5];
     def bad_models:
       configured_profiles
       | to_entries
       | map(.value as $p | select(($p.model | type) == "string") | select((catalog($p.harness) | length) > 0) | select(model_ok($p) | not)
-        | "profile \(.key) \($p.harness)/\($p.model) (valid: \((catalog($p.harness) | .[0:5] | join(", "))))")
+        | "profile \(.key) \($p.harness)/\($p.model) (valid: \((nearest_models($p) | join(", "))))")
       | unique;
     if type != "object" then "top-level value must be an object"
     elif has("rules") and (.rules | type) != "array" then "rules must be an array"
