@@ -98,6 +98,9 @@ cleanup_workers
 : > "$case_dir/pids"
 : > "$case_dir/rows"
 rm "$other/state/second.meta"
+# Pin the lease scan to an empty pool so a host Treehouse cannot decide the clean verdict.
+printf '#!/usr/bin/env bash\nprintf "[]\\n"\n' > "$case_dir/bin/treehouse"
+chmod +x "$case_dir/bin/treehouse"
 set +e
 out=$(FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
 status=$?
