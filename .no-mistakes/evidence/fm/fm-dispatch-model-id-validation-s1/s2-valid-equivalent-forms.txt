@@ -1,0 +1,5 @@
+## config:
+{"default":[{"harness":"cursor","model":"cursor-grok-4.5-high"},{"harness":"cursor","model":"cursor-grok-4.5-high-fast"},{"harness":"agy","model":"gemini-3.8-flash","effort":"medium"},{"harness":"agy","model":"gemini-3.8-flash-high"}]}
+## bootstrap:
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+exit=0

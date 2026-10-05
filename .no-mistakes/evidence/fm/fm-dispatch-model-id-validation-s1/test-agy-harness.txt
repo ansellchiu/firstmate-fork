@@ -1,0 +1,5 @@
+ok - herdr exit detection: malformed and failed reads stay unknown
+ok - fm-spawn: agy accepts base plus effort only when the suffixed catalog id exists
+ok - fm-spawn: a busy verdict on an unregistered path without a dialog fails and closes the endpoint
+ok - fm-spawn: an agy dialog that never turns busy fails the spawn and closes the endpoint
+rc=

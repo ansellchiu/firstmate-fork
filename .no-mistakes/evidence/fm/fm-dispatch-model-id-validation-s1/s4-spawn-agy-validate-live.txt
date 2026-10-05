@@ -1,0 +1,8 @@
+## agy_model_validate (bin/fm-spawn.sh) driven against the real 'agy models' catalog
+model=gemini-3.8-flash effort=medium -> rc=0 MODEL=gemini-3.8-flash-medium
+model=gemini-3.8-flash effort=high -> rc=0 MODEL=gemini-3.8-flash-high
+model=gemini-3.8-flash-high effort= -> rc=0 MODEL=gemini-3.8-flash-high
+error: agy model 'gemini-3.8-flash' is not listed by 'agy models'; choose a listed id or omit --model
+model=gemini-3.8-flash effort=xhigh -> rc=1 MODEL=gemini-3.8-flash
+error: agy model 'gemini-9-ultra' is not listed by 'agy models'; choose a listed id or omit --model
+model=gemini-9-ultra effort=high -> rc=1 MODEL=gemini-9-ultra

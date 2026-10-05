@@ -1,0 +1,6 @@
+## PATH has no agy/cursor-agent
+## config:
+{"default":[{"harness":"cursor","model":"cursor-grok-4.5-xmedium"},{"harness":"agy","model":"gemini-9-ultra","effort":"high"}]}
+## bootstrap:
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+exit=0

@@ -1,0 +1,6 @@
+fatal: not a git repository (or any of the parent directories): .git
+ok - bootstrap reports degraded vault and stays silent when vault is healthy
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+ok - bootstrap validates configured models against live agy and Cursor catalogs
+rc=

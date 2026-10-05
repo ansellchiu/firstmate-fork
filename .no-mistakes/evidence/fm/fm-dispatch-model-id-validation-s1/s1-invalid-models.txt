@@ -1,0 +1,6 @@
+## config:
+{"default":[{"harness":"cursor","model":"cursor-grok-4.5-xmedium"},{"harness":"cursor","model":"cursor-grok-4.5-high"},{"harness":"agy","model":"gemini-3.8-flash","effort":"medium"},{"harness":"agy","model":"gemini-3.8-flash-high"},{"harness":"agy","model":"gemini-9-ultra","effort":"high"}]}
+## bootstrap:
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+CREW_DISPATCH: invalid config/crew-dispatch.json - unknown model: profile 0 cursor/cursor-grok-4.5-xmedium (valid: cursor-grok-4.5-low-fast, cursor-grok-4.5-medium, cursor-grok-4.5-high-fast, cursor-grok-4.5-high, cursor-grok-4.5-low), profile 4 agy/gemini-9-ultra (valid: gemini-3.1-pro-low, gemini-3.1-pro-high, gemini-3.6-flash-low, gemini-3.7-flash-low, gemini-3.8-flash-low)
+exit=0
