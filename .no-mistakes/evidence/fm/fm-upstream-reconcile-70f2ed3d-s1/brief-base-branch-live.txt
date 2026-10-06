@@ -1,0 +1,23 @@
+$ fm-brief.sh demo-1 demo --mode no-mistakes --base-branch release/1.x
+scaffolded: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.YwnHz3/data/demo-1/brief.md (ship, mode=no-mistakes; replace {TASK} and {FIRSTMATE_SPEC})
+rc=0
+demo-1
+(eval):2: no matches found: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.YwnHz3/*/demo-1*brief*
+brief=
+ugrep: warning: : No such file or directory
+
+$ fm-brief.sh demo-2 demo --mode local-only --base-branch release/1.x
+error: fm-brief.sh --base-branch: a base branch cannot ship mode=local-only, whose landing fast-forwards local main; ship no-mistakes or direct-PR, which open a pull request against the base
+rc=1
+
+$ fm-brief.sh demo-3 demo --mode no-mistakes --base-branch ""
+error: --base-branch takes a branch name and applies only to ship and scout briefs
+rc=1
+--- brief.md lines naming the base branch:
+19:Base branch: release/1.x
+29:1. Never push to the base branch `release/1.x` or the default branch. Never merge a PR.
+117:This task's base branch is `release/1.x`, not the repository default: pass `--base-branch release/1.x` on every `no-mistakes axi run` that starts a run, so the pipeline rebases onto, opens its PR against, and watches CI for that branch.
+
+$ fm-pipeline-spend.sh record demo-1   (config/pipeline-spend absent)
+rc=0
+ls: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.YwnHz3/data/pipeline-spend.jsonl: No such file or directory

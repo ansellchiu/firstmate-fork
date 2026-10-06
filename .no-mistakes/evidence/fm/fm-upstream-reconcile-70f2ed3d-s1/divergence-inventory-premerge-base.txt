@@ -1,0 +1,84 @@
+inventory: attention
+inventory-entries: 51
+inventory-entry: extension-contract ok
+inventory-entry: automic-vault-injection ok
+inventory-entry: token-spend-view ok
+inventory-entry: agy-harness-preflight ok
+inventory-entry: rate-limit-classification ok
+inventory-entry: unmetered-quota-report ok
+inventory-entry: pi-branch-rotation ok
+inventory-entry: wake-batch-coalescing ok
+inventory-entry: spawn-launch-postcondition ok
+inventory-entry: upstream-reconciliation ok
+inventory-entry: stale-repeat-suppression ok
+inventory-entry: auto-standdown ok
+inventory-entry: daemon-lock-liveness ok
+inventory-entry: claims-audit ok
+inventory-entry: batched-captain-answers ok
+inventory-entry: scout-research-standards ok
+inventory-entry: delivery-posture-gate ok
+inventory-entry: pi-primary-growth ok
+inventory-entry: portfolio-attention-limit ok
+inventory-entry: herdr-native-submit-proof ok
+inventory-entry: pr-forge-state-classification ok
+inventory-entry: teardown-dedupe-marker-sync ok
+inventory-entry: config-inherit-single-owner ok
+inventory-entry: changed-selection-deletions ok
+inventory-entry: away-escalation-delivery ok
+inventory-entry: catch-all-marker-crosscheck ok
+inventory-entry: rearm-resurface-empty-queue ok
+inventory-entry: herdr-native-idle-unknown ok
+inventory-entry: session-lock-harness-case ok
+inventory-entry: autoarm-actionable-rewake ok
+inventory-entry: mail-plane-input-hardening ok
+inventory-entry: launch-agent-xml-escaping ok
+inventory-entry: macos-platform-binary-holder ok
+inventory-entry: herdr-relaunch-identity-release ok
+inventory-entry: merge-plane-completion-receipts ok
+inventory-entry: branch-outcome-repeat-suppression ok
+inventory-entry: unreadable-posture-refusal ok
+inventory-entry: calm-composer-shapes ok
+inventory-entry: secondmate-same-origin-worktree ok
+inventory-entry: bearings-board-private ok
+inventory-entry: pi-idle-observer ok
+inventory-entry: contributions-read-concurrency ok
+inventory-entry: fleet-health-procevent ok
+inventory-entry: private-ci-repo-references ok
+inventory-entry: lint-root-memory-cap ok
+inventory-entry: portable-serial-ten-shards ok
+inventory-entry: supervision-host-suite-split ok
+inventory-entry: pi-deferred-close-test-removal ok
+inventory-entry: orphan-watch-arm-reap ok
+inventory-entry: home-layout-private-rows ok
+inventory-entry: residual-private-drift needs-review
+inventory-drift: compared fede6197556c188dd2f451809d17851760d1ef46..HEAD vs fede6197556c188dd2f451809d17851760d1ef46..70f2ed3d
+inventory-contended: .agents/skills/afk/SKILL.md
+inventory-contended: .agents/skills/bearings/SKILL.md
+inventory-contended: .agents/skills/operational-home-layout/SKILL.md
+inventory-contended: .agents/skills/scout-completion/SKILL.md
+inventory-contended: AGENTS.md
+inventory-contended: bin/fm-brief.sh
+inventory-contended: bin/fm-classify-lib.sh
+inventory-contended: bin/fm-contributions.sh
+inventory-contended: bin/fm-nm-run-lib.sh
+inventory-contended: bin/fm-promote.sh
+inventory-contended: bin/fm-send.sh
+inventory-contended: bin/fm-spawn.sh
+inventory-contended: bin/fm-supervise-daemon.sh
+inventory-contended: bin/fm-teardown.sh
+inventory-contended: bin/fm-test-run.sh
+inventory-contended: bin/fm-watch.sh
+inventory-contended: docs/architecture.md
+inventory-contended: docs/configuration.md
+inventory-contended: docs/scripts.md
+inventory-contended: docs/verification/runtime-backends.md
+inventory-contended: tests/fm-brief.test.sh
+inventory-contended: tests/fm-contributions.test.sh
+inventory-contended: tests/fm-daemon.test.sh
+inventory-contended: tests/fm-spawn-dispatch-profile.test.sh
+inventory-contended: tests/fm-spawn-pool-base-freshen.test.sh
+inventory-contended: tests/fm-task-delivery.test.sh
+inventory-contended: tests/fm-teardown.test.sh
+inventory-contended: tests/fm-test-fixture-cleanup.test.sh
+inventory-contended: tests/lib.sh
+inventory-uncovered-count: 0
