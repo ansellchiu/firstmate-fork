@@ -5175,6 +5175,40 @@ SH
   pass "teardown returns held lease naming torn-down task and leaves live task lease alone"
 }
 
+test_forced_secondmate_returns_descendant_held_leases() {
+  local case_dir held_slot used_slot rc status_json
+  case_dir=$(make_case descendant-held-leases)
+  write_meta "$case_dir" local-only secondmate
+  configure_secondmate_with_tmux_children "$case_dir"
+  held_slot="$case_dir/pool/1/repo"
+  used_slot="$case_dir/pool/2/repo"
+  mkdir -p "$case_dir/pool/1" "$case_dir/pool/2"
+  git init -q "$held_slot"
+  git init -q "$used_slot"
+  printf 'task=missing-task\nhome=%s\n' "$case_dir" > "$case_dir/pool/1/.fm-slot-owner"
+  mkdir -p "$case_dir/other-home/state"
+  fm_write_meta "$case_dir/other-home/state/live-user.meta" "worktree=$used_slot" "kind=ship"
+  printf 'task=live-user\nhome=%s\n' "$case_dir/other-home" > "$case_dir/pool/2/.fm-slot-owner"
+  status_json=$(printf '[{"path":"%s","lease_holder":"fm-held:child-a"},{"path":"%s","lease_holder":"fm-held:child-b"}]' "$held_slot" "$used_slot")
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+if [ "\$*" = "status --json" ]; then
+  printf '%s\n' '$status_json'
+else
+  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+fi
+SH
+  : > "$case_dir/treehouse.log"
+  rc=0
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 0 "$rc" "descendant-held-leases: forced secondmate teardown should finish"
+  assert_grep "return --force $held_slot" "$case_dir/treehouse.log" \
+    "descendant-held-leases: the held lease naming a torn-down descendant was not returned"
+  assert_no_grep "$used_slot" "$case_dir/treehouse.log" \
+    "descendant-held-leases: a held slot another live task uses was returned"
+  pass "forced secondmate teardown returns descendant held leases and spares live slots"
+}
+
 
 test_teardown_held_lease_guard_failures() {
   local scenario case_dir slot owner_home owner_id field rc branch
@@ -5366,3 +5400,4 @@ test_run_abort_precedes_process_reap_precedes_worktree_removal
 test_teardown_returns_held_lease_and_preserves_live_task_lease
 
 test_teardown_held_lease_guard_failures
+test_forced_secondmate_returns_descendant_held_leases

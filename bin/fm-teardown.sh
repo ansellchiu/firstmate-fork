@@ -2530,8 +2530,8 @@ slot_holds_unlanded_work() {  # <slot-path>
 
 RETURNED_TREEHOUSE_SLOTS=()
 
-teardown_return_held_leases() {  # <task-id>
-  local task_id=$1
+teardown_return_held_leases() {  # <task-id> <state-dir> <project> <projects-dir>
+  local task_id=$1 state=$2 proj=$3 projects=$4
   command -v treehouse >/dev/null 2>&1 || return 0
   if ! command -v jq >/dev/null 2>&1; then
     echo "warning: cannot scan for held treehouse leases: jq is not installed" >&2
@@ -2542,11 +2542,11 @@ teardown_return_held_leases() {  # <task-id>
   local -a projects_to_check=()
   local proj_dir p abs_p
 
-  if [ -n "${PROJ:-}" ] && [ -d "$PROJ" ]; then
-    projects_to_check+=("$PROJ")
+  if [ -n "$proj" ] && [ -d "$proj" ]; then
+    projects_to_check+=("$proj")
   fi
 
-  for p in "${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"/*; do
+  for p in "$projects"/*; do
     [ -d "$p" ] || continue
     projects_to_check+=("$p")
   done
@@ -2584,7 +2584,7 @@ teardown_return_held_leases() {  # <task-id>
       done
       [ "$already_returned" = 0 ] || continue
 
-      if ! claimants=$(fm_treehouse_slot_record_claimants "$STATE" "$can_slot" "$task_id"); then
+      if ! claimants=$(fm_treehouse_slot_record_claimants "$state" "$can_slot" "$task_id"); then
         echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
         continue
       fi
@@ -2607,7 +2607,7 @@ teardown_return_held_leases() {  # <task-id>
 
       teardown_treehouse_return "$slot" "$proj_dir" "held lease" || {
         echo "error: treehouse return failed for held lease $slot; teardown aborted" >&2
-        exit 1
+        return 1
       }
       RETURNED_TREEHOUSE_SLOTS+=("$can_slot")
       fm_treehouse_slot_owner_release "$slot" "$task_id"
@@ -3446,6 +3446,9 @@ cleanup_firstmate_home_children() {
         fi
       fi
     fi
+    if [ "$child_kind" != secondmate ]; then
+      teardown_return_held_leases "$child_id" "$sub_state" "$child_proj" "${FM_PROJECTS_OVERRIDE:-$home/projects}" || return 1
+    fi
     remove_grok_turnend_auth "$sub_state" "$child_id" || return 1
     remove_kimi_turnend_auth "$sub_state" "$child_id" || return 1
     remove_pr_poll_artifacts "$sub_state" "$child_id" || return 1
@@ -3882,7 +3885,7 @@ elif [ -d "$WT" ] && [ "$KIND" != secondmate ]; then
 fi
 
 if [ "$KIND" != secondmate ]; then
-  teardown_return_held_leases "$ID"
+  teardown_return_held_leases "$ID" "$STATE" "${PROJ:-}" "${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}" || exit 1
 fi
 
 HERDR_PRESENTATION_JOURNAL="$STATE/$ID.herdr-presentation"
