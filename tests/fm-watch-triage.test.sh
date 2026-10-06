@@ -2855,6 +2855,62 @@ test_unchanged_stale_repeat_absorbed_but_changed_reason_surfaces() {
   pass "an unchanged stale notification already handled is absorbed, while a materially changed reason still surfaces"
 }
 
+# Regression for unchanged terminal stale repeat: under set -u, mark_surfaced
+# requires the captured endpoint and identity arguments. An unchanged repeat of
+# an already-handled terminal stale wake must absorb without aborting the cycle
+# on an unbound variable error.
+test_unchanged_terminal_stale_repeat_absorbed_without_unbound_variable() {
+  local dir state fakebin out err capture_file statusf window key sig pid wakes
+  dir=$(make_case terminal-stale-repeat); state="$dir/state"; fakebin="$dir/fakebin"
+  out="$dir/watch.out"; err="$dir/watch.err"; capture_file="$dir/pane.txt"; statusf="$state/term.status"
+  window="test:fm-term"
+  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/term.meta"
+  printf 'done: completed and ready\n' > "$statusf"
+  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-term_status"
+  key=$(printf '%s' "$window" | tr ':/.' '___')
+  export FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell'
+
+  # Round 1: first sight surfaces stale
+  printf 'done pane (tick 1)\n' > "$capture_file"
+  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2> "$err" &
+  pid=$!
+  if wait_live "$pid" 20; then reap "$pid"; else wait "$pid" || true; fi
+  ack_stopped_cycle "$state" || fail "could not acknowledge initial terminal stale surface"
+  grep -cFx "stale: $window" "$out" >/dev/null || fail "initial terminal stale was not surfaced: $(cat "$out")"
+
+  # Round 2: tick 2 (new hash), unchanged terminal status, repeat suppressed
+  printf 'done pane (tick 2)\n' > "$capture_file"
+  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  : > "$out"
+  : > "$err"
+
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
+    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
+    FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2> "$err" &
+  pid=$!
+  if wait_live "$pid" 20; then
+    reap "$pid"
+  else
+    wait "$pid" || true
+    fail "watcher exited on an unchanged terminal stale repeat instead of absorbing: $(cat "$err") $(cat "$out")"
+  fi
+  grep -F "unbound variable" "$err" && fail "watcher cycle failed with unbound variable: $(cat "$err")"
+  [ ! -s "$out" ] || fail "unchanged terminal stale repeat emitted a wake during absorb: $(cat "$out")"
+  grep -F "absorbed unchanged terminal stale repeat" "$state/.watch-triage.log" >/dev/null \
+    || fail "triage log did not record absorbed unchanged terminal stale repeat"
+
+  unset FM_FAKE_CREW_STATE
+  pass "unchanged terminal stale repeat is absorbed and does not exit on an unbound variable"
+}
+
 # A dead worker reaches handle_paused_stale rather than the live fallback above.
 # When one declared wait directly replaces another, the existing
 # throttle belongs to the old declaration and must not suppress the new wait's
@@ -7512,6 +7568,7 @@ test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
 test_declared_pause_churny_pane_stays_bounded_across_hashes
 test_unchanged_stale_repeat_absorbed_but_changed_reason_surfaces
+test_unchanged_terminal_stale_repeat_absorbed_without_unbound_variable
 test_own_work_wait_keeps_first_alert_then_long_cadence
 test_absorbed_replacement_wait_does_not_inherit_the_old_throttle
 test_live_declared_wait_churn_honors_the_resurface_throttle

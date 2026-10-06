@@ -3556,7 +3556,13 @@ EOF
               # due re-surface from a repeat.
               printf '%s' "$h" > "$sf"
               rm -f "$ssf"
-              mark_surfaced "$STATE/$(window_to_task "$w" "$STATE").status"
+              stale_status="$STATE/$(window_to_task "$w" "$STATE").status"
+              stale_record=$(status_span_first_actionable_record "$stale_status" 0)
+              case $? in
+                0|1) stale_end=${stale_record%%$'\t'*}; stale_rest=${stale_record#*$'\t'}; stale_ident=${stale_rest%%$'\t'*} ;;
+                *) stale_end=''; stale_ident='' ;;
+              esac
+              mark_surfaced "$stale_status" "$stale_end" "$stale_ident"
               triage_log "absorbed unchanged terminal stale repeat (already handled and acknowledged): $w"
               wake_batch_absorbed stale "$w" "unchanged terminal stale repeat, already handled"
             else
