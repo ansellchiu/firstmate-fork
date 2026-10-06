@@ -2498,30 +2498,6 @@ teardown_owns_worktree() {
   [ "$TEARDOWN_SLOT_REASSIGNED" != 1 ]
 }
 
-slot_used_by_another_live_task() {  # <slot-path> <task-id>
-  local slot=$1 task_id=$2
-  local canonical_slot state_dir other other_id field other_path other_slot
-  canonical_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
-  collect_local_firstmate_states "$STATE" || return 1
-  for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
-    state_dir=$(CDPATH='' cd -- "$state_dir" 2>/dev/null && pwd -P) || continue
-    for other in "$state_dir"/*.meta; do
-      [ -f "$other" ] && [ ! -L "$other" ] || continue
-      other_id=$(basename "$other" .meta)
-      [ "$other_id" != "$task_id" ] || continue
-      for field in worktree home; do
-        other_path=$(fm_meta_get "$other" "$field")
-        [ -n "$other_path" ] || continue
-        other_slot=$(canonical_existing_dir "$other_path" 2>/dev/null || echo "$other_path")
-        if [ "$other_slot" = "$canonical_slot" ]; then
-          return 0
-        fi
-      done
-    done
-  done
-  return 1
-}
-
 slot_holds_unlanded_work() {  # <slot-path>
   local slot=$1
   [ -d "$slot" ] || return 1
@@ -2586,7 +2562,7 @@ teardown_return_held_leases() {  # <task-id>
     unique_projects+=("$p")
   done
 
-  local status slot_paths slot can_slot branch ret already_returned
+  local status slot_paths slot can_slot branch ret already_returned claimants
   for proj_dir in "${unique_projects[@]}"; do
     status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ) || continue
     [ -n "$status" ] || continue
@@ -2608,9 +2584,11 @@ teardown_return_held_leases() {  # <task-id>
       done
       [ "$already_returned" = 0 ] || continue
 
-      if slot_used_by_another_live_task "$can_slot" "$task_id"; then
+      if ! claimants=$(fm_treehouse_slot_record_claimants "$STATE" "$can_slot" "$task_id"); then
+        echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
         continue
       fi
+      [ -z "$claimants" ] || continue
 
       if slot_holds_unlanded_work "$can_slot"; then
         continue

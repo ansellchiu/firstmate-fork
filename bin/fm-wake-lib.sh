@@ -1759,7 +1759,7 @@ collect_local_firstmate_states() {
 # home's own record, since homes may reuse a task id. Prints one meta path per
 # line; fails when the local homes cannot be enumerated.
 fm_treehouse_slot_record_claimants() {  # <state-dir> <worktree> <task-id>
-  local state=$1 worktree=$2 id=$3 slot own meta wt state_dir
+  local state=$1 worktree=$2 id=$3 slot own meta wt state_dir field
   slot=$(CDPATH='' cd -- "$worktree" 2>/dev/null && pwd -P) || return 0
   own="$(CDPATH='' cd -- "$state" 2>/dev/null && pwd -P)/$id.meta"
   collect_local_firstmate_states "$state" || return 1
@@ -1769,10 +1769,12 @@ fm_treehouse_slot_record_claimants() {  # <state-dir> <worktree> <task-id>
     state_dir=$(CDPATH='' cd -- "$state_dir" 2>/dev/null && pwd -P) || continue
     for meta in "$state_dir"/*.meta; do
       [ -f "$meta" ] && [ "$meta" != "$own" ] || continue
-      wt=$(fm_meta_get "$meta" worktree)
-      [ -n "$wt" ] || continue
-      wt=$(CDPATH='' cd -- "$wt" 2>/dev/null && pwd -P) || continue
-      [ "$wt" = "$slot" ] && printf '%s\n' "$meta"
+      for field in worktree home; do
+        wt=$(fm_meta_get "$meta" "$field")
+        [ -n "$wt" ] || continue
+        wt=$(CDPATH='' cd -- "$wt" 2>/dev/null && pwd -P) || continue
+        [ "$wt" = "$slot" ] && printf '%s\n' "$meta"
+      done
     done
   done | sort -u
 }
