@@ -382,9 +382,10 @@ fm_test_path_under() { # <path> <root>
   esac
 }
 
-# Temp-directory prefixes the pruned-arm sweep treats as fixture space. Both
-# the raw TMPDIR and its physical path are included so a symlink alias cannot
-# hide a fixture arm or reach outside the temp directory.
+# Temp-directory prefixes the pruned-arm sweep treats as fixture space: the
+# fm_test_tmpdir root plus its aliases (its physical path, and the raw TMPDIR
+# only when it resolves to that same root) so a symlink alias cannot hide a
+# fixture arm or reach outside the temp directory.
 fm_test_temp_prefixes() {
   local raw physical effective
   printf '%s\n' "$FM_TEST_TMPDIR"
