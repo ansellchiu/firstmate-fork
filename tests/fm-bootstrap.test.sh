@@ -1366,3 +1366,36 @@ SH
 
 test_vault_diagnostic
 
+test_dispatch_model_catalog_validation() {
+  local case_dir fakebin out
+  case_dir="$TMP_ROOT/dispatch-model-catalog"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  printf '%s\n' '{"default":[{"harness":"cursor","model":"cursor-grok-4.5-medium"},{"harness":"agy","model":"gemini-3.8-flash","effort":"medium"},{"harness":"agy","model":"gemini-3.8-flash","effort":"high"}]}' > "$case_dir/home/config/crew-dispatch.json"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  add_real_jq "$fakebin"
+  cat > "$fakebin/cursor-agent" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'Available models' 'auto - Auto' 'gpt-5.3-codex - Codex' 'cursor-grok-4.5-high-fast - Grok' 'claude-sonnet - Sonnet' 'gpt-5.3-codex-low - Codex' 'gpt-5.3-codex-fast - Codex' 'cursor-grok-4.5-high - Grok'
+SH
+  cat > "$fakebin/agy" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' 'auto Auto' 'claude-sonnet Sonnet' 'gemini-3.8-flash-medium Gemini' 'gpt-5.3-codex Codex' 'gpt-5.3-codex-low Codex' 'gpt-5.3-codex-fast Codex'
+SH
+  chmod +x "$fakebin/cursor-agent" "$fakebin/agy"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    TYPESAFE_API_KEY=test-key FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  assert_contains "$out" 'CREW_DISPATCH: invalid config/crew-dispatch.json - unknown model:' \
+    'catalog validation reports unknown configured models'
+  assert_contains "$out" 'cursor/cursor-grok-4.5-medium' \
+    'catalog validation names the cursor entry and bad model'
+  assert_contains "$out" 'cursor/cursor-grok-4.5-medium (valid: cursor-grok-4.5-high, cursor-grok-4.5-high-fast,' \
+    'cursor suggestions rank the nearest ids ahead of unordered unrelated models'
+  assert_contains "$out" 'agy/gemini-3.8-flash' \
+    'agy base model plus effort is checked against its suffixed catalog id'
+  assert_contains "$out" 'agy/gemini-3.8-flash (valid: gemini-3.8-flash-medium,' \
+    'agy suggestions rank the nearest id ahead of unordered unrelated models'
+  pass 'bootstrap validates configured models against live agy and Cursor catalogs'
+}
+
+test_dispatch_model_catalog_validation

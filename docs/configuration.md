@@ -1206,7 +1206,7 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 
 - When the file exists, bootstrap validates it with `jq`.
 - Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
-- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
+- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, a model id absent from the harness's live catalog (`agy models` or `cursor-agent --list-models`, checked only when that listing is available; an agy base id plus `effort` counts when the suffixed id is listed), or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
 - While typed resolution is active, malformed `approval`, `min_confidence`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 - Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 - While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.
