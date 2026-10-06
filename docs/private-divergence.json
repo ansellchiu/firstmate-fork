@@ -28,7 +28,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "automic-vault-injection",
@@ -54,7 +54,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "token-spend-view",
@@ -104,7 +104,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "rate-limit-classification",
@@ -126,7 +126,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "unmetered-quota-report",
@@ -147,7 +147,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "pi-branch-rotation",
@@ -169,7 +169,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "wake-batch-coalescing",
@@ -191,7 +191,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "spawn-launch-postcondition",
@@ -211,7 +211,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "upstream-reconciliation",
@@ -240,7 +240,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "stale-repeat-suppression",
@@ -264,7 +264,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "auto-standdown",
@@ -285,7 +285,8 @@
         "tests/fm-backend-autodetect-smoke.test.sh",
         "tests/fm-backend-orca.test.sh",
         "tests/fm-backend-herdr-launcher-workspace-e2e.test.sh",
-        "tests/fm-backend-herdr-workspace-per-home-e2e.test.sh"
+        "tests/fm-backend-herdr-workspace-per-home-e2e.test.sh",
+        "tests/fm-spawn-pool-base-freshen.test.sh"
       ],
       "intent": "A worker that never started stops escalating forever: the watcher stands the task down once, preserves its brief, and raises one loud check wake instead of an endless stale ladder.",
       "provenance": {
@@ -295,7 +296,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "daemon-lock-liveness",
@@ -316,7 +317,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "claims-audit",
@@ -364,7 +365,8 @@
       "paths": [
         "bin/fm-brief.sh",
         "tests/fm-brief.test.sh",
-        "AGENTS.md"
+        "AGENTS.md",
+        ".agents/skills/scout-completion/SKILL.md"
       ],
       "intent": "Every scout brief carries a standing, task-agnostic retrieval contract: live web-search with cited queries, an authoritative existence-surface check for every negative claim, and an explicit could-not-check statement when a surface is unreachable.",
       "provenance": {
@@ -374,7 +376,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "delivery-posture-gate",
@@ -394,7 +396,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "pi-primary-growth",
@@ -431,7 +433,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "portfolio-attention-limit",
@@ -461,7 +463,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "herdr-native-submit-proof",
@@ -480,7 +482,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "pr-forge-state-classification",
@@ -519,7 +521,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "config-inherit-single-owner",
@@ -538,7 +540,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "changed-selection-deletions",
@@ -555,7 +557,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "away-escalation-delivery",
@@ -577,7 +579,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "catch-all-marker-crosscheck",
@@ -597,7 +599,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "rearm-resurface-empty-queue",
@@ -840,7 +842,8 @@
       "paths": [
         "bin/fm-claude-trust.sh",
         "tests/fm-claude-trust.test.sh",
-        "docs/verification/runtime-backends.md"
+        "docs/verification/runtime-backends.md",
+        "tests/fm-spawn-pool-base-freshen.test.sh"
       ],
       "intent": "A secondmate home may launch Claude workers in a worktree of a same-origin clone it was handed, with trust pre-registered for that worktree, instead of refusing the launch scope.",
       "provenance": {
@@ -850,7 +853,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "bearings-board-private",
@@ -862,19 +865,21 @@
         "tests/fm-fleet-snapshot-view.test.sh",
         ".github/workflows/ci.yml",
         "bin/fm-procevent-lavish.sh",
-        "docs/verification/process-event-sources.md"
+        "docs/verification/process-event-sources.md",
+        ".agents/skills/bearings/SKILL.md"
       ],
-      "intent": "The bearings board shows a collapsed context disclosure on decision cards, parses snapshot dates structurally (non-ISO dates read as unknown), and a board note that selects no authored option never closes a captain call.",
+      "intent": "The bearings board shows a collapsed context disclosure on decision cards, parses snapshot dates structurally (non-ISO dates read as unknown), and a board note that selects no authored option never closes a captain call. Bearings reads clocks and report dates from the snapshot's local fields, so a UTC value is never shown as the captain's local time.",
       "provenance": {
         "commits": [
           "654d3f8",
           "712c954",
-          "81bad20"
+          "81bad20",
+          "e741b29"
         ]
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "pi-idle-observer",
@@ -890,7 +895,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "contributions-read-concurrency",
@@ -907,7 +912,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "fleet-health-procevent",
@@ -975,7 +980,8 @@
         ]
       },
       "upstreamEquivalent": "unknown",
-      "disposition": "retain"
+      "disposition": "retain",
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "supervision-host-suite-split",
@@ -996,7 +1002,8 @@
         ]
       },
       "upstreamEquivalent": "unknown",
-      "disposition": "retain"
+      "disposition": "retain",
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "pi-deferred-close-test-removal",
@@ -1016,6 +1023,42 @@
       "disposition": "retain"
     },
     {
+      "id": "orphan-watch-arm-reap",
+      "area": "Process hygiene",
+      "paths": [
+        "bin/fm-remote-job-reap-orphans.sh",
+        "tests/fm-remote-job-orphan-reap.test.sh",
+        "tests/fm-test-fixture-cleanup.test.sh"
+      ],
+      "intent": "Teardown and test startup also stop this home's watcher arms whose code root was pruned, and fixture cleanup stops only the watch arm its own fixture armed, so a TERM-ignoring arm never outlives its worktree.",
+      "provenance": {
+        "commits": [
+          "604208a"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+    },
+    {
+      "id": "home-layout-private-rows",
+      "area": "Operational home layout",
+      "paths": [
+        ".agents/skills/operational-home-layout/SKILL.md"
+      ],
+      "intent": "The home-layout catalog carries one row for each private config, data, or state path (point-of-use secret injection and its backend, lane burn watch, attention limit, Pi idle observer, plan payback ledger, completion receipts, branch rotation and repeat suppression, findings), so every private path stays locatable from the one layout owner.",
+      "provenance": {
+        "commits": [
+          "816508c",
+          "87049f1",
+          "f8671f5"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+    },
+    {
       "id": "residual-private-drift",
       "area": "Residual",
       "paths": [
@@ -1031,7 +1074,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "needs-review",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     }
   ]
 }
