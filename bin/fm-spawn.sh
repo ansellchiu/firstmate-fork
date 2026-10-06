@@ -1471,23 +1471,13 @@ trap spawn_abort_cleanup EXIT
 # One bounded lock per live Herdr session/socket, shared across all homes.
 # <session> is required so secondmate and primary spawns serialize against the
 # same session without writing any other home's state directory.
-spawn_herdr_presentation_order_lock_acquire() {
-  local session=${1:-} attempt lock_path
+spawn_herdr_presentation_order_lock_acquire() {  # [session] [max-seconds]
+  local session=${1:-} lock_path
   [ -n "$session" ] || session=$(fm_backend_herdr_session)
   lock_path=$(fm_backend_herdr_presentation_session_lock_path "$session") || return 1
   HERDR_PRESENTATION_ORDER_LOCK="$lock_path"
-  # The holder keeps this lock for its whole spawn, which can include a
-  # bounded retry for another pool slot, so a concurrent recovery waits ~30s.
-  attempt=0
-  while [ "$attempt" -lt 300 ]; do
-    if fm_lock_try_acquire "$HERDR_PRESENTATION_ORDER_LOCK"; then
-      HERDR_PRESENTATION_ORDER_LOCK_HELD=1
-      return 0
-    fi
-    sleep 0.1
-    attempt=$((attempt + 1))
-  done
-  return 1
+  fm_lock_acquire_wait_max "$HERDR_PRESENTATION_ORDER_LOCK" "${2:-30}" || return 1
+  HERDR_PRESENTATION_ORDER_LOCK_HELD=1
 }
 
 clear_relaunch_harness_wiring() {
@@ -3934,7 +3924,11 @@ else
           echo "error: herdr presentation recovery could not ensure its exact named session" >&2
           exit 1
         }
-        spawn_herdr_presentation_order_lock_acquire "$HERDR_SES" || {
+        # The holder keeps this lock for its whole spawn, including its bounded
+        # pool-slot acquisition (up to 4 tries, each up to 60s to settle and
+        # 30s to leave a held slot), so a recovery that refuses on timeout
+        # must outlast all of it.
+        spawn_herdr_presentation_order_lock_acquire "$HERDR_SES" 420 || {
           echo "error: herdr presentation recovery could not acquire its session lock; refusing a concurrent resume" >&2
           exit 1
         }
