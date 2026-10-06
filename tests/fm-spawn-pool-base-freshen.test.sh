@@ -801,7 +801,7 @@ test_leaving_a_held_slot_keeps_every_process_out_of_it() {
     echo "ok - skipped: treehouse or lsof is not installed"
     return 0
   fi
-  local dir repo pool held cmd out
+  local dir repo pool held out
   dir="$TMP_ROOT/leave-slot"
   repo="$dir/r"
   mkdir -p "$dir"

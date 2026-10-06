@@ -98,18 +98,23 @@ cleanup_workers
 : > "$case_dir/pids"
 : > "$case_dir/rows"
 # macOS hides other processes' environments: ps -E prints only the command line.
-add_process hidden-primary "$case_dir/clone" cursor-agent cursor-agent
-add_process hidden-isolated "$case_dir/isolated" cursor-agent cursor-agent
-while read -r pid; do "$real_ps" -ww -o command= -p "$pid" > "$case_dir/env-$pid"; done < "$case_dir/pids"
-hidden_pid=$(head -1 "$case_dir/pids")
-set +e
-out=$(FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
-status=$?
-set -e
-expect_code 1 "$status" 'an agent in a primary with a hidden environment cannot report clean'
-assert_contains "$out" "AUDIT_ERROR $hidden_pid cannot-read-environment agent=cursor-agent cwd=$case_dir/clone" 'hidden environment in a primary is an explicit error'
-assert_not_contains "$out" "cwd=$case_dir/isolated" 'hidden environment in a disposable copy is not reported'
-pass 'audit fails closed on hidden worker environments in primaries'
+# The audit reads /proc first where it exists, so the hidden case is macOS-only.
+if [ -r /proc/self/environ ]; then
+  echo 'ok - skipped hidden-environment case: /proc exposes worker environments'
+else
+  add_process hidden-primary "$case_dir/clone" cursor-agent cursor-agent
+  add_process hidden-isolated "$case_dir/isolated" cursor-agent cursor-agent
+  while read -r pid; do "$real_ps" -ww -o command= -p "$pid" > "$case_dir/env-$pid"; done < "$case_dir/pids"
+  hidden_pid=$(head -1 "$case_dir/pids")
+  set +e
+  out=$(FM_HOME="$home" PATH="$case_dir/bin:$PATH" bash "$ROOT/bin/fm-slot-audit.sh")
+  status=$?
+  set -e
+  expect_code 1 "$status" 'an agent in a primary with a hidden environment cannot report clean'
+  assert_contains "$out" "AUDIT_ERROR $hidden_pid cannot-read-environment agent=cursor-agent cwd=$case_dir/clone" 'hidden environment in a primary is an explicit error'
+  assert_not_contains "$out" "cwd=$case_dir/isolated" 'hidden environment in a disposable copy is not reported'
+  pass 'audit fails closed on hidden worker environments in primaries'
+fi
 cleanup_workers
 : > "$case_dir/pids"
 : > "$case_dir/rows"
