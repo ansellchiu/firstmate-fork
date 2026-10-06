@@ -2539,80 +2539,58 @@ teardown_return_held_leases() {  # <task-id>
   fi
 
   local target_holder="fm-held:$task_id"
-  local -a projects_to_check=()
-  local proj_dir p abs_p
-
-  if [ -n "${PROJ:-}" ] && [ -d "$PROJ" ]; then
-    projects_to_check+=("$PROJ")
-  fi
-
-  for p in "${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"/*; do
-    [ -d "$p" ] || continue
-    projects_to_check+=("$p")
-  done
-
-  local -a unique_projects=()
-  local seen_projects=" "
-  for p in "${projects_to_check[@]}"; do
-    abs_p=$(CDPATH='' cd -- "$p" 2>/dev/null && pwd -P) || abs_p="$p"
-    case "$seen_projects" in
-      *" $abs_p "*) continue ;;
-    esac
-    seen_projects="$seen_projects$abs_p "
-    unique_projects+=("$p")
-  done
+  local proj_dir=${PROJ:-}
+  [ -n "$proj_dir" ] && [ -d "$proj_dir" ] || return 0
 
   local status slot_paths slot can_slot branch ret already_returned claimants
-  for proj_dir in "${unique_projects[@]}"; do
-    status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ) || continue
-    [ -n "$status" ] || continue
+  status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ) || return 0
+  [ -n "$status" ] || return 0
 
-    slot_paths=$(printf '%s\n' "$status" | jq -r --arg holder "$target_holder" \
-      '.[]? | select((.lease_holder // "") == $holder) | .path // empty' 2>/dev/null) || continue
-    [ -n "$slot_paths" ] || continue
+  slot_paths=$(printf '%s\n' "$status" | jq -r --arg holder "$target_holder" \
+    '.[]? | select((.lease_holder // "") == $holder) | .path // empty' 2>/dev/null) || return 0
+  [ -n "$slot_paths" ] || return 0
 
-    while IFS= read -r slot; do
-      [ -n "$slot" ] || continue
-      can_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
+  while IFS= read -r slot; do
+    [ -n "$slot" ] || continue
+    can_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
 
-      already_returned=0
-      for ret in "${RETURNED_TREEHOUSE_SLOTS[@]}"; do
-        if [ "$ret" = "$can_slot" ] || [ "$ret" = "$slot" ]; then
-          already_returned=1
-          break
+    already_returned=0
+    for ret in "${RETURNED_TREEHOUSE_SLOTS[@]}"; do
+      if [ "$ret" = "$can_slot" ] || [ "$ret" = "$slot" ]; then
+        already_returned=1
+        break
+      fi
+    done
+    [ "$already_returned" = 0 ] || continue
+
+    if ! claimants=$(fm_treehouse_slot_record_claimants "$STATE" "$can_slot" "$task_id"); then
+      echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
+      continue
+    fi
+    [ -z "$claimants" ] || continue
+
+    if slot_holds_unlanded_work "$can_slot"; then
+      continue
+    fi
+
+    if [ -d "$slot" ]; then
+      branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+      if [ "$branch" != "HEAD" ]; then
+        if git -C "$slot" checkout --detach -q 2>/dev/null; then
+          git -C "$slot" branch -D "$branch" >/dev/null 2>&1 || true
         fi
-      done
-      [ "$already_returned" = 0 ] || continue
-
-      if ! claimants=$(fm_treehouse_slot_record_claimants "$STATE" "$can_slot" "$task_id"); then
-        echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
-        continue
       fi
-      [ -z "$claimants" ] || continue
+      rm -f "$slot/.claude/settings.local.json" "$slot/.opencode/plugins/fm-turn-end.js" \
+        "$slot/.fm-grok-turnend" "$slot/.fm-kimi-turnend"
+    fi
 
-      if slot_holds_unlanded_work "$can_slot"; then
-        continue
-      fi
-
-      if [ -d "$slot" ]; then
-        branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
-        if [ "$branch" != "HEAD" ]; then
-          if git -C "$slot" checkout --detach -q 2>/dev/null; then
-            git -C "$slot" branch -D "$branch" >/dev/null 2>&1 || true
-          fi
-        fi
-        rm -f "$slot/.claude/settings.local.json" "$slot/.opencode/plugins/fm-turn-end.js" \
-          "$slot/.fm-grok-turnend" "$slot/.fm-kimi-turnend"
-      fi
-
-      teardown_treehouse_return "$slot" "$proj_dir" "held lease" || {
-        echo "error: treehouse return failed for held lease $slot; teardown aborted" >&2
-        exit 1
-      }
-      RETURNED_TREEHOUSE_SLOTS+=("$can_slot")
-      fm_treehouse_slot_owner_release "$slot" "$task_id"
-    done <<< "$slot_paths"
-  done
+    teardown_treehouse_return "$slot" "$proj_dir" "held lease" || {
+      echo "error: treehouse return failed for held lease $slot; teardown aborted" >&2
+      exit 1
+    }
+    RETURNED_TREEHOUSE_SLOTS+=("$can_slot")
+    fm_treehouse_slot_owner_release "$slot" "$task_id"
+  done <<< "$slot_paths"
 }
 
 firstmate_home_has_treehouse_slot() {

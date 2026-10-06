@@ -5176,6 +5176,33 @@ SH
 }
 
 
+test_teardown_held_lease_ignores_unrelated_project() {
+  local case_dir foreign_slot rc
+  case_dir=$(make_case held-foreign-project)
+  write_meta "$case_dir" local-only ship
+  wt_commit "$case_dir" "work landed"
+  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
+  mkdir -p "$case_dir/projects/other" "$case_dir/pool/9"
+  foreign_slot="$case_dir/pool/9/repo"
+  git init -q "$foreign_slot"
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+if [ "\$*" = "status --json" ]; then
+  [ "\$(pwd -P)" = "\$(cd "$case_dir/projects/other" && pwd -P)" ] || { echo '[]'; exit 0; }
+  printf '[{"path":"%s","lease_holder":"fm-held:task-x1"}]\n' '$foreign_slot'
+else
+  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+fi
+SH
+  : > "$case_dir/treehouse.log"
+  rc=0
+  FM_HOME="$case_dir" run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 0 "$rc" "held-foreign-project: teardown should succeed"
+  assert_no_grep "$foreign_slot" "$case_dir/treehouse.log" \
+    "held-foreign-project: held lease in an unrelated project was returned"
+  pass "held lease cleanup leaves unrelated projects alone"
+}
+
 test_teardown_held_lease_guard_failures() {
   local scenario case_dir slot owner_home owner_id field rc branch
   for scenario in claim-home same-id home-field registry-same-id malformed unsafe unavailable; do
@@ -5365,4 +5392,5 @@ test_process_exit_during_identity_lookup_does_not_refuse
 test_run_abort_precedes_process_reap_precedes_worktree_removal
 test_teardown_returns_held_lease_and_preserves_live_task_lease
 
+test_teardown_held_lease_ignores_unrelated_project
 test_teardown_held_lease_guard_failures
