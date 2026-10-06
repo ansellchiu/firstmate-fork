@@ -162,6 +162,7 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-findings.sh`        | Record, list, and triage a ship worker's incidental out-of-scope findings            |
 | `fm-findings-lib.sh`     | Own the per-task incidental-findings file, its entry format, dedup, pending scan, and triage |
 | `fm-teardown.sh`         | Fail-closed teardown: return landed ship worktrees, require a landed ship task's completion receipt, require completed scout deliverables, retire secondmate homes |
+| `fm-slot-audit.sh`       | Read-only audit of double-claimed work copies, workers outside isolation, and held-slot leases, with the reconciliation path |
 | `fm-harness.sh`          | Detect the running harness, resolve crew or secondmate harness, model, and effort, and validate the native-only `ultra` effort |
 | `fm-lock.sh`             | Per-home firstmate session lock                                                      |
 | `fm-x-lib.sh`            | Shared Relay config, relay, and reply-threading helpers                              |

@@ -1495,7 +1495,7 @@ fm_task_set_lock_path() {  # <state-dir>
 # the walk at the current home, which is the correct answer rather than an
 # error: the parent lives on another machine, so its filesystem can neither hold
 # nor be observed by a lock taken here, and a remote-seeded home is itself the
-# top of the local tree that bin/fm-teardown.sh's collect_local_firstmate_states
+# top of the local tree that collect_local_firstmate_states
 # enumerates (that walk already skips remote registry entries for the same
 # reason). Refusing a remote binding instead made every operation anchored here
 # fail closed inside a remote secondmate home and its local descendants.
@@ -1696,6 +1696,99 @@ fm_treehouse_slot_owner_state() {  # <worktree> <task-id>
   else
     FM_TREEHOUSE_SLOT_OWNER=other
   fi
+}
+
+# Every local Firstmate home's state directory, starting with <record-state>:
+# the root home and each locally registered secondmate home below it. Sets
+# TREEHOUSE_OWNER_STATES; fails closed on an unsafe or malformed registry.
+collect_local_firstmate_states() {
+  local record_state=$1 root home reg line child known existing i=0
+  local -a homes
+  TREEHOUSE_OWNER_STATES=("$record_state")
+  root=$(fm_firstmate_root_home "$FM_HOME") || {
+    echo "REFUSED: cannot resolve the root Firstmate home; nothing was changed" >&2
+    return 1
+  }
+  homes=("$root")
+  if ! command -v secondmate_registry_parse_line >/dev/null 2>&1; then
+    # shellcheck source=bin/fm-secondmate-registry-lib.sh
+    . "$FM_WAKE_LIB_DIR/fm-secondmate-registry-lib.sh"
+  fi
+  while [ "$i" -lt "${#homes[@]}" ]; do
+    home=${homes[$i]}
+    i=$((i + 1))
+    known=0
+    for existing in "${TREEHOUSE_OWNER_STATES[@]}"; do
+      [ "$existing" != "$home/state" ] || known=1
+    done
+    [ "$known" = 1 ] || TREEHOUSE_OWNER_STATES+=("$home/state")
+    reg="$home/data/secondmates.md"
+    [ ! -e "$reg" ] && [ ! -L "$reg" ] && continue
+    [ -f "$reg" ] && [ ! -L "$reg" ] || {
+      echo "REFUSED: local Firstmate registry is unsafe at $reg; nothing was changed" >&2
+      return 1
+    }
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "- "*)
+          secondmate_registry_parse_line "$line" || {
+            echo "REFUSED: malformed local Firstmate registry entry in $reg; nothing was changed" >&2
+            return 1
+          }
+          [ "$SECONDMATE_REGISTRY_REMOTE" -eq 0 ] || continue
+          child=$([ -n "$SECONDMATE_REGISTRY_HOME" ] && CDPATH='' cd -- "$SECONDMATE_REGISTRY_HOME" 2>/dev/null && pwd -P) || {
+            echo "REFUSED: registered local Firstmate home is unavailable: $SECONDMATE_REGISTRY_HOME; nothing was changed" >&2
+            return 1
+          }
+          known=0
+          for existing in "${homes[@]}"; do
+            [ "$existing" != "$child" ] || known=1
+          done
+          [ "$known" = 1 ] || homes+=("$child")
+          ;;
+      esac
+    done < "$reg"
+  done
+}
+
+# Name every OTHER record that still holds a pool slot.
+# A record exists until teardown deletes it, so any record - running, parked,
+# held for the captain or superseded - keeps its slot; only teardown frees one.
+# Looks at every local Firstmate home plus the home named by the slot's own
+# claim, so a slot a different home took is seen too, and skips only this
+# home's own record, since homes may reuse a task id. Prints one meta path per
+# line; fails when the local homes cannot be enumerated.
+fm_treehouse_slot_record_claimants() {  # <state-dir> <worktree> <task-id>
+  local state=$1 worktree=$2 id=$3 slot own meta wt state_dir
+  slot=$(CDPATH='' cd -- "$worktree" 2>/dev/null && pwd -P) || return 0
+  own="$(CDPATH='' cd -- "$state" 2>/dev/null && pwd -P)/$id.meta"
+  collect_local_firstmate_states "$state" || return 1
+  fm_treehouse_slot_owner_state "$worktree" "$id"
+  [ -z "$FM_TREEHOUSE_SLOT_OWNER_HOME" ] || TREEHOUSE_OWNER_STATES+=("$FM_TREEHOUSE_SLOT_OWNER_HOME/state")
+  for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
+    state_dir=$(CDPATH='' cd -- "$state_dir" 2>/dev/null && pwd -P) || continue
+    for meta in "$state_dir"/*.meta; do
+      [ -f "$meta" ] && [ "$meta" != "$own" ] || continue
+      wt=$(fm_meta_get "$meta" worktree)
+      [ -n "$wt" ] || continue
+      wt=$(CDPATH='' cd -- "$wt" 2>/dev/null && pwd -P) || continue
+      [ "$wt" = "$slot" ] && printf '%s\n' "$meta"
+    done
+  done | sort -u
+}
+
+# The pane command that fully leaves a pool slot the spawn must not take.
+# `treehouse lease` is state-only (it never resets or cleans the copy) and keeps
+# every later `get` from handing the slot out until it is returned; the exit then
+# ends the subshell, so no process of the new task keeps the slot as its working
+# directory and the supervisor does not return it. The lease holder label
+# `fm-held:<holder-id>` names the task record that holds the slot, which is what
+# bin/fm-slot-audit.sh reports and what a manual `treehouse return` clears.
+fm_treehouse_leave_slot_command() {  # <worktree> <holder-id>
+  local slot name holder=${2-}
+  slot=$(CDPATH='' cd -- "$1" 2>/dev/null && pwd -P) || return 1
+  name=$(basename "$(dirname "$slot")")
+  printf "treehouse lease '%s' --lease-holder 'fm-held:%s' && exit\n" "${name//\'/}" "${holder//\'/}"
 }
 
 # Drop a task's own claim once its slot is back in the pool. Never removes
