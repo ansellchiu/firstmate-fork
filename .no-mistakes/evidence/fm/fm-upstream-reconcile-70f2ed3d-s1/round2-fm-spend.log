@@ -1,0 +1,7 @@
+ok - fm-spend.sh: bash -n succeeds
+ok - fm-spend.sh: --help prints usage and exits 0
+ok - fm-spend.sh: missing tokscale emits clear error and exits 1
+ok - fm-spend.sh: maps task IDs, aggregates per workspace, and falls back to short path
+ok - fm-spend.sh: works from any cwd
+ok - fm-spend.sh: passes through arguments correctly
+EXIT 0

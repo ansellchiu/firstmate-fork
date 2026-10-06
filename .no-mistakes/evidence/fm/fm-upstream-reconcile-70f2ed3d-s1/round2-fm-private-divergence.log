@@ -1,0 +1,13 @@
+ok - T1 a missing inventory is a hard failure
+ok - T2 schema errors fail hard with a deterministic reason
+ok - T3 a clean inventory reports ok
+ok - T4 stale paths and unresolved provenance are reported
+ok - T5 dispositions that need a human decision are surfaced
+ok - T6 uncovered drift is computed from git, not from the file
+ok - T7 the recorded review point gates when an entry resurfaces
+ok - T8 an unconfirmed upstream-equivalence claim is challenged
+ok - T9 an unresolvable revision reports why, and the other checks still run
+ok - T10 the inventory this repo ships is schema-valid
+ok - T11 an uncomputable comparison never reports a false unconfirmed equivalence
+# all fm-private-divergence tests passed
+EXIT 0

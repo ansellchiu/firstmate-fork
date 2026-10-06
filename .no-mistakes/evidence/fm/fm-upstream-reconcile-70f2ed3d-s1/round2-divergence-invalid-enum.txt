@@ -1,0 +1,2 @@
+inventory: invalid: entry token-spend-view upstreamEquivalent must be one of ('none', 'partial', 'present', 'unknown')
+EXIT 1

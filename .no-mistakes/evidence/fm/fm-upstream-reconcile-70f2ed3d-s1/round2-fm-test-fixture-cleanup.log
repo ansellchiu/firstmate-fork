@@ -1,0 +1,13 @@
+ok - fm_test_tmproot cleans up its fixture root on normal exit
+ok - fm_test_tmproot cleans up its fixture root on SIGTERM
+ok - the cleanup registry cannot be injected through path precreation
+ok - failed fixture registration rolls back the new root
+ok - the orphan sweep reaps only old fixtures without a live owner
+ok - the orphan sweep reaps read-only package fixtures
+ok - fixture cleanup stops only the watch arm its own fixture armed
+ok - test startup reaps a pruned temp watch arm and leaves one outside the temp directory
+ok - test startup reaps a pruned temp watch arm and leaves one outside the temp directory
+tests/fm-test-fixture-cleanup.test.sh: line 380: 26938 Killed: 9                  FM_ARM_HEARTBEAT="$hb" "$stale/root/bin/fm-watch-arm.sh" --restart > /dev/null 2>&1
+ok - the first stale-fixture sweep stops watch arms through a temp alias
+ok - test registries and fixture roots stay out of a git worktree TMPDIR
+EXIT 0
