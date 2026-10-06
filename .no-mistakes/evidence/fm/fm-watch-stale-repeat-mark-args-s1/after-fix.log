@@ -1,0 +1,2 @@
+ok - unchanged terminal stale repeat is absorbed and does not exit on an unbound variable
+ok - an unchanged stale notification already handled is absorbed, while a materially changed reason still surfaces

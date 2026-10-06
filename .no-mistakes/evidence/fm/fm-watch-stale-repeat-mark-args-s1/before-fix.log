@@ -1,0 +1,1 @@
+not ok - watcher exited on an unchanged terminal stale repeat instead of absorbing: /Users/achiu/.no-mistakes/worktrees/d9c8a3404af5/01M47KRSZ4NDMSYZDTYBZ8TF02/bin/fm-push-transition-lib.sh: line 197: $2: unbound variable 
