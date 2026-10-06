@@ -386,14 +386,18 @@ fm_test_path_under() { # <path> <root>
 # the raw TMPDIR and its physical path are included so a symlink alias cannot
 # hide a fixture arm or reach outside the temp directory.
 fm_test_temp_prefixes() {
-  local raw physical
+  local raw physical effective
+  printf '%s\n' "$FM_TEST_TMPDIR"
+  effective=$(CDPATH='' cd -P -- "$FM_TEST_TMPDIR" && pwd -P) || return 1
+  if [ "$effective" != "$FM_TEST_TMPDIR" ]; then
+    printf '%s\n' "$effective"
+  fi
   raw=${TMPDIR:-/tmp}
   raw=${raw%/}
-  printf '%s\n' "$raw"
   if [ -d "$raw" ]; then
     physical=$(CDPATH='' cd -P -- "$raw" && pwd -P) || physical=
-    if [ -n "$physical" ] && [ "$physical" != "$raw" ]; then
-      printf '%s\n' "$physical"
+    if [ "$physical" = "$effective" ] && [ "$raw" != "$effective" ]; then
+      printf '%s\n' "$raw"
     fi
   fi
 }

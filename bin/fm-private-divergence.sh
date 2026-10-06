@@ -73,7 +73,7 @@ from pathlib import Path
 
 ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
-UPSTREAM_EQUIVALENT = ("none", "present", "unknown")
+UPSTREAM_EQUIVALENT = ("none", "partial", "present", "unknown")
 DISPOSITIONS = ("retain", "superseded", "needs-review")
 REQUIRED = ("id", "area", "paths", "intent", "provenance", "upstreamEquivalent", "disposition")
 

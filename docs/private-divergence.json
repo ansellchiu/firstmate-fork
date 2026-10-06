@@ -63,15 +63,15 @@
         "bin/fm-spend.sh",
         "tests/fm-spend.test.sh"
       ],
-      "intent": "Per-task token spend is readable without leaving the home, so cost stays a courtesy report rather than a blocking gate.",
+      "intent": "Per-task token spend is readable without leaving the home, so cost stays a courtesy report rather than a blocking gate. Retain both views: bin/fm-pipeline-spend.sh is a partial upstream equivalent that records pipeline-only spend from the no-mistakes database, while bin/fm-spend.sh reports harness-wide token spend via tokscale. Upstream pipeline-spend remains opt-in and disabled by default.",
       "provenance": {
         "commits": [
           "f9266d3"
         ]
       },
-      "upstreamEquivalent": "none",
+      "upstreamEquivalent": "partial",
       "disposition": "retain",
-      "upstreamReviewedAt": "b1ad702fafdd03d94e5ce47cd4ba86e589ad33d6"
+      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
       "id": "agy-harness-preflight",

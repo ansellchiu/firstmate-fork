@@ -261,13 +261,15 @@ SH
 # directory is already gone, and must leave an arm outside that directory.
 test_orphan_sweep_reaps_pruned_temp_watch_arm_only() {
   local harness outside hb_temp hb_out stop_out temp_root
-  local temp_a temp_b out_a out_b
+  local temp_a temp_b out_a out_b sweep_tmpdir temp_base
+  sweep_tmpdir=${1:-${TMPDIR:-/tmp}}
   harness=$(fm_test_tmproot fm-test-cleanup-arm-orphan-harness)
   outside=$(mktemp -d "$ROOT/.fm-arm-scope.XXXXXX")
   hb_temp="$harness/temp-hb"
   hb_out="$harness/out-hb"
   stop_out="$harness/out-stop"
-  temp_root=$(mktemp -d "${TMPDIR:-/tmp}/fm-pi-watch-extension.XXXXXX")
+  temp_base=$(TMPDIR="$sweep_tmpdir" FM_TEST_SKIP_ORPHAN_REAP=1 bash -c '. "$1"; printf "%s\n" "$FM_TEST_TMPDIR"' _ "$LIB")
+  temp_root=$(mktemp -d "$temp_base/fm-pi-watch-extension.XXXXXX")
 
   launch_bounded_arm() { # <root> <heartbeat> [stop-file]
     local root=$1 heartbeat=$2 stop=${3:-}
@@ -319,7 +321,7 @@ SH
   }
   rm -rf "$temp_root" "$outside/root"
 
-  bash -c '
+  TMPDIR="$sweep_tmpdir" FM_TEST_SKIP_ORPHAN_REAP=0 bash -c '
     # shellcheck source=tests/lib.sh
     . "$1"
   ' _ "$LIB"
@@ -437,5 +439,6 @@ test_orphan_sweep_respects_fixture_ownership
 test_orphan_sweep_reaps_read_only_package_tree
 test_cleanup_reaps_owned_watch_arm_only
 test_orphan_sweep_reaps_pruned_temp_watch_arm_only
+test_orphan_sweep_reaps_pruned_temp_watch_arm_only "$ROOT"
 test_orphan_sweep_reaps_watch_arm_through_temp_alias
 test_registries_avoid_git_worktree_root
