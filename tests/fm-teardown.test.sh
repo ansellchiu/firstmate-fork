@@ -5102,6 +5102,79 @@ test_retained_sources_still_reach_the_ordinary_refusal() {
   pass "present required sources still reach the ordinary teardown refusal"
 }
 
+test_teardown_returns_held_lease_and_preserves_live_task_lease() {
+  local case_dir held_slot other_slot used_held_slot unlanded_slot rc status_json
+  case_dir=$(make_case teardown-held-leases)
+  write_meta "$case_dir" local-only ship
+  wt_commit "$case_dir" "work landed"
+  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
+
+  mkdir -p "$case_dir/pool/1" "$case_dir/pool/2" "$case_dir/pool/3" "$case_dir/pool/4"
+  held_slot="$case_dir/pool/1/repo"
+  other_slot="$case_dir/pool/2/repo"
+  used_held_slot="$case_dir/pool/3/repo"
+  unlanded_slot="$case_dir/pool/4/repo"
+  git init -q "$held_slot"
+  git init -q "$other_slot"
+  git init -q "$used_held_slot"
+  git init -q "$unlanded_slot"
+  echo "dirty" > "$unlanded_slot/dirty.txt"
+
+  # Seed a stale slot-owner claim for the held slot naming a missing task
+  printf 'task=stale-holder\nhome=%s\n' "$case_dir" > "$case_dir/pool/1/.fm-slot-owner"
+
+  # other-slot is in use by a different live task record (other-task)
+  fm_write_meta "$case_dir/state/other-task.meta" \
+    "window=firstmate:fm-other-task" \
+    "endpoint_task_id=other-task" \
+    "worktree=$other_slot" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only"
+
+  # used_held_slot is in use by live-user despite held lease naming task-x1
+  fm_write_meta "$case_dir/state/live-user.meta" \
+    "window=firstmate:fm-live-user" \
+    "endpoint_task_id=live-user" \
+    "worktree=$used_held_slot" \
+    "project=$case_dir/project" \
+    "kind=ship" \
+    "mode=local-only"
+
+  status_json=$(printf '[{"name":"1","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"},{"name":"2","path":"%s","status":"leased","lease_holder":"fm-held:other-task"},{"name":"3","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"},{"name":"4","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"}]' "$held_slot" "$other_slot" "$used_held_slot" "$unlanded_slot")
+
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  "status --json")
+    printf '%s\n' '$status_json'
+    exit 0
+    ;;
+  *)
+    printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+    exit 0
+    ;;
+esac
+SH
+  chmod +x "$case_dir/fakebin/treehouse"
+  : > "$case_dir/treehouse.log"
+
+  rc=0
+  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 0 "$rc" "teardown should succeed and return held leases"
+
+  assert_grep "return --force $held_slot" "$case_dir/treehouse.log" \
+    "held-leases: the held lease naming the torn-down task was not returned"
+  assert_no_grep "$other_slot" "$case_dir/treehouse.log" \
+    "held-leases: the held lease naming a different live task was returned"
+  assert_no_grep "$used_held_slot" "$case_dir/treehouse.log" \
+    "held-leases: the held lease naming task-x1 that another live task uses was returned"
+  assert_no_grep "$unlanded_slot" "$case_dir/treehouse.log" \
+    "held-leases: the held lease naming task-x1 with unlanded work was returned"
+
+  pass "teardown returns held lease naming torn-down task and leaves live task lease alone"
+}
+
 test_missing_startup_source_refuses_before_cleanup
 test_unreadable_startup_source_refuses_before_cleanup
 test_missing_adapter_sibling_refuses_before_cleanup
@@ -5229,3 +5302,4 @@ test_process_spawned_during_grace_is_reaped_on_later_pass
 test_persistent_scan_refuses_after_bounded_retries
 test_process_exit_during_identity_lookup_does_not_refuse
 test_run_abort_precedes_process_reap_precedes_worktree_removal
+test_teardown_returns_held_lease_and_preserves_live_task_lease

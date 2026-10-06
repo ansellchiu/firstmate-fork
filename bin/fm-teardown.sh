@@ -2498,6 +2498,145 @@ teardown_owns_worktree() {
   [ "$TEARDOWN_SLOT_REASSIGNED" != 1 ]
 }
 
+slot_used_by_another_live_task() {  # <slot-path> <task-id>
+  local slot=$1 task_id=$2
+  local canonical_slot state_dir other other_id field other_path other_slot
+  canonical_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
+  collect_local_firstmate_states "$STATE" || return 1
+  for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
+    state_dir=$(CDPATH='' cd -- "$state_dir" 2>/dev/null && pwd -P) || continue
+    for other in "$state_dir"/*.meta; do
+      [ -f "$other" ] && [ ! -L "$other" ] || continue
+      other_id=$(basename "$other" .meta)
+      [ "$other_id" != "$task_id" ] || continue
+      for field in worktree home; do
+        other_path=$(fm_meta_get "$other" "$field")
+        [ -n "$other_path" ] || continue
+        other_slot=$(canonical_existing_dir "$other_path" 2>/dev/null || echo "$other_path")
+        if [ "$other_slot" = "$canonical_slot" ]; then
+          return 0
+        fi
+      done
+    done
+  done
+  return 1
+}
+
+slot_holds_unlanded_work() {  # <slot-path>
+  local slot=$1
+  [ -d "$slot" ] || return 1
+  [ "$FORCE" != "--force" ] || return 1
+  if ! git -C "$slot" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 1
+  fi
+  local dirty_raw dirty unpushed_raw unpushed branch default_b
+  dirty_raw=$(git -C "$slot" status --porcelain 2>/dev/null || true)
+  dirty=$(printf '%s\n' "$dirty_raw" | grep -vE '^\?\? (\.claude/|\.fm-(grok|kimi)-turnend$)' | head -1 || true)
+  if [ -n "$dirty" ]; then
+    return 0
+  fi
+  unpushed_raw=$(git -C "$slot" log --oneline HEAD --not --remotes -- 2>/dev/null || true)
+  unpushed=$(printf '%s\n' "$unpushed_raw" | head -1 || true)
+  if [ -n "$unpushed" ]; then
+    branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+    if [ "$slot" = "$WT" ]; then
+      return 1
+    fi
+    default_b=$(default_branch 2>/dev/null || echo main)
+    if git -C "$slot" merge-base --is-ancestor HEAD "$default_b" 2>/dev/null \
+       || git -C "$slot" merge-base --is-ancestor HEAD "origin/$default_b" 2>/dev/null; then
+      return 1
+    fi
+    return 0
+  fi
+  return 1
+}
+
+RETURNED_TREEHOUSE_SLOTS=()
+
+teardown_return_held_leases() {  # <task-id>
+  local task_id=$1
+  command -v treehouse >/dev/null 2>&1 || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "warning: cannot scan for held treehouse leases: jq is not installed" >&2
+    return 0
+  fi
+
+  local target_holder="fm-held:$task_id"
+  local -a projects_to_check=()
+  local proj_dir p abs_p
+
+  if [ -n "${PROJ:-}" ] && [ -d "$PROJ" ]; then
+    projects_to_check+=("$PROJ")
+  fi
+
+  for p in "${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"/*; do
+    [ -d "$p" ] || continue
+    projects_to_check+=("$p")
+  done
+
+  local -a unique_projects=()
+  local seen_projects=" "
+  for p in "${projects_to_check[@]}"; do
+    abs_p=$(CDPATH='' cd -- "$p" 2>/dev/null && pwd -P) || abs_p="$p"
+    case "$seen_projects" in
+      *" $abs_p "*) continue ;;
+    esac
+    seen_projects="$seen_projects$abs_p "
+    unique_projects+=("$p")
+  done
+
+  local status slot_paths slot can_slot branch ret already_returned
+  for proj_dir in "${unique_projects[@]}"; do
+    status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ) || continue
+    [ -n "$status" ] || continue
+
+    slot_paths=$(printf '%s\n' "$status" | jq -r --arg holder "$target_holder" \
+      '.[]? | select((.lease_holder // "") == $holder) | .path // empty' 2>/dev/null) || continue
+    [ -n "$slot_paths" ] || continue
+
+    while IFS= read -r slot; do
+      [ -n "$slot" ] || continue
+      can_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
+
+      already_returned=0
+      for ret in "${RETURNED_TREEHOUSE_SLOTS[@]}"; do
+        if [ "$ret" = "$can_slot" ] || [ "$ret" = "$slot" ]; then
+          already_returned=1
+          break
+        fi
+      done
+      [ "$already_returned" = 0 ] || continue
+
+      if slot_used_by_another_live_task "$can_slot" "$task_id"; then
+        continue
+      fi
+
+      if slot_holds_unlanded_work "$can_slot"; then
+        continue
+      fi
+
+      if [ -d "$slot" ]; then
+        branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+        if [ "$branch" != "HEAD" ]; then
+          if git -C "$slot" checkout --detach -q 2>/dev/null; then
+            git -C "$slot" branch -D "$branch" >/dev/null 2>&1 || true
+          fi
+        fi
+        rm -f "$slot/.claude/settings.local.json" "$slot/.opencode/plugins/fm-turn-end.js" \
+          "$slot/.fm-grok-turnend" "$slot/.fm-kimi-turnend"
+      fi
+
+      teardown_treehouse_return "$slot" "$proj_dir" "held lease" || {
+        echo "error: treehouse return failed for held lease $slot; teardown aborted" >&2
+        exit 1
+      }
+      RETURNED_TREEHOUSE_SLOTS+=("$can_slot")
+      fm_treehouse_slot_owner_release "$slot" "$task_id"
+    done <<< "$slot_paths"
+  done
+}
+
 firstmate_home_has_treehouse_slot() {
   local home=$1
   worktree_registered_for_project "$FM_ROOT" "$home"
@@ -3761,6 +3900,11 @@ elif [ -d "$WT" ] && [ "$KIND" != secondmate ]; then
   # unclaimed until its next holder claims it, and leaves the claim in place
   # whenever the return did not actually happen.
   fm_treehouse_slot_owner_release "$WT" "$ID"
+  RETURNED_TREEHOUSE_SLOTS+=("$(canonical_existing_dir "$WT" 2>/dev/null || echo "$WT")")
+fi
+
+if [ "$KIND" != secondmate ]; then
+  teardown_return_held_leases "$ID"
 fi
 
 HERDR_PRESENTATION_JOURNAL="$STATE/$ID.herdr-presentation"
