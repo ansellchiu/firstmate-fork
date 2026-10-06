@@ -5236,12 +5236,6 @@ SH
   done
 }
 
-if [ "${1:-}" = --held-leases ]; then
-  test_teardown_returns_held_lease_and_preserves_live_task_lease
-  test_teardown_held_lease_guard_failures
-  exit 0
-fi
-
 test_missing_startup_source_refuses_before_cleanup
 test_unreadable_startup_source_refuses_before_cleanup
 test_missing_adapter_sibling_refuses_before_cleanup
