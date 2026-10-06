@@ -119,10 +119,10 @@ test_orphan_sweep_respects_fixture_ownership() {
   active_dir=$(cat "$dirfile")
   touch -t 202001010000 "$active_dir/.fm-test-fixture"
 
-  stale_dir=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-cleanup-stale.XXXXXX")
+  stale_dir=$(mktemp -d "$FM_TEST_TMPDIR/fm-test-cleanup-stale.XXXXXX")
   printf '%s\n%s\n' "$$" reused-process-identity > "$stale_dir/.fm-test-fixture"
   touch -t 202001010000 "$stale_dir/.fm-test-fixture"
-  fresh_dir=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-cleanup-fresh.XXXXXX")
+  fresh_dir=$(mktemp -d "$FM_TEST_TMPDIR/fm-test-cleanup-fresh.XXXXXX")
   : > "$fresh_dir/.fm-test-fixture"
 
   bash -c '
@@ -146,7 +146,7 @@ test_orphan_sweep_respects_fixture_ownership() {
 
 test_orphan_sweep_reaps_read_only_package_tree() {
   local stale_dir package_dir
-  stale_dir=$(mktemp -d "${TMPDIR:-/tmp}/fm-test-cleanup-read-only.XXXXXX")
+  stale_dir=$(mktemp -d "$FM_TEST_TMPDIR/fm-test-cleanup-read-only.XXXXXX")
   package_dir="$stale_dir/packages/extension"
   mkdir -p "$package_dir"
   printf '%s\n%s\n' "$$" reused-process-identity > "$stale_dir/.fm-test-fixture"
@@ -261,13 +261,15 @@ SH
 # directory is already gone, and must leave an arm outside that directory.
 test_orphan_sweep_reaps_pruned_temp_watch_arm_only() {
   local harness outside hb_temp hb_out stop_out temp_root
-  local temp_a temp_b out_a out_b
+  local temp_a temp_b out_a out_b sweep_tmpdir temp_base
+  sweep_tmpdir=${1:-${TMPDIR:-/tmp}}
   harness=$(fm_test_tmproot fm-test-cleanup-arm-orphan-harness)
   outside=$(mktemp -d "$ROOT/.fm-arm-scope.XXXXXX")
   hb_temp="$harness/temp-hb"
   hb_out="$harness/out-hb"
   stop_out="$harness/out-stop"
-  temp_root=$(mktemp -d "${TMPDIR:-/tmp}/fm-pi-watch-extension.XXXXXX")
+  temp_base=$(TMPDIR="$sweep_tmpdir" FM_TEST_SKIP_ORPHAN_REAP=1 bash -c '. "$1"; printf "%s\n" "$FM_TEST_TMPDIR"' _ "$LIB")
+  temp_root=$(mktemp -d "$temp_base/fm-pi-watch-extension.XXXXXX")
 
   launch_bounded_arm() { # <root> <heartbeat> [stop-file]
     local root=$1 heartbeat=$2 stop=${3:-}
@@ -319,7 +321,7 @@ SH
   }
   rm -rf "$temp_root" "$outside/root"
 
-  bash -c '
+  TMPDIR="$sweep_tmpdir" FM_TEST_SKIP_ORPHAN_REAP=0 bash -c '
     # shellcheck source=tests/lib.sh
     . "$1"
   ' _ "$LIB"
@@ -384,6 +386,51 @@ SH
   pass "the first stale-fixture sweep stops watch arms through a temp alias"
 }
 
+test_registries_avoid_git_worktree_root() {
+  # A TMPDIR pointed at a repository root used to place live `.fm-test-*`
+  # registries beside tracked files. A concurrent git add during a suite then
+  # committed them (observed on the claim-walk CI fix round). The helper must
+  # keep registries and fixture roots outside that root for the whole run.
+  local harness repo dirfile child_dir pid tries entry
+  harness=$(fm_test_tmproot fm-test-cleanup-gitroot-harness)
+  repo="$harness/repo"
+  dirfile="$harness/child-dir"
+  mkdir -p "$repo"
+  git -C "$repo" init -q
+  bash -c '
+    export TMPDIR="$1"
+    # shellcheck source=tests/lib.sh
+    . "$2"
+    d=$(fm_test_tmproot fm-test-cleanup-gitroot)
+    printf "%s\n" "$d" > "$3"
+    # Hold the suite open so a concurrent add would see any root-side leak.
+    while :; do sleep 0.1; done
+  ' _ "$repo" "$LIB" "$dirfile" &
+  pid=$!
+  tries=0
+  while [ "$tries" -lt 100 ]; do
+    [ -s "$dirfile" ] && break
+    sleep 0.05
+    tries=$((tries + 1))
+  done
+  [ -s "$dirfile" ] || fail "the git-root TMPDIR child never published its fixture root"
+  child_dir=$(cat "$dirfile")
+  assert_present "$child_dir" "the git-root TMPDIR child did not create a fixture root"
+  case "$child_dir" in
+    "$repo"|"$repo"/*)
+      fail "fm_test_tmproot placed a fixture root inside the git worktree root: $child_dir"
+      ;;
+  esac
+  for entry in "$repo"/.fm-test-cleanup.* "$repo"/.fm-test-procevent.* "$repo"/.fm-test-watcher.*; do
+    [ ! -e "$entry" ] || fail "a live test registry landed in the git worktree root: $entry"
+  done
+  kill -TERM "$pid"
+  wait "$pid" 2>/dev/null || true
+  assert_absent "$child_dir" \
+    "the git-root TMPDIR child's fixture root survived SIGTERM"
+  pass "test registries and fixture roots stay out of a git worktree TMPDIR"
+}
+
 test_fixture_root_gone_after_normal_exit
 test_fixture_root_gone_after_sigterm
 test_cleanup_registry_resists_precreation
@@ -392,4 +439,6 @@ test_orphan_sweep_respects_fixture_ownership
 test_orphan_sweep_reaps_read_only_package_tree
 test_cleanup_reaps_owned_watch_arm_only
 test_orphan_sweep_reaps_pruned_temp_watch_arm_only
+test_orphan_sweep_reaps_pruned_temp_watch_arm_only "$ROOT"
 test_orphan_sweep_reaps_watch_arm_through_temp_alias
+test_registries_avoid_git_worktree_root

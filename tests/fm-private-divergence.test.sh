@@ -114,17 +114,17 @@ test_schema_errors_fail_hard() {
 
 # --- T3: a clean inventory reports ok --------------------------------------
 test_clean_inventory_is_ok() {
-  local repo out sha
+  local repo out sha equivalent
   repo=$(new_repo t3)
   sha=$(git -C "$repo" rev-parse HEAD)
-  write_inventory "$repo" "$(entry core-behavior '["core.txt"]' "[\"$sha\"]" none retain)"
-
-  out=$(run_check "$repo")
-
-  expect_code 0 "$?" "a clean inventory exits 0"
-  assert_contains "$out" "inventory: ok" "a clean inventory is ok"
-  assert_contains "$out" "inventory-entry: core-behavior ok" "the entry is clean"
-  assert_contains "$out" "inventory-entries: 1" "the entry count is reported"
+  for equivalent in none partial present unknown; do
+    write_inventory "$repo" "$(entry core-behavior '["core.txt"]' "[\"$sha\"]" "$equivalent" retain)"
+    out=$(run_check "$repo")
+    expect_code 0 "$?" "a clean $equivalent inventory exits 0"
+    assert_contains "$out" "inventory: ok" "a clean inventory is ok"
+    assert_contains "$out" "inventory-entry: core-behavior ok" "the entry is clean"
+    assert_contains "$out" "inventory-entries: 1" "the entry count is reported"
+  done
   pass "T3 a clean inventory reports ok"
 }
 
