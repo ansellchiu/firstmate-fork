@@ -132,12 +132,45 @@ pass() {
 # that file is armed once, here, at source time - which always runs in the
 # real caller, never a subshell.
 
+# fm_test_tmpdir: directory used for registries and fixture roots.
+# Resolves absolute or relative TMPDIR to an existing physical directory,
+# falling back to /tmp if resolution fails or the directory contains .git.
+# Keep registries out of git worktree roots so concurrent git add -A cannot
+# accidentally stage live test state.
+fm_test_tmpdir() {
+  local base=${TMPDIR:-/tmp} physical
+  base=${base%/}
+  [ -n "$base" ] || base=/tmp
+  case "$base" in
+    /*) ;;
+    *)
+      if physical=$(CDPATH='' cd -- "$base" 2>/dev/null && pwd -P); then
+        base=$physical
+      else
+        base=/tmp
+      fi
+      ;;
+  esac
+  if physical=$(CDPATH='' cd -- "$base" 2>/dev/null && pwd -P); then
+    base=$physical
+  else
+    base=/tmp
+  fi
+  if [ -e "$base/.git" ]; then
+    printf '%s\n' /tmp
+    return 0
+  fi
+  printf '%s\n' "$base"
+}
+
+FM_TEST_TMPDIR=$(fm_test_tmpdir) || return 1
+
 FM_TEST_CLEANUP_DIRS=()
-FM_TEST_CLEANUP_REGISTRY=$(mktemp "${TMPDIR:-/tmp}/.fm-test-cleanup.$$.XXXXXX") || return 1
+FM_TEST_CLEANUP_REGISTRY=$(mktemp "$FM_TEST_TMPDIR/.fm-test-cleanup.$$.XXXXXX") || return 1
 
 fm_test_pid_identity() {
   local pid=$1
-  FM_STATE_OVERRIDE="${TMPDIR:-/tmp}" bash -c \
+  FM_STATE_OVERRIDE="$FM_TEST_TMPDIR" bash -c \
     '. "$1"; fm_pid_identity "$2"' _ "$ROOT/bin/fm-wake-lib.sh" "$pid"
 }
 
@@ -160,7 +193,7 @@ FM_TEST_OWNER_IDENTITY=$(fm_test_pid_identity "$$") || {
 # private one). It never matches on a script or process name, which would reach
 # into another home's live runners.
 
-FM_TEST_PROCEVENT_REGISTRY=$(mktemp "${TMPDIR:-/tmp}/.fm-test-procevent.$$.XXXXXX") || return 1
+FM_TEST_PROCEVENT_REGISTRY=$(mktemp "$FM_TEST_TMPDIR/.fm-test-procevent.$$.XXXXXX") || return 1
 
 fm_test_track_procevent_home() {  # <home> [claim-root]
   [ -n "${1:-}" ] || return 1
@@ -199,7 +232,7 @@ fm_test_reap_procevent_homes() {
 # deleted has no lock and is skipped; that watcher exits on its own home-gone
 # check within one poll.
 
-FM_TEST_WATCHER_REGISTRY=$(mktemp "${TMPDIR:-/tmp}/.fm-test-watcher.$$.XXXXXX") || return 1
+FM_TEST_WATCHER_REGISTRY=$(mktemp "$FM_TEST_TMPDIR/.fm-test-watcher.$$.XXXXXX") || return 1
 
 fm_test_track_watcher_state() {  # <state-dir>
   [ -n "${1:-}" ] || return 1
@@ -349,18 +382,23 @@ fm_test_path_under() { # <path> <root>
   esac
 }
 
-# Temp-directory prefixes the pruned-arm sweep treats as fixture space. Both
-# the raw TMPDIR and its physical path are included so a symlink alias cannot
-# hide a fixture arm or reach outside the temp directory.
+# Temp-directory prefixes the pruned-arm sweep treats as fixture space: the
+# fm_test_tmpdir root plus its aliases (its physical path, and the raw TMPDIR
+# only when it resolves to that same root) so a symlink alias cannot hide a
+# fixture arm or reach outside the temp directory.
 fm_test_temp_prefixes() {
-  local raw physical
+  local raw physical effective
+  printf '%s\n' "$FM_TEST_TMPDIR"
+  effective=$(CDPATH='' cd -P -- "$FM_TEST_TMPDIR" && pwd -P) || return 1
+  if [ "$effective" != "$FM_TEST_TMPDIR" ]; then
+    printf '%s\n' "$effective"
+  fi
   raw=${TMPDIR:-/tmp}
   raw=${raw%/}
-  printf '%s\n' "$raw"
   if [ -d "$raw" ]; then
     physical=$(CDPATH='' cd -P -- "$raw" && pwd -P) || physical=
-    if [ -n "$physical" ] && [ "$physical" != "$raw" ]; then
-      printf '%s\n' "$physical"
+    if [ "$physical" = "$effective" ] && [ "$raw" != "$effective" ]; then
+      printf '%s\n' "$raw"
     fi
   fi
 }
@@ -455,7 +493,7 @@ fm_test_cleanup() {
 
 fm_test_tmproot() {
   local prefix=${1:-fm-test} root tmp_base
-  tmp_base=${TMPDIR:-/tmp}
+  tmp_base=$(fm_test_tmpdir)
   tmp_base=${tmp_base%/}
   root=$(mktemp -d "$tmp_base/${prefix}.XXXXXX") || return 1
   root=$(cd -P -- "$root" && pwd -P) || return 1
@@ -488,7 +526,7 @@ fm_test_reap_orphans() {
   # temp-directory scope is what keeps this startup sweep off another home.
   fm_test_reap_matching_watch_arms pruned
   now=$(date +%s)
-  for marker in "${TMPDIR:-/tmp}"/fm-*/.fm-test-fixture; do
+  for marker in "$FM_TEST_TMPDIR"/fm-*/.fm-test-fixture; do
     [ -e "$marker" ] || continue
     owner_pid=$(sed -n '1p' "$marker" 2>/dev/null) || owner_pid=
     owner_identity=$(sed -n '2,$p' "$marker" 2>/dev/null) || owner_identity=
