@@ -2624,28 +2624,6 @@ teardown_return_held_leases() {  # <task-id> [<state-dir>] [<proj-dir>]
   done <<< "$slot_paths"
 }
 
-cleanup_descendant_held_leases() {  # <home-path>
-  local home=$1 sub_state child_meta child_id child_proj child_kind child_home
-  sub_state="$home/state"
-  [ -d "$sub_state" ] || return 0
-  for child_meta in "$sub_state"/*.meta; do
-    [ -e "$child_meta" ] || continue
-    child_id=$(basename "$child_meta" .meta)
-    child_kind=$(meta_value "$child_meta" kind)
-    [ -n "$child_kind" ] || child_kind=ship
-    if [ "$child_kind" = secondmate ]; then
-      child_home=$(meta_value "$child_meta" home)
-      [ -n "$child_home" ] || child_home=$(meta_value "$child_meta" worktree)
-      if [ -n "$child_home" ] && [ -d "$child_home" ]; then
-        cleanup_descendant_held_leases "$child_home" || return $?
-      fi
-    else
-      child_proj=$(meta_value "$child_meta" project)
-      teardown_return_held_leases "$child_id" "$sub_state" "$child_proj" || return $?
-    fi
-  done
-}
-
 firstmate_home_has_treehouse_slot() {
   local home=$1
   worktree_registered_for_project "$FM_ROOT" "$home"
@@ -3477,9 +3455,6 @@ cleanup_firstmate_home_children() {
         fi
       fi
     fi
-    if [ "$child_kind" != secondmate ]; then
-      teardown_return_held_leases "$child_id" "$sub_state" "$child_proj" || return 1
-    fi
     remove_grok_turnend_auth "$sub_state" "$child_id" || return 1
     remove_kimi_turnend_auth "$sub_state" "$child_id" || return 1
     remove_pr_poll_artifacts "$sub_state" "$child_id" || return 1
@@ -3571,7 +3546,6 @@ if [ "$KIND" = secondmate ]; then
 fi
 
 if [ "$KIND" = secondmate ] && [ "$FORCE" = "--force" ]; then
-  cleanup_descendant_held_leases "$HOME_PATH" || exit $?
   cleanup_firstmate_home_children "$HOME_PATH" || exit $?
 fi
 
