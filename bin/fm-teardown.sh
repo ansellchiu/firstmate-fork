@@ -2584,7 +2584,7 @@ teardown_return_held_leases() {  # <task-id> [<state-dir>] [<proj-dir>]
     can_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
 
     already_returned=0
-    for ret in "${RETURNED_TREEHOUSE_SLOTS[@]}"; do
+    for ret in ${RETURNED_TREEHOUSE_SLOTS[@]+"${RETURNED_TREEHOUSE_SLOTS[@]}"}; do
       if [ "$ret" = "$can_slot" ] || [ "$ret" = "$slot" ]; then
         already_returned=1
         break
