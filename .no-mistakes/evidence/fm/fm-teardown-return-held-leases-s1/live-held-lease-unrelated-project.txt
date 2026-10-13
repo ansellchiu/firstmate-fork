@@ -1,0 +1,10 @@
+== BEFORE (other project's pool) ==
+{"name":"1","status":"leased","lease_holder":"fm-held:task-y"}
+== TEARDOWN task-y ==
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.rGnnOa
+warning: task task-y's recorded worktree /private/tmp/fm-heldlab.98pZ6w/pool/.treehouse/project-aac020/1/project was reassigned to task stale-holder (home /tmp/fm-lab.rGnnOa), which claimed that pool slot after this record was written; that slot is no longer task-y's, so its processes, copy, and claim are left untouched and only task-y's own cleanup runs.
+teardown task-y complete (window firstmate:fm-task-y; pool slot /tmp/fm-heldlab.98pZ6w/pool/.treehouse/project-aac020/1/project left to task stale-holder (home /tmp/fm-lab.rGnnOa), which it was reassigned to)
+Backlog: task-y just finished (this home keeps no markdown backlog at /private/tmp/fm-lab.rGnnOa/data/backlog.md). Update /private/tmp/fm-lab.rGnnOa/data/backlog.md - move task-y to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+== AFTER (other project's pool) ==
+{"name":"1","status":"leased","lease_holder":"fm-held:task-y"}
+task-y own slot:

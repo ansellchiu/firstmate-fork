@@ -1,0 +1,32 @@
+== BEFORE ==
+{"name":"1","status":"leased","lease_holder":"fm-held:task-x1"}
+{"name":"2","status":"leased","lease_holder":"fm-held:other-task"}
+{"name":"3","status":"leased","lease_holder":"fm-held:task-x1"}
+{"name":"4","status":"leased","lease_holder":"fm-held:task-x1"}
+{"name":"5","status":"leased","lease_holder":"task-x1"}
+slot1 claim: task=stale-holder home=/tmp/fm-lab.rGnnOa 
+== TEARDOWN task-x1 (real treehouse, lab home) ==
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.rGnnOa
+
+🌳 Worktree returned to pool.
+
+🌳 Worktree returned to pool.
+teardown task-x1 complete (window firstmate:fm-task-x1, worktree /tmp/fm-heldlab.98pZ6w/pool/.treehouse/project-aac020/5/project)
+Backlog: task-x1 just finished (this home keeps no markdown backlog at /private/tmp/fm-lab.rGnnOa/data/backlog.md). Update /private/tmp/fm-lab.rGnnOa/data/backlog.md - move task-x1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+rc=
+== AFTER ==
+{"name":"1","status":"available","lease_holder":""}
+{"name":"2","status":"leased","lease_holder":"fm-held:other-task"}
+{"name":"3","status":"leased","lease_holder":"fm-held:task-x1"}
+{"name":"4","status":"leased","lease_holder":"fm-held:task-x1"}
+{"name":"5","status":"available","lease_holder":""}
+.
+..
+.fm-slot-owner
+project
+slot4 dirty file kept: /tmp/fm-heldlab.98pZ6w/pool/.treehouse/project-aac020/4/project/dirty.txt
+state:
+home-summary.json
+live-user.meta
+receipts.jsonl
+terminal-outcomes

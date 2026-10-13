@@ -1,0 +1,10 @@
+ok - teardown returns held lease naming torn-down task and leaves live task lease alone
+ok - held lease cleanup leaves unrelated projects alone
+ok - held lease guard preserves slot on claim-home
+ok - held lease guard preserves slot on same-id
+ok - held lease guard preserves slot on home-field
+ok - held lease guard preserves slot on registry-same-id
+ok - held lease guard preserves slot on malformed
+ok - held lease guard preserves slot on unsafe
+ok - held lease guard preserves slot on unavailable
+ok - forced secondmate teardown returns descendant held leases
