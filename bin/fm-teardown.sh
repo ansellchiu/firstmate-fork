@@ -5,6 +5,10 @@
 # scout tasks before reporting success (a secondmate teardown transitions none,
 # since secondmates are not backlog items), then refresh/prune the project's
 # clone for PR-based ship tasks.
+# After an ordinary task's own landed-work checks pass, teardown also returns any
+# Treehouse slot leased on its behalf (fm-held:<task-id>) through the same return
+# path, unless another live task still uses the slot, the slot holds unlanded
+# work, or its state cannot be inspected; bin/fm-slot-audit.sh reports the rest.
 # An endpoint whose close could not do its job REFUSES before any record naming
 # it is removed: those records are the only thing that names what survived, so
 # reporting such a close as a completed cleanup strands the endpoint instead of
