@@ -30,10 +30,10 @@
 #      bin/fm-teardown.sh, which leaves a slot another task's claim holds.
 #   2. For each OUT_OF_ISOLATION agent, interrupt or exit it with bin/fm-control.sh
 #      for its task before any git runs in that pane; never drive it in place.
-#      A HELD_LEASE is not returned automatically: once the holder named in its label is
-#      cleaned up (or its record is gone), run the printed `treehouse return <slot>`
-#      yourself, or the slot stays out of the pool. Returning it at teardown is
-#      follow-up work.
+#      bin/fm-teardown.sh returns a HELD_LEASE naming the task it tears down, unless
+#      another live task still uses the slot or it holds unlanded work. For any other
+#      HELD_LEASE (for example, a holder already gone), run the printed
+#      `treehouse return <slot>` yourself, or the slot stays out of the pool.
 #   3. Re-run this script until it is clean. bin/fm-spawn.sh refuses new work into
 #      any slot a record still holds, so no new double claim is created meanwhile.
 set -u
