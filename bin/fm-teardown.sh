@@ -2498,27 +2498,49 @@ teardown_owns_worktree() {
   [ "$TEARDOWN_SLOT_REASSIGNED" != 1 ]
 }
 
-slot_holds_unlanded_work() {  # <slot-path>
+slot_holds_unlanded_work() {  # <slot-path> [<proj-dir>]
   local slot=$1
+  local proj_dir=${2:-${PROJ:-}}
   [ -d "$slot" ] || return 1
   [ "$FORCE" != "--force" ] || return 1
   if ! git -C "$slot" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    return 1
+    echo "warning: cannot verify git repository in held slot $slot; leaving its lease intact" >&2
+    return 0
   fi
-  local dirty_raw dirty unpushed_raw unpushed branch default_b
-  dirty_raw=$(git -C "$slot" status --porcelain 2>/dev/null || true)
+  local dirty_raw dirty unpushed_raw unpushed branch default_b ref b
+  if ! dirty_raw=$(git -C "$slot" status --porcelain 2>/dev/null); then
+    echo "warning: git status failed in held slot $slot; leaving its lease intact" >&2
+    return 0
+  fi
   dirty=$(printf '%s\n' "$dirty_raw" | grep -vE '^\?\? (\.claude/|\.fm-(grok|kimi)-turnend$)' | head -1 || true)
   if [ -n "$dirty" ]; then
     return 0
   fi
-  unpushed_raw=$(git -C "$slot" log --oneline HEAD --not --remotes -- 2>/dev/null || true)
+  if ! git -C "$slot" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! unpushed_raw=$(git -C "$slot" log --oneline HEAD --not --remotes -- 2>/dev/null); then
+    echo "warning: git log failed in held slot $slot; leaving its lease intact" >&2
+    return 0
+  fi
   unpushed=$(printf '%s\n' "$unpushed_raw" | head -1 || true)
   if [ -n "$unpushed" ]; then
     branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
-    if [ "$slot" = "$WT" ]; then
-      return 1
+    default_b=""
+    if [ -n "$proj_dir" ] && [ -d "$proj_dir" ]; then
+      ref=$(git -C "$proj_dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+      if [ -n "$ref" ]; then
+        default_b="${ref#origin/}"
+      else
+        for b in main master; do
+          if git -C "$proj_dir" show-ref --verify --quiet "refs/heads/$b"; then
+            default_b="$b"
+            break
+          fi
+        done
+      fi
     fi
-    default_b=$(default_branch 2>/dev/null || echo main)
+    [ -n "$default_b" ] || default_b=$(default_branch 2>/dev/null || echo main)
     if git -C "$slot" merge-base --is-ancestor HEAD "$default_b" 2>/dev/null \
        || git -C "$slot" merge-base --is-ancestor HEAD "origin/$default_b" 2>/dev/null; then
       return 1
@@ -2530,8 +2552,10 @@ slot_holds_unlanded_work() {  # <slot-path>
 
 RETURNED_TREEHOUSE_SLOTS=()
 
-teardown_return_held_leases() {  # <task-id>
+teardown_return_held_leases() {  # <task-id> [<state-dir>] [<proj-dir>]
   local task_id=$1
+  local state_dir=${2:-$STATE}
+  local proj_dir=${3:-${PROJ:-}}
   command -v treehouse >/dev/null 2>&1 || return 0
   if ! command -v jq >/dev/null 2>&1; then
     echo "warning: cannot scan for held treehouse leases: jq is not installed" >&2
@@ -2539,15 +2563,20 @@ teardown_return_held_leases() {  # <task-id>
   fi
 
   local target_holder="fm-held:$task_id"
-  local proj_dir=${PROJ:-}
   [ -n "$proj_dir" ] && [ -d "$proj_dir" ] || return 0
 
   local status slot_paths slot can_slot branch ret already_returned claimants
-  status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ) || return 0
+  if ! status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ); then
+    echo "error: treehouse status failed in $proj_dir" >&2
+    return 1
+  fi
   [ -n "$status" ] || return 0
 
-  slot_paths=$(printf '%s\n' "$status" | jq -r --arg holder "$target_holder" \
-    '.[]? | select((.lease_holder // "") == $holder) | .path // empty' 2>/dev/null) || return 0
+  if ! slot_paths=$(printf '%s\n' "$status" | jq -r --arg holder "$target_holder" \
+    '.[]? | select((.lease_holder // "") == $holder) | .path // empty' 2>/dev/null); then
+    echo "error: failed to parse treehouse status JSON in $proj_dir" >&2
+    return 1
+  fi
   [ -n "$slot_paths" ] || return 0
 
   while IFS= read -r slot; do
@@ -2563,13 +2592,13 @@ teardown_return_held_leases() {  # <task-id>
     done
     [ "$already_returned" = 0 ] || continue
 
-    if ! claimants=$(fm_treehouse_slot_record_claimants "$STATE" "$can_slot" "$task_id"); then
+    if ! claimants=$(fm_treehouse_slot_record_claimants "$state_dir" "$can_slot" "$task_id"); then
       echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
       continue
     fi
     [ -z "$claimants" ] || continue
 
-    if slot_holds_unlanded_work "$can_slot"; then
+    if slot_holds_unlanded_work "$can_slot" "$proj_dir"; then
       continue
     fi
 
@@ -2586,11 +2615,33 @@ teardown_return_held_leases() {  # <task-id>
 
     teardown_treehouse_return "$slot" "$proj_dir" "held lease" || {
       echo "error: treehouse return failed for held lease $slot; teardown aborted" >&2
-      exit 1
+      return 1
     }
     RETURNED_TREEHOUSE_SLOTS+=("$can_slot")
     fm_treehouse_slot_owner_release "$slot" "$task_id"
   done <<< "$slot_paths"
+}
+
+cleanup_descendant_held_leases() {  # <home-path>
+  local home=$1 sub_state child_meta child_id child_proj child_kind child_home
+  sub_state="$home/state"
+  [ -d "$sub_state" ] || return 0
+  for child_meta in "$sub_state"/*.meta; do
+    [ -e "$child_meta" ] || continue
+    child_id=$(basename "$child_meta" .meta)
+    child_kind=$(meta_value "$child_meta" kind)
+    [ -n "$child_kind" ] || child_kind=ship
+    if [ "$child_kind" = secondmate ]; then
+      child_home=$(meta_value "$child_meta" home)
+      [ -n "$child_home" ] || child_home=$(meta_value "$child_meta" worktree)
+      if [ -n "$child_home" ] && [ -d "$child_home" ]; then
+        cleanup_descendant_held_leases "$child_home" || return $?
+      fi
+    else
+      child_proj=$(meta_value "$child_meta" project)
+      teardown_return_held_leases "$child_id" "$sub_state" "$child_proj" || return $?
+    fi
+  done
 }
 
 firstmate_home_has_treehouse_slot() {
@@ -3424,6 +3475,9 @@ cleanup_firstmate_home_children() {
         fi
       fi
     fi
+    if [ "$child_kind" != secondmate ]; then
+      teardown_return_held_leases "$child_id" "$sub_state" "$child_proj" || return 1
+    fi
     remove_grok_turnend_auth "$sub_state" "$child_id" || return 1
     remove_kimi_turnend_auth "$sub_state" "$child_id" || return 1
     remove_pr_poll_artifacts "$sub_state" "$child_id" || return 1
@@ -3515,6 +3569,7 @@ if [ "$KIND" = secondmate ]; then
 fi
 
 if [ "$KIND" = secondmate ] && [ "$FORCE" = "--force" ]; then
+  cleanup_descendant_held_leases "$HOME_PATH" || exit $?
   cleanup_firstmate_home_children "$HOME_PATH" || exit $?
 fi
 
@@ -3860,7 +3915,7 @@ elif [ -d "$WT" ] && [ "$KIND" != secondmate ]; then
 fi
 
 if [ "$KIND" != secondmate ]; then
-  teardown_return_held_leases "$ID"
+  teardown_return_held_leases "$ID" "$STATE" "${PROJ:-}" || exit 1
 fi
 
 HERDR_PRESENTATION_JOURNAL="$STATE/$ID.herdr-presentation"

@@ -5263,6 +5263,42 @@ SH
   done
 }
 
+test_forced_secondmate_teardown_returns_descendant_held_leases() {
+  local case_dir home child_held_slot rc
+  case_dir=$(make_case forced-sm-descendant-held)
+  write_meta "$case_dir" local-only secondmate
+  configure_secondmate_with_tmux_children "$case_dir"
+  home="$case_dir/secondmate-home"
+
+  mkdir -p "$case_dir/pool/1"
+  child_held_slot="$case_dir/pool/1/repo"
+  git init -q "$child_held_slot"
+
+  cat > "$case_dir/fakebin/tmux" <<SH
+#!/usr/bin/env bash
+exit 0
+SH
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+if [ "\$*" = "status --json" ]; then
+  printf '[{"path":"%s","lease_holder":"fm-held:child-a"}]\n' '$child_held_slot'
+else
+  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+fi
+SH
+  chmod +x "$case_dir/fakebin/tmux" "$case_dir/fakebin/treehouse"
+  : > "$case_dir/treehouse.log"
+
+  rc=0
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 0 "$rc" "forced-sm-descendant-held: teardown should succeed: $(cat "$case_dir/stderr")"
+
+  assert_grep "return --force $child_held_slot" "$case_dir/treehouse.log" \
+    "forced-sm-descendant-held: child held lease was not returned"
+
+  pass "forced secondmate teardown returns descendant held leases"
+}
+
 test_missing_startup_source_refuses_before_cleanup
 test_unreadable_startup_source_refuses_before_cleanup
 test_missing_adapter_sibling_refuses_before_cleanup
@@ -5394,3 +5430,4 @@ test_teardown_returns_held_lease_and_preserves_live_task_lease
 
 test_teardown_held_lease_ignores_unrelated_project
 test_teardown_held_lease_guard_failures
+test_forced_secondmate_teardown_returns_descendant_held_leases

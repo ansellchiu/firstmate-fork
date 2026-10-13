@@ -1764,6 +1764,7 @@ fm_treehouse_slot_record_claimants() {  # <state-dir> <worktree> <task-id>
   own="$(CDPATH='' cd -- "$state" 2>/dev/null && pwd -P)/$id.meta"
   collect_local_firstmate_states "$state" || return 1
   fm_treehouse_slot_owner_state "$worktree" "$id"
+  [ "$FM_TREEHOUSE_SLOT_OWNER" != unsafe ] || return 1
   [ -z "$FM_TREEHOUSE_SLOT_OWNER_HOME" ] || TREEHOUSE_OWNER_STATES+=("$FM_TREEHOUSE_SLOT_OWNER_HOME/state")
   for state_dir in "${TREEHOUSE_OWNER_STATES[@]}"; do
     state_dir=$(CDPATH='' cd -- "$state_dir" 2>/dev/null && pwd -P) || continue
