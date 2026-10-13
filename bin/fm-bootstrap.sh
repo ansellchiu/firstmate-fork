@@ -1069,7 +1069,14 @@ crew_dispatch_validate() {
   else
     verified_harnesses='["claude","codex","opencode","pi","pi-signed","grok","kimi","cursor","agy","muse","rovo","omp","devin"]'
   fi
-  err=$(jq -r --argjson typed "$typed_active" --argjson verified_harnesses "$verified_harnesses" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" '
+  local agy_models='' cursor_models=''
+  if command -v agy >/dev/null 2>&1; then
+    agy_models=$(agy models 2>/dev/null | awk 'NF { print $1 }' | grep -E '^[[:alnum:]_.:/-]+$' || true)
+  fi
+  if command -v cursor-agent >/dev/null 2>&1; then
+    cursor_models=$(cursor-agent --list-models 2>/dev/null | awk 'NF && $1 != "Available" && $1 != "models" { print $1 }' | grep -E '^[[:alnum:]_.:/-]+$' || true)
+  fi
+  err=$(jq -r --argjson typed "$typed_active" --argjson verified_harnesses "$verified_harnesses" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" --arg agy_models "$agy_models" --arg cursor_models "$cursor_models" '
     def verified($h): $verified_harnesses | index($h);
     def provider_id($p): ($p | type) == "string" and ($p | test($provider_re));
     def effort_ok($h; $m; $e):
@@ -1123,6 +1130,30 @@ crew_dispatch_validate() {
       | map(select(. as $p | effort_ok($p.h; $p.m; $p.e) | not))
       | map("\(.h):\(.e)")
       | unique;
+    def catalog($h):
+      if $h == "agy" then ($agy_models | split("\n") | map(select(length > 0)))
+      elif $h == "cursor" then ($cursor_models | split("\n") | map(select(length > 0)))
+      else [] end;
+    def model_ok($p):
+      if ($p.model | type) != "string" then true
+      elif (catalog($p.harness) | length) == 0 then true
+      elif (catalog($p.harness) | index($p.model)) != null then true
+      elif $p.harness == "agy" and ($p.effort != null) and (catalog($p.harness) | index(($p.model) + "-" + ($p.effort))) != null then true
+      else false end;
+    def common_prefix_length($a; $b):
+      ($a | explode) as $left | ($b | explode) as $right
+      | reduce range(0; ([($left | length), ($right | length)] | min)) as $i
+          (0; if . == $i and $left[$i] == $right[$i] then . + 1 else . end);
+    def nearest_models($p):
+      catalog($p.harness)
+      | sort_by(-common_prefix_length(.; $p.model), ((length - ($p.model | length)) | fabs), .)
+      | .[0:5];
+    def bad_models:
+      configured_profiles
+      | to_entries
+      | map(.value as $p | select(($p.model | type) == "string") | select((catalog($p.harness) | length) > 0) | select(model_ok($p) | not)
+        | "profile \(.key) \($p.harness)/\($p.model) (valid: \((nearest_models($p) | join(", "))))")
+      | unique;
     if type != "object" then "top-level value must be an object"
     elif has("rules") and (.rules | type) != "array" then "rules must be an array"
     elif [(.rules // [])[]? | select(type != "object")] | length > 0 then "each rule must be an object"
@@ -1158,6 +1189,7 @@ crew_dispatch_validate() {
         | map(select(. as $h | verified($h) | not))
         | unique) as $bad_harnesses
       | if ($bad_harnesses | length) > 0 then "unverified harness: " + ($bad_harnesses | join(", "))
+        elif (bad_models | length) > 0 then "unknown model: " + (bad_models | join(", "))
         elif (bad_efforts | length) > 0 then "invalid effort: " + (bad_efforts | join(", "))
         else empty
         end
