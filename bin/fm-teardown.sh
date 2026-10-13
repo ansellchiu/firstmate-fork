@@ -2592,7 +2592,9 @@ teardown_return_held_leases() {  # <task-id> [<state-dir>] [<proj-dir>]
     done
     [ "$already_returned" = 0 ] || continue
 
-    if ! claimants=$(fm_treehouse_slot_record_claimants "$state_dir" "$can_slot" "$task_id"); then
+    fm_treehouse_slot_owner_state "$can_slot" "$task_id"
+    if [ "$FM_TREEHOUSE_SLOT_OWNER" = unsafe ] \
+      || ! claimants=$(fm_treehouse_slot_record_claimants "$state_dir" "$can_slot" "$task_id"); then
       echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
       continue
     fi

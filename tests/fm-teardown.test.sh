@@ -5217,7 +5217,7 @@ test_teardown_held_lease_guard_failures() {
     mkdir -p "$slot/.claude"
     printf '{}\n' > "$slot/.claude/settings.local.json"
     owner_home="$case_dir/unregistered"
-    owner_id=live-user
+    owner_id="live-user"
     field=worktree
     case "$scenario" in
       same-id|registry-same-id) owner_id=task-x1 ;;
