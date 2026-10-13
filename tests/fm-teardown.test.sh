@@ -5102,6 +5102,173 @@ test_retained_sources_still_reach_the_ordinary_refusal() {
   pass "present required sources still reach the ordinary teardown refusal"
 }
 
+test_teardown_returns_held_lease_and_preserves_live_task_lease() {
+  local case_dir held_slot other_slot used_held_slot unlanded_slot rc status_json own_slot
+  for own_slot in present missing; do
+    case_dir=$(make_case "teardown-held-leases-$own_slot")
+    write_meta "$case_dir" local-only ship
+    wt_commit "$case_dir" "work landed"
+    git -C "$case_dir/project" merge -q --ff-only fm/task-x1
+
+    mkdir -p "$case_dir/pool/1" "$case_dir/pool/2" "$case_dir/pool/3" "$case_dir/pool/4"
+    held_slot="$case_dir/pool/1/repo"
+    other_slot="$case_dir/pool/2/repo"
+    used_held_slot="$case_dir/pool/3/repo"
+    unlanded_slot="$case_dir/pool/4/repo"
+    git init -q "$held_slot"
+    git init -q "$other_slot"
+    git init -q "$used_held_slot"
+    git init -q "$unlanded_slot"
+    echo "dirty" > "$unlanded_slot/dirty.txt"
+
+    # Seed a stale slot-owner claim for the held slot naming a missing task
+    printf 'task=stale-holder\nhome=%s\n' "$case_dir" > "$case_dir/pool/1/.fm-slot-owner"
+
+    # other-slot is in use by a different live task record (other-task)
+    fm_write_meta "$case_dir/state/other-task.meta" \
+      "window=firstmate:fm-other-task" \
+      "endpoint_task_id=other-task" \
+      "worktree=$other_slot" \
+      "project=$case_dir/project" \
+      "kind=ship" \
+      "mode=local-only"
+
+    # used_held_slot is in use by live-user despite held lease naming task-x1
+    fm_write_meta "$case_dir/state/live-user.meta" \
+      "window=firstmate:fm-live-user" \
+      "endpoint_task_id=live-user" \
+      "worktree=$used_held_slot" \
+      "project=$case_dir/project" \
+      "kind=ship" \
+      "mode=local-only"
+
+    status_json=$(printf '[{"name":"1","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"},{"name":"2","path":"%s","status":"leased","lease_holder":"fm-held:other-task"},{"name":"3","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"},{"name":"4","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"}]' "$held_slot" "$other_slot" "$used_held_slot" "$unlanded_slot")
+
+    cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+case "\$*" in
+  "status --json")
+    printf '%s\n' '$status_json'
+    exit 0
+    ;;
+  *)
+    printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+    exit 0
+    ;;
+esac
+SH
+    chmod +x "$case_dir/fakebin/treehouse"
+    : > "$case_dir/treehouse.log"
+
+    if [ "$own_slot" = missing ]; then
+      git -C "$case_dir/project" worktree remove "$case_dir/wt"
+    fi
+
+    rc=0
+    FM_HOME="$case_dir" run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    expect_code 0 "$rc" "teardown should succeed and return held leases"
+
+    assert_grep "return --force $held_slot" "$case_dir/treehouse.log" \
+      "held-leases: the held lease naming the torn-down task was not returned"
+    assert_no_grep "$other_slot" "$case_dir/treehouse.log" \
+      "held-leases: the held lease naming a different live task was returned"
+    assert_no_grep "$used_held_slot" "$case_dir/treehouse.log" \
+      "held-leases: the held lease naming task-x1 that another live task uses was returned"
+    assert_no_grep "$unlanded_slot" "$case_dir/treehouse.log" \
+      "held-leases: the held lease naming task-x1 with unlanded work was returned"
+
+    pass "teardown returns held lease and preserves live leases with $own_slot own slot"
+  done
+}
+
+
+test_teardown_held_lease_ignores_unrelated_project() {
+  local case_dir foreign_slot rc
+  case_dir=$(make_case held-foreign-project)
+  write_meta "$case_dir" local-only ship
+  wt_commit "$case_dir" "work landed"
+  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
+  mkdir -p "$case_dir/projects/other" "$case_dir/pool/9"
+  foreign_slot="$case_dir/pool/9/repo"
+  git init -q "$foreign_slot"
+  cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+if [ "\$*" = "status --json" ]; then
+  [ "\$(pwd -P)" = "\$(cd "$case_dir/projects/other" && pwd -P)" ] || { echo '[]'; exit 0; }
+  printf '[{"path":"%s","lease_holder":"fm-held:task-x1"}]\n' '$foreign_slot'
+else
+  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+fi
+SH
+  : > "$case_dir/treehouse.log"
+  rc=0
+  FM_HOME="$case_dir" run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  expect_code 0 "$rc" "held-foreign-project: teardown should succeed"
+  assert_no_grep "$foreign_slot" "$case_dir/treehouse.log" \
+    "held-foreign-project: held lease in an unrelated project was returned"
+  pass "held lease cleanup leaves unrelated projects alone"
+}
+
+test_teardown_held_lease_guard_failures() {
+  local scenario case_dir slot owner_home owner_id field rc branch
+  for scenario in claim-home same-id home-field registry-same-id malformed unsafe unavailable; do
+    case_dir=$(make_case "held-guard-$scenario")
+    write_meta "$case_dir" local-only ship
+    wt_commit "$case_dir" "work landed"
+    git -C "$case_dir/project" merge -q --ff-only fm/task-x1
+    slot="$case_dir/pool/1/repo"
+    mkdir -p "$case_dir/pool/1"
+    git clone -q "$case_dir/project" "$slot"
+    git -C "$slot" checkout -q -b held-worker
+    mkdir -p "$slot/.claude"
+    printf '{}\n' > "$slot/.claude/settings.local.json"
+    owner_home="$case_dir/unregistered"
+    owner_id="live-user"
+    field=worktree
+    case "$scenario" in
+      same-id|registry-same-id) owner_id=task-x1 ;;
+      home-field) field=home ;;
+    esac
+    mkdir -p "$owner_home/state"
+    fm_write_meta "$owner_home/state/$owner_id.meta" "$field=$slot" "kind=secondmate"
+    printf 'task=%s\nhome=%s\n' "$owner_id" "$owner_home" > "$case_dir/pool/1/.fm-slot-owner"
+    case "$scenario" in
+      registry-same-id)
+        printf -- '- worker - fixture (home: %s; scope: fixture; projects: repo; added 2026-10-06)\n' "$owner_home" > "$case_dir/data/secondmates.md"
+        rm "$case_dir/pool/1/.fm-slot-owner"
+        ;;
+      malformed) printf -- '- malformed\n' > "$case_dir/data/secondmates.md" ;;
+      unsafe) ln -s "$case_dir/registry" "$case_dir/data/secondmates.md" ;;
+      unavailable) printf -- '- worker - fixture (home: %s; scope: fixture; projects: repo; added 2026-10-06)\n' "$case_dir/missing" > "$case_dir/data/secondmates.md" ;;
+    esac
+    cat > "$case_dir/fakebin/treehouse" <<SH
+#!/usr/bin/env bash
+if [ "\$*" = "status --json" ]; then
+  printf '[{"path":"%s","lease_holder":"fm-held:task-x1"}]\n' '$slot'
+else
+  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
+fi
+SH
+    : > "$case_dir/treehouse.log"
+    rc=0
+    FM_HOME="$case_dir" run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    expect_code 0 "$rc" "held-guard-$scenario: task cleanup should finish"
+    assert_no_grep "$slot" "$case_dir/treehouse.log" "held-guard-$scenario: protected slot returned"
+    branch=$(git -C "$slot" symbolic-ref --short HEAD)
+    [ "$branch" = held-worker ] || fail "held-guard-$scenario: protected branch detached"
+    [ -f "$slot/.claude/settings.local.json" ] || fail "held-guard-$scenario: protected hook removed"
+    [ -f "$owner_home/state/$owner_id.meta" ] || fail "held-guard-$scenario: claimant record removed"
+    case "$scenario" in
+      malformed|unsafe|unavailable)
+        assert_grep 'leaving its lease intact' "$case_dir/stderr" "held-guard-$scenario: scan failure did not warn"
+        ;;
+      registry-same-id) ;;
+      *) [ -f "$case_dir/pool/1/.fm-slot-owner" ] || fail "held-guard-$scenario: claim removed" ;;
+    esac
+    pass "held lease guard preserves slot on $scenario"
+  done
+}
+
 test_missing_startup_source_refuses_before_cleanup
 test_unreadable_startup_source_refuses_before_cleanup
 test_missing_adapter_sibling_refuses_before_cleanup
@@ -5229,3 +5396,7 @@ test_process_spawned_during_grace_is_reaped_on_later_pass
 test_persistent_scan_refuses_after_bounded_retries
 test_process_exit_during_identity_lookup_does_not_refuse
 test_run_abort_precedes_process_reap_precedes_worktree_removal
+test_teardown_returns_held_lease_and_preserves_live_task_lease
+
+test_teardown_held_lease_ignores_unrelated_project
+test_teardown_held_lease_guard_failures

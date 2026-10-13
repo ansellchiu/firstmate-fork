@@ -5,6 +5,10 @@
 # scout tasks before reporting success (a secondmate teardown transitions none,
 # since secondmates are not backlog items), then refresh/prune the project's
 # clone for PR-based ship tasks.
+# After an ordinary task's own landed-work checks pass, teardown also returns any
+# Treehouse slot leased on its behalf (fm-held:<task-id>) through the same return
+# path, unless another live task still uses the slot, the slot holds unlanded
+# work, or its state cannot be inspected; bin/fm-slot-audit.sh reports the rest.
 # An endpoint whose close could not do its job REFUSES before any record naming
 # it is removed: those records are the only thing that names what survived, so
 # reporting such a close as a completed cleanup strands the endpoint instead of
@@ -2498,6 +2502,132 @@ teardown_owns_worktree() {
   [ "$TEARDOWN_SLOT_REASSIGNED" != 1 ]
 }
 
+slot_holds_unlanded_work() {  # <slot-path> [<proj-dir>]
+  local slot=$1
+  local proj_dir=${2:-${PROJ:-}}
+  [ -d "$slot" ] || return 1
+  [ "$FORCE" != "--force" ] || return 1
+  if ! git -C "$slot" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "warning: cannot verify git repository in held slot $slot; leaving its lease intact" >&2
+    return 0
+  fi
+  local dirty_raw dirty unpushed_raw unpushed branch default_b ref b
+  if ! dirty_raw=$(git -C "$slot" status --porcelain 2>/dev/null); then
+    echo "warning: git status failed in held slot $slot; leaving its lease intact" >&2
+    return 0
+  fi
+  dirty=$(printf '%s\n' "$dirty_raw" | grep -vE '^\?\? (\.claude/|\.fm-(grok|kimi)-turnend$)' | head -1 || true)
+  if [ -n "$dirty" ]; then
+    return 0
+  fi
+  if ! git -C "$slot" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! unpushed_raw=$(git -C "$slot" log --oneline HEAD --not --remotes -- 2>/dev/null); then
+    echo "warning: git log failed in held slot $slot; leaving its lease intact" >&2
+    return 0
+  fi
+  unpushed=$(printf '%s\n' "$unpushed_raw" | head -1 || true)
+  if [ -n "$unpushed" ]; then
+    branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+    default_b=""
+    if [ -n "$proj_dir" ] && [ -d "$proj_dir" ]; then
+      ref=$(git -C "$proj_dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+      if [ -n "$ref" ]; then
+        default_b="${ref#origin/}"
+      else
+        for b in main master; do
+          if git -C "$proj_dir" show-ref --verify --quiet "refs/heads/$b"; then
+            default_b="$b"
+            break
+          fi
+        done
+      fi
+    fi
+    [ -n "$default_b" ] || default_b=$(default_branch 2>/dev/null || echo main)
+    if git -C "$slot" merge-base --is-ancestor HEAD "$default_b" 2>/dev/null \
+       || git -C "$slot" merge-base --is-ancestor HEAD "origin/$default_b" 2>/dev/null; then
+      return 1
+    fi
+    return 0
+  fi
+  return 1
+}
+
+RETURNED_TREEHOUSE_SLOTS=()
+
+teardown_return_held_leases() {  # <task-id> [<state-dir>] [<proj-dir>]
+  local task_id=$1
+  local state_dir=${2:-$STATE}
+  local proj_dir=${3:-${PROJ:-}}
+  command -v treehouse >/dev/null 2>&1 || return 0
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "warning: cannot scan for held treehouse leases: jq is not installed" >&2
+    return 0
+  fi
+
+  local target_holder="fm-held:$task_id"
+  [ -n "$proj_dir" ] && [ -d "$proj_dir" ] || return 0
+
+  local status slot_paths slot can_slot branch ret already_returned claimants
+  if ! status=$( ( cd "$proj_dir" && treehouse status --json ) 2>/dev/null ); then
+    echo "error: treehouse status failed in $proj_dir" >&2
+    return 1
+  fi
+  [ -n "$status" ] || return 0
+
+  if ! slot_paths=$(printf '%s\n' "$status" | jq -r --arg holder "$target_holder" \
+    '.[]? | select((.lease_holder // "") == $holder) | .path // empty' 2>/dev/null); then
+    echo "error: failed to parse treehouse status JSON in $proj_dir" >&2
+    return 1
+  fi
+  [ -n "$slot_paths" ] || return 0
+
+  while IFS= read -r slot; do
+    [ -n "$slot" ] || continue
+    can_slot=$(canonical_existing_dir "$slot" 2>/dev/null || echo "$slot")
+
+    already_returned=0
+    for ret in ${RETURNED_TREEHOUSE_SLOTS[@]+"${RETURNED_TREEHOUSE_SLOTS[@]}"}; do
+      if [ "$ret" = "$can_slot" ] || [ "$ret" = "$slot" ]; then
+        already_returned=1
+        break
+      fi
+    done
+    [ "$already_returned" = 0 ] || continue
+
+    fm_treehouse_slot_owner_state "$can_slot" "$task_id"
+    if [ "$FM_TREEHOUSE_SLOT_OWNER" = unsafe ] \
+      || ! claimants=$(fm_treehouse_slot_record_claimants "$state_dir" "$can_slot" "$task_id"); then
+      echo "warning: cannot prove held treehouse slot $slot is unused; leaving its lease intact" >&2
+      continue
+    fi
+    [ -z "$claimants" ] || continue
+
+    if slot_holds_unlanded_work "$can_slot" "$proj_dir"; then
+      continue
+    fi
+
+    if [ -d "$slot" ]; then
+      branch=$(git -C "$slot" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+      if [ "$branch" != "HEAD" ]; then
+        if git -C "$slot" checkout --detach -q 2>/dev/null; then
+          git -C "$slot" branch -D "$branch" >/dev/null 2>&1 || true
+        fi
+      fi
+      rm -f "$slot/.claude/settings.local.json" "$slot/.opencode/plugins/fm-turn-end.js" \
+        "$slot/.fm-grok-turnend" "$slot/.fm-kimi-turnend"
+    fi
+
+    teardown_treehouse_return "$slot" "$proj_dir" "held lease" || {
+      echo "error: treehouse return failed for held lease $slot; teardown aborted" >&2
+      return 1
+    }
+    RETURNED_TREEHOUSE_SLOTS+=("$can_slot")
+    fm_treehouse_slot_owner_release "$slot" "$task_id"
+  done <<< "$slot_paths"
+}
+
 firstmate_home_has_treehouse_slot() {
   local home=$1
   worktree_registered_for_project "$FM_ROOT" "$home"
@@ -3761,6 +3891,11 @@ elif [ -d "$WT" ] && [ "$KIND" != secondmate ]; then
   # unclaimed until its next holder claims it, and leaves the claim in place
   # whenever the return did not actually happen.
   fm_treehouse_slot_owner_release "$WT" "$ID"
+  RETURNED_TREEHOUSE_SLOTS+=("$(canonical_existing_dir "$WT" 2>/dev/null || echo "$WT")")
+fi
+
+if [ "$KIND" != secondmate ]; then
+  teardown_return_held_leases "$ID" "$STATE" "${PROJ:-}" || exit 1
 fi
 
 HERDR_PRESENTATION_JOURNAL="$STATE/$ID.herdr-presentation"
