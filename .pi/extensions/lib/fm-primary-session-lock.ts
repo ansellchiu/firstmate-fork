@@ -25,7 +25,9 @@ export type LockOwnership = "owned" | "missing" | "other";
 /** Ancestors to walk before giving up. A harness sits a few levels above node. */
 const MAX_ANCESTORS = 8;
 
-function parentPid(pid: string): string {
+/** The parent pid of <pid>, or "" when it cannot be read. Exported for
+ * callers that walk the same ancestry this module does. */
+export function parentPid(pid: string): string {
   const result = spawnSync("ps", ["-o", "ppid=", "-p", pid], { encoding: "utf8" });
   if (result.status !== 0) return "";
   return result.stdout.trim();

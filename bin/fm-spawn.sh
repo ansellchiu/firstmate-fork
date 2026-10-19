@@ -1749,7 +1749,7 @@ spawn_abort_cleanup() {
       local reclaim_status=0
       spawn_orca_reclaim_launch_file || reclaim_status=$?
       case "$reclaim_status" in
-        0) kimi_spawn_fail "spawn ended before Orca terminal $T ran the launch command; removed the launch file and refused the worker launch" || true ;;
+        0) spawn_launch_failed "spawn ended before Orca terminal $T ran the launch command; removed the launch file and refused the worker launch" || true ;;
         2) echo "warning: could not remove Orca launch file $SPAWN_STAGED_LAUNCH_FILE; remove it by hand" >&2 ;;
       esac
     fi
@@ -6723,7 +6723,7 @@ fi
 sleep 0.3
 spawn_orca_launch_send_fail() {
   rm -f -- "$LAUNCH_FILE" 2>/dev/null || true
-  kimi_spawn_fail "launch command could not be delivered to Orca terminal $T"
+  spawn_launch_failed "launch command could not be delivered to Orca terminal $T"
   rovo_endpoint_cleanup
   exit 1
 }
@@ -6739,7 +6739,7 @@ spawn_orca_wait_launch_consumed() {
     if [ "$i" -gt "$max" ]; then
       spawn_orca_reclaim_launch_file || reclaim_status=$?
       [ "$reclaim_status" != 1 ] || return 0
-      kimi_spawn_fail "Orca terminal $T did not run the launch command or could not remove the launch file; refused the worker launch"
+      spawn_launch_failed "Orca terminal $T did not run the launch command or could not remove the launch file; refused the worker launch"
       exit 1
     fi
     sleep 0.2

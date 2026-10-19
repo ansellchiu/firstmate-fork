@@ -61,6 +61,7 @@ import { encodeFirstmateOperationalInput } from "./lib/fm-operational-input.ts";
 import {
   type LockOwnership,
   lockOwnership as sessionLockOwnership,
+  parentPid,
   pidAlive,
 } from "./lib/fm-primary-session-lock.ts";
 
