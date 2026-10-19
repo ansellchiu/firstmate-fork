@@ -379,7 +379,11 @@ test_release_frees_a_place() {
   expect_code "$DEFER_EXIT" "$rc" "one freed place admitted two workers: $out"
   assert_contains "$out" "2 already hold a place (live-b, task-c)" "the new worker did not take the freed place"
 
-  # Cleanup: the real teardown removes the record, which frees its place.
+  # Cleanup: the real teardown removes the record, which frees its place. A
+  # landed ship task's teardown requires its completion receipt, so record one.
+  FM_ROOT_OVERRIDE='' FM_HOME="$home" FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' \
+    "$ROOT/bin/fm-receipt.sh" write-landing --task live-b --pr-url "https://github.com/o/r/pull/8" >/dev/null \
+    || fail "could not record live-b's completion receipt"
   rc=0
   out=$(FM_ROOT_OVERRIDE='' FM_HOME="$home" FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' FM_CONFIG_OVERRIDE='' \
     FM_FAKE_CALL_LOG="$case_dir/calls.log" PATH="$case_dir/fakebin:$PATH" \

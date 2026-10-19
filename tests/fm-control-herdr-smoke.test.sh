@@ -199,19 +199,31 @@ SLEEP_BIN=$(command -v sleep) || fail "sleep not found"
 # argv[0] basename is the harness name the classifier reads) and releases only
 # when the test says so, which is what keeps the release assertion below about
 # the harness rather than about the test.
+# Herdr counts a registration only while an agent-named process runs in the
+# pane (issue #4115), so the script hands its registry work to a bounded
+# background helper and then becomes a stand-in whose argv[0] is `codex`; the
+# helper stops it once the identity is released.
+CODEX_STANDIN_DIR="$SCRATCH/codex-standin"
+mkdir -p "$CODEX_STANDIN_DIR"
+ln -s "$STANDIN_BIN" "$CODEX_STANDIN_DIR/codex"
 cat > "$FAKEBIN/codex" <<EOF
 #!/usr/bin/env bash
 set -e
 : > "$SCRATCH/codex-launched"
 "$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane report-agent "$PANE_ID" \
   --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch --state idle >/dev/null 2>&1
-for _ in \$(seq 1 900); do
-  if [ -e "$SCRATCH/codex-release-now" ]; then break; fi
-  sleep 0.1
-done
-"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
-  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1
-: > "$SCRATCH/codex-released"
+agent_pid=\$\$
+(
+  for _ in \$(seq 1 900); do
+    if [ -e "$SCRATCH/codex-release-now" ]; then break; fi
+    sleep 0.1
+  done
+  "$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
+    --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1
+  : > "$SCRATCH/codex-released"
+  kill "\$agent_pid" 2>/dev/null || true
+) </dev/null >/dev/null 2>&1 &
+exec "$CODEX_STANDIN_DIR/codex"
 EOF
 chmod +x "$FAKEBIN/codex"
 printf -v FAKEBIN_Q '%q' "$FAKEBIN"
@@ -227,7 +239,10 @@ done
 [ "$(fm_backend_herdr_current_path "$SESSION:$PANE_ID" 2>/dev/null || true)" = "$PROJ_REAL" ] \
   || fail "the real Herdr pane did not drift out of its recorded worktree"
 
-OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
+# The launch postcondition must actually wait for these relaunches: the pane's
+# foreground is still the shell on an immediate read, and only the stand-in
+# process proves the agent (tests/lib.sh exports a zero wait for fixtures).
+OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 FM_SPAWN_LAUNCH_WAIT=20 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a drifted, agent-free Herdr pane should be re-homed and relaunched: $OUT"
 [ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched"
@@ -377,7 +392,7 @@ esac
 pass "real herdr: exit on a pane with a stale registration is idempotent success"
 
 rm -f "$SCRATCH/codex-launched" "$SCRATCH/codex-release-now" "$SCRATCH/codex-released"
-OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
+OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 FM_SPAWN_LAUNCH_WAIT=20 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a stale-registration Herdr pane should be relaunched: $OUT"
 for _ in $(seq 1 20); do

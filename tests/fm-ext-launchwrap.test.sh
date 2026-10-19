@@ -601,9 +601,11 @@ run_spawn() {  # <home> <wt> <fakebin> <id> <proj> [extra-env...]
 }
 
 launch_line() {  # <case-dir>
-  # The brief doorbell names a fresh operational-inbox record per spawn; normalize it.
+  # The brief doorbell names a fresh operational-inbox record per spawn, and the
+  # trailer-strip git config is a per-home, per-launch temp file; normalize both.
   grep 'dangerously-skip-permissions' "$1/fake/launch-lines" 2>/dev/null | tail -n 1 \
-    | sed -E 's#operational-inbox/[0-9]+-[0-9a-f]+[.]msg#operational-inbox/RECORD.msg#g'
+    | sed -E -e 's#operational-inbox/[0-9]+-[0-9a-f]+[.]msg#operational-inbox/RECORD.msg#g' \
+      -e 's#/fm-[^/+]*[+][0-9a-f]+/git-config[.][^/'"'"']*[.]sh#/TASKTMP/git-config.sh#g'
 }
 
 rec=$(spawn_case plain seam-z1 '')
