@@ -609,9 +609,10 @@
       "paths": [
         "bin/fm-wake-lib.sh",
         "tests/fm-watch-arm.test.sh",
-        "tests/fm-watcher-lock.test.sh"
+        "tests/fm-watcher-lock.test.sh",
+        "tests/fm-watch-checkpoint.test.sh"
       ],
-      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued.",
+      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued. Upstream's never-announced-recovery checkpoint case therefore queues a real durable wake before asserting the one announcement.",
       "provenance": {
         "commits": [
           "950421c7"
@@ -733,9 +734,10 @@
       "paths": [
         "tests/fm-control-herdr-smoke.test.sh",
         "docs/agent-control.md",
-        "tests/fm-backend-herdr-presentation-e2e.test.sh"
+        "tests/fm-backend-herdr-presentation-e2e.test.sh",
+        "bin/fm-spawn.sh"
       ],
-      "intent": "The real-herdr relaunch smoke drives a replacement harness that reports and then releases a native Herdr agent identity, and waits for that release before asserting re-homing, so the relaunch path is proven against the native agent registry the private submit and idle classification reads rather than against a pane that never carried an identity. The real-Herdr presentation e2e launches the same long-lived stand-in agent (herdr_test_agent_command) rather than a bare sleep loop, so it too exercises the native agent registry.",
+      "intent": "The real-herdr relaunch smoke drives a replacement harness that reports and then releases a native Herdr agent identity, and waits for that release before asserting re-homing, so the relaunch path is proven against the native agent registry the private submit and idle classification reads rather than against a pane that never carried an identity. The real-Herdr presentation e2e launches the same long-lived stand-in agent (herdr_test_agent_command) rather than a bare sleep loop, so it too exercises the native agent registry. An exact-resume recovery waits for the Herdr presentation session lock within a bound long enough to outlast a live holder's whole spawn (including held-pool-slot retries) and refuses only past it, so upstream's refuse-by-default contention case asserts that bounded wait; upstream's --herdr-resume-lock-wait remains as the explicit unbounded opt-in.",
       "provenance": {
         "commits": [
           "0a6e6a7"
@@ -759,9 +761,10 @@
         "tests/fm-remote-secondmate-parent-binding.test.sh",
         "tests/fm-public-followup.test.sh",
         "tests/fm-teardown-endpoint-safety.test.sh",
-        ".agents/skills/ship-landing/SKILL.md"
+        ".agents/skills/ship-landing/SKILL.md",
+        "tests/fm-project-capacity.test.sh"
       ],
-      "intent": "Every landing path writes a typed completion receipt before reporting success and records PR assignment to the authenticated account, and a closed-unmerged PR is reported as such, so teardown can refuse a task whose landing was never proved and the captain sees every review-ready PR in the GitHub inbox.",
+      "intent": "Every landing path writes a typed completion receipt before reporting success and records PR assignment to the authenticated account, and a closed-unmerged PR is reported as such, so teardown can refuse a task whose landing was never proved and the captain sees every review-ready PR in the GitHub inbox. Upstream tests that clean up a landed ship task record its receipt first.",
       "provenance": {
         "commits": [
           "63a7fcd",
