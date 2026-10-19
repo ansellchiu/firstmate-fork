@@ -191,7 +191,6 @@ pass "real herdr $HERDR_VERSION: a gone session reads recoverable while a live p
 
 FAKEBIN="$SCRATCH/fakebin"
 mkdir -p "$FAKEBIN"
-SLEEP_BIN=$(command -v sleep) || fail "sleep not found"
 # The replacement harness has to be a real live agent for the relaunch's launch
 # postcondition to accept it, and it has to keep its registration until the test
 # has finished asserting the relaunch - releasing on a timer instead would race

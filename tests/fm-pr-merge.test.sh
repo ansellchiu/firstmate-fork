@@ -31,7 +31,7 @@ MR_STALE_HEAD=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 # "pulls" route Forgejo/Gitea use.
 FJ_HOST=forgejo.example
 FJ_OWNER=fixture
-FJ_REPO=fixture-repo
+FJ_REPO="fixture-repo"
 FJ_LOGIN=fm-fixture
 FJ_URL="https://$FJ_HOST/$FJ_OWNER/$FJ_REPO/pulls/9"
 FJ_HEAD=cccccccccccccccccccccccccccccccccccccccc
