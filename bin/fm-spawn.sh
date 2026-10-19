@@ -5220,8 +5220,9 @@ EOF
 
 # Bind the discovered session into task metadata (the control verbs' durable
 # address), in the same locked-filter-and-publish shape spawn_record_traceparent
-# uses: an idempotent rewrite that drops any prior polytoken_* binding before
-# appending the fresh one.
+# uses: an idempotent rewrite that drops any prior polytoken_* binding and
+# writes the fresh one ahead of any preserved PR identity block, which must stay
+# last in the record for PR poll identity verification to authenticate.
 spawn_record_polytoken_session() {
   local meta="$STATE/$ID.meta" status=0 acquired=0
   if [ "$SPAWN_META_LOCK_HELD" != 1 ]; then
@@ -5232,12 +5233,19 @@ spawn_record_polytoken_session() {
   fi
   SPAWN_META_TMP="$STATE/.$ID.meta.polytoken.${BASHPID:-$$}"
   if [ ! -f "$meta" ] || [ ! -w "$meta" ] ||
-    ! awk -F= '$1 != "polytoken_session" && $1 != "polytoken_port" && $1 != "polytoken_credential"' "$meta" >"$SPAWN_META_TMP" ||
-    ! {
-      echo "polytoken_session=$POLYTOKEN_SESSION_ID"
-      echo "polytoken_port=$POLYTOKEN_SESSION_PORT"
-      echo "polytoken_credential=$POLYTOKEN_SESSION_CREDENTIAL"
-    } >>"$SPAWN_META_TMP" ||
+    ! awk -F= -v session="$POLYTOKEN_SESSION_ID" -v port="$POLYTOKEN_SESSION_PORT" \
+      -v credential="$POLYTOKEN_SESSION_CREDENTIAL" '
+      function binding() {
+        print "polytoken_session=" session
+        print "polytoken_port=" port
+        print "polytoken_credential=" credential
+        inserted = 1
+      }
+      $1 == "polytoken_session" || $1 == "polytoken_port" || $1 == "polytoken_credential" { next }
+      $1 == "pr" && !inserted { binding() }
+      { print }
+      END { if (!inserted) binding() }
+    ' "$meta" >"$SPAWN_META_TMP" ||
     ! fm_backlog_atomic_transition publish "$SPAWN_META_TMP" "$meta" "task record" "$STATE"; then
     status=1
     rm -f "$SPAWN_META_TMP" 2>/dev/null || true

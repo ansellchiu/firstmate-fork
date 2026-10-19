@@ -2461,6 +2461,16 @@ captain_call_stale_bound() {  # <window-key> <task>
 # Both records of an ordinary crew wait bound it (see task_captain_call_open
 # above): the status line the worker declared, and the backlog hold firstmate
 # recorded once the captain took the work in hand.
+#
+# An UNDECLARED wake that survives that bound is withheld once more when it is the
+# exact notification firstmate already handled and acknowledged inside the
+# suppression horizon (fm_wake_stale_repeat_suppressed owns that judgement and its
+# fail-open rules). The bookkeeping below runs either way, so a withheld repeat still counts
+# as classified; only the costly full-context notification is withheld, and a
+# suppressed wake advances neither bound because it never fired. The pause and
+# rate-limit surfaces deliberately do NOT route through this: their payloads carry
+# a changing age, and their own bounded cadence is already the one owner of how
+# often that wait re-notifies.
 surface_nonterminal_stale() {  # <window> <hash> [dialog-name]
   local win=$1 h=$2 dialog=${3-} key task last declared=1 bounded=1 throttled=1 suppressed=0 until now reason=''
   key=$(window_key "$win")
