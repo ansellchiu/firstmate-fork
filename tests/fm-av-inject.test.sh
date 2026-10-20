@@ -556,8 +556,15 @@ case "\$*" in
 esac
 case "\${1:-}" in
   display-message) printf 'firstmate\n'; exit 0 ;;
-  list-windows) exit 0 ;;
-  has-session|new-session|new-window|kill-window) exit 0 ;;
+  # Target checks confirm a window by name (bin/backends/tmux.sh), so answer
+  # with every window this fake was asked to create.
+  list-windows) cat "$state_file.windows" 2>/dev/null; exit 0 ;;
+  new-window)
+    prev=
+    for a in "\$@"; do [ "\$prev" != -n ] || printf '%s\n' "\$a" >> "$state_file.windows"; prev=\$a; done
+    exit 0
+    ;;
+  has-session|new-session|kill-window) exit 0 ;;
   capture-pane)
     case "\$state" in
       ready)
@@ -625,6 +632,9 @@ SH
   fm_fake_exit0 "$fakebin" treehouse
   cat > "$fakebin/timeout" <<'SH'
 #!/usr/bin/env bash
+# Match both shapes bin/fm-timeout-lib.sh fm_run_timed uses:
+# `timeout -k <grace> <secs> cmd...` and plain `timeout <secs> cmd...`.
+[ "${1:-}" != -k ] || shift 2
 shift
 exec "$@"
 SH
@@ -637,6 +647,8 @@ SH
   chmod +x "$fakebin/av"
   cat > "$fakebin/cursor-agent" <<'SH'
 #!/usr/bin/env bash
+# bin/fm-cursor-lib.sh verifies a launch candidate by its --help identity.
+[ "${1:-}" != --help ] || echo "Start the Cursor Agent"
 exit 0
 SH
   chmod +x "$fakebin/cursor-agent"

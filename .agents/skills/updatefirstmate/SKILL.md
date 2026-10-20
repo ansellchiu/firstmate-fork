@@ -24,6 +24,7 @@ This home has two remotes with different jobs, and the whole skill turns on the 
 Every invocation checks upstream first, and only then updates the fleet from origin.
 `bin/fm-upstream.sh` is the one owner of that check and of the reconciliation mechanics; read its header for exact flags and output lines.
 `bin/fm-private-divergence.sh` owns the inventory of intentional private divergence that the check consults.
+Updating is consumption, not publication: it only fetches from public upstream and pulls from origin, so every home runs it regardless of role, and the firstmate-repository publication boundary (`firstmate-self-repo`) never applies to it.
 
 Pulling the files is only half of it.
 A running agent holds `AGENTS.md` and every skill it has already loaded frozen from the moment it launched, and no verified harness offers a reload, so new bytes on disk change nothing for it until it starts a fresh conversation.

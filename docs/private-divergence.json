@@ -18,7 +18,8 @@
         "README.md",
         "docs/scripts.md",
         "tests/fm-session-start.test.sh",
-        "AGENTS.md"
+        "AGENTS.md",
+        ".agents/skills/agent-skill-trigger-index/SKILL.md"
       ],
       "intent": "Private homes install extensions that register their own load triggers and contribute bounded session-start sections; a failing contributor must never block session start.",
       "provenance": {
@@ -28,7 +29,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "automic-vault-injection",
@@ -54,7 +55,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "token-spend-view",
@@ -104,7 +105,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "rate-limit-classification",
@@ -126,7 +127,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "unmetered-quota-report",
@@ -137,7 +138,8 @@
         "tests/fm-quota-unmetered.test.sh",
         "docs/scripts.md",
         "bin/fm-test-run.sh",
-        ".agents/skills/quota-array-dispatch/SKILL.md"
+        ".agents/skills/quota-array-dispatch/SKILL.md",
+        "docs/verification/dispatch-auth.md"
       ],
       "intent": "Providers quota-axi does not meter still get a quota perspective, so dispatch selection accounts for every candidate instead of silently skipping unmetered ones.",
       "provenance": {
@@ -147,7 +149,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "pi-branch-rotation",
@@ -169,7 +171,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "wake-batch-coalescing",
@@ -191,7 +193,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "spawn-launch-postcondition",
@@ -211,7 +213,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "upstream-reconciliation",
@@ -240,7 +242,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "stale-repeat-suppression",
@@ -264,7 +266,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "auto-standdown",
@@ -296,7 +298,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "daemon-lock-liveness",
@@ -317,7 +319,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "claims-audit",
@@ -339,7 +341,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "batched-captain-answers",
@@ -357,7 +359,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "scout-research-standards",
@@ -376,7 +378,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "delivery-posture-gate",
@@ -396,7 +398,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "pi-primary-growth",
@@ -433,7 +435,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "portfolio-attention-limit",
@@ -463,7 +465,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "herdr-native-submit-proof",
@@ -482,7 +484,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "pr-forge-state-classification",
@@ -501,7 +503,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "teardown-dedupe-marker-sync",
@@ -521,7 +523,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "config-inherit-single-owner",
@@ -540,7 +542,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "changed-selection-deletions",
@@ -557,7 +559,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "away-escalation-delivery",
@@ -579,7 +581,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "catch-all-marker-crosscheck",
@@ -599,7 +601,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "rearm-resurface-empty-queue",
@@ -607,9 +609,10 @@
       "paths": [
         "bin/fm-wake-lib.sh",
         "tests/fm-watch-arm.test.sh",
-        "tests/fm-watcher-lock.test.sh"
+        "tests/fm-watcher-lock.test.sh",
+        "tests/fm-watch-checkpoint.test.sh"
       ],
-      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued.",
+      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued. Upstream's never-announced-recovery checkpoint case therefore queues a real durable wake before asserting the one announcement.",
       "provenance": {
         "commits": [
           "950421c7"
@@ -617,7 +620,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "herdr-native-idle-unknown",
@@ -636,7 +639,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "session-lock-harness-case",
@@ -653,7 +656,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "autoarm-actionable-rewake",
@@ -672,7 +675,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "mail-plane-input-hardening",
@@ -730,9 +733,11 @@
       "area": "Runtime backends",
       "paths": [
         "tests/fm-control-herdr-smoke.test.sh",
-        "docs/agent-control.md"
+        "docs/agent-control.md",
+        "tests/fm-backend-herdr-presentation-e2e.test.sh",
+        "bin/fm-spawn.sh"
       ],
-      "intent": "The real-herdr relaunch smoke drives a replacement harness that reports and then releases a native Herdr agent identity, and waits for that release before asserting re-homing, so the relaunch path is proven against the native agent registry the private submit and idle classification reads rather than against a pane that never carried an identity.",
+      "intent": "The real-herdr relaunch smoke drives a replacement harness that reports and then releases a native Herdr agent identity, and waits for that release before asserting re-homing, so the relaunch path is proven against the native agent registry the private submit and idle classification reads rather than against a pane that never carried an identity. The real-Herdr presentation e2e launches the same long-lived stand-in agent (herdr_test_agent_command) rather than a bare sleep loop, so it too exercises the native agent registry. An exact-resume recovery waits for the Herdr presentation session lock within a bound long enough to outlast a live holder's whole spawn (including held-pool-slot retries) and refuses only past it, so upstream's refuse-by-default contention case asserts that bounded wait; upstream's --herdr-resume-lock-wait remains as the explicit unbounded opt-in.",
       "provenance": {
         "commits": [
           "0a6e6a7"
@@ -740,7 +745,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "merge-plane-completion-receipts",
@@ -755,9 +760,11 @@
         "tests/fm-pr-merge.test.sh",
         "tests/fm-remote-secondmate-parent-binding.test.sh",
         "tests/fm-public-followup.test.sh",
-        "tests/fm-teardown-endpoint-safety.test.sh"
+        "tests/fm-teardown-endpoint-safety.test.sh",
+        ".agents/skills/ship-landing/SKILL.md",
+        "tests/fm-project-capacity.test.sh"
       ],
-      "intent": "Every landing path writes a typed completion receipt before reporting success and records PR assignment to the authenticated account, and a closed-unmerged PR is reported as such, so teardown can refuse a task whose landing was never proved and the captain sees every review-ready PR in the GitHub inbox.",
+      "intent": "Every landing path writes a typed completion receipt before reporting success and records PR assignment to the authenticated account, and a closed-unmerged PR is reported as such, so teardown can refuse a task whose landing was never proved and the captain sees every review-ready PR in the GitHub inbox. Upstream tests that clean up a landed ship task record its receipt first.",
       "provenance": {
         "commits": [
           "63a7fcd",
@@ -769,7 +776,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "branch-outcome-repeat-suppression",
@@ -791,7 +798,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "unreadable-posture-refusal",
@@ -814,7 +821,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "calm-composer-shapes",
@@ -823,9 +830,10 @@
         "docs/calm.md",
         "docs/calm-mode-feasibility.md",
         "tests/fm-composer-lib.test.sh",
-        "docs/tmux-backend.md"
+        "docs/tmux-backend.md",
+        "tests/fm-tmux-submit-busy.test.sh"
       ],
-      "intent": "Calm and the shared composer classifier read Pi 0.85+'s titled composer border and working indicator, hiding the working border while keeping stock parity, and the tmux baseline-gated submit conversion stays scoped to the shapes actually captured.",
+      "intent": "Calm and the shared composer classifier read Pi 0.85+'s titled composer border and working indicator, hiding the working border while keeping stock parity, and the tmux baseline-gated submit conversion stays scoped to the shapes actually captured. The tmux plane's away-mode injection boundary is proven against the committed Pi 0.85 captures, so a generating Pi pane never reads `empty` there even though the busy shapes stay unactivated on tmux.",
       "provenance": {
         "commits": [
           "86f3133",
@@ -834,7 +842,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "secondmate-same-origin-worktree",
@@ -843,7 +851,8 @@
         "bin/fm-claude-trust.sh",
         "tests/fm-claude-trust.test.sh",
         "docs/verification/runtime-backends.md",
-        "tests/fm-spawn-pool-base-freshen.test.sh"
+        "tests/fm-spawn-pool-base-freshen.test.sh",
+        "docs/orca-backend.md"
       ],
       "intent": "A secondmate home may launch Claude workers in a worktree of a same-origin clone it was handed, with trust pre-registered for that worktree, instead of refusing the launch scope.",
       "provenance": {
@@ -853,7 +862,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "bearings-board-private",
@@ -879,7 +888,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "pi-idle-observer",
@@ -895,7 +904,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "contributions-read-concurrency",
@@ -912,7 +921,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "fleet-health-procevent",
@@ -944,7 +953,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "lint-root-memory-cap",
@@ -981,7 +990,7 @@
       },
       "upstreamEquivalent": "unknown",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "supervision-host-suite-split",
@@ -1003,7 +1012,7 @@
       },
       "upstreamEquivalent": "unknown",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "pi-deferred-close-test-removal",
@@ -1020,7 +1029,8 @@
         ]
       },
       "upstreamEquivalent": "unknown",
-      "disposition": "retain"
+      "disposition": "retain",
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "orphan-watch-arm-reap",
@@ -1056,7 +1066,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     },
     {
       "id": "treehouse-ci-lease-pin",
@@ -1076,22 +1086,73 @@
       "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
     },
     {
+      "id": "cursor-placeholder-busy-token",
+      "area": "Cursor composer and secondmate restart",
+      "paths": [
+        ".agents/skills/harness-adapters/references/harness/cursor.md",
+        "bin/fm-secondmate-restart.sh",
+        "tests/fm-secondmate-restart.test.sh"
+      ],
+      "intent": "Cursor's dim right-aligned `ctrl+c to stop` busy token is dropped from the plain mid-turn placeholder row before the placeholder match, so an idle Cursor composer reads empty while typed text stays pending, and bin/fm-secondmate-restart.sh holds the per-mate liveness lock across its stop and relaunch so the liveness sweep never reads the intentional stop as a missing endpoint and races a second spawn.",
+      "provenance": {
+        "commits": [
+          "8aaca68e"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+    },
+    {
+      "id": "relaunch-pr-poll-authentication",
+      "area": "Worker relaunch task records",
+      "paths": [
+        "bin/fm-spawn.sh",
+        "tests/fm-control-relaunch.test.sh"
+      ],
+      "intent": "Every spawn-owned task-record write keeps the preserved PR identity block (pr=, pr_head=, trailing x_* lines) last, so fm_pr_metadata_identity_parse still authenticates an armed PR poll after a relaunch: control_relaunch_tx is written before the preserved block, and the traceparent and Polytoken session bindings are inserted ahead of the first pr= line rather than appended after it.",
+      "provenance": {
+        "commits": [
+          "a8a5486b"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+    },
+    {
+      "id": "inherited-ci-fixture-repairs",
+      "area": "Test fixtures",
+      "paths": [
+        "tests/fm-secondmate-liveness.test.sh",
+        "tests/fm-control-relaunch.test.sh"
+      ],
+      "intent": "Fixtures repaired when the fork's inherited red CI lanes were fixed: the fake tmux reports the agent's command once a window is spawned and forgets it when killed, so a liveness re-probe after relaunch sees the mate live; the Herdr relaunch fixture models a live Pi foreground process; and in-place sed uses the portable -i.bak form.",
+      "provenance": {
+        "commits": [
+          "55b57bec"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+    },
+    {
       "id": "residual-private-drift",
       "area": "Residual",
       "paths": [
         "bin/fm-nm-run-lib.sh",
-        "bin/fm-promote.sh",
-        "docs/verification/dispatch-auth.md"
+        "bin/fm-promote.sh"
       ],
-      "intent": "Residual private behavior carried by the Route B reconciliation: a live validation run bound to the worktree displaces an older terminal record, promoted ship instructions carry the incidental-findings command bound to this home, and dispatch-auth verification evidence. Needs a fresh look on whether each still earns divergence.",
+      "intent": "Residual private behavior carried by the Route B reconciliation: a live validation run bound to the worktree displaces an older terminal record, and promoted ship instructions carry the incidental-findings command bound to this home. Reviewed against upstream 45dd50a5: upstream carries neither, so both still earn divergence (the dispatch-auth verification evidence moved to unmetered-quota-report, which it supports).",
       "provenance": {
         "commits": [
           "f98eee4"
         ]
       },
       "upstreamEquivalent": "none",
-      "disposition": "needs-review",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "disposition": "retain",
+      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
     }
   ]
 }

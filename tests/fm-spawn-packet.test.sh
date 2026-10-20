@@ -76,6 +76,9 @@ SH
     chmod +x "$fakebin/tmux"
     mkdir -p "$proj"
     git -C "$proj" init -q || fail "could not initialize project fixture"
+    # A project with no commit is refused for that reason first; give it one.
+    git -C "$proj" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init \
+      || fail "could not commit project fixture"
   fi
   printf '%s|%s|%s|%s|%s|%s\n' "$home" "$proj" "$wt" "$fakebin" "$case_dir" "$id"
 }
