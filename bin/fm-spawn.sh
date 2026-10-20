@@ -2379,9 +2379,10 @@ omp_model_validate() { # <omp-bin> <model>
 # bound (bin/fm-timeout-lib.sh) with stdin detached: a stalled fetch or a
 # sign-in prompt can never block the spawn before any pane exists. An
 # unreachable listing establishes nothing (harness-adapters
-# model-and-effort.md) and launches unvalidated with a notice.
-agy_model_validate() {  # <agy-bin> <model>
-  local bin=$1 model=$2 listing rc=0 bound=${FM_AGY_MODELS_TIMEOUT:-15}
+# model-and-effort.md) and launches unvalidated with a notice. A base id whose
+# <model>-<effort> suffix is listed is rewritten to that id (sets MODEL).
+agy_model_validate() {  # <agy-bin> <model> [effort]
+  local bin=$1 model=$2 effort=${3:-} listing rc=0 bound=${FM_AGY_MODELS_TIMEOUT:-15}
   case "$bound" in ''|*[!0-9]*|0*) bound=15 ;; esac
   [ -n "$model" ] && [ "$model" != default ] || return 0
   listing=$(fm_run_timed "$bound" "$bin" models 2>/dev/null < /dev/null) || rc=$?
@@ -2396,6 +2397,14 @@ agy_model_validate() {  # <agy-bin> <model>
   if printf '%s\n' "$listing" | awk '{print $1}' | grep -qxF -- "$model"; then
     return 0
   fi
+  case "$effort" in
+  low | medium | high)
+    if printf '%s\n' "$listing" | awk '{print $1}' | grep -qxF -- "$model-$effort"; then
+      MODEL=$model-$effort
+      return 0
+    fi
+    ;;
+  esac
   echo "error: agy model '$model' is not listed by 'agy models'; choose a listed id or omit --model" >&2
   return 1
 }
@@ -2930,7 +2939,7 @@ if [ "$HARNESS" = omp ]; then
   omp_model_validate "$OMP_BIN" "$MODEL" || exit 1
 fi
 if [ "$HARNESS" = agy ]; then
-  agy_model_validate "$AGY_BIN" "$MODEL" || exit 1
+  agy_model_validate "$AGY_BIN" "$MODEL" "$EFFORT" || exit 1
 fi
 # polytoken's model validation composes firstmate's model and effort axes into
 # the launch model reference (bin/fm-polytoken-lib.sh owns the reasoning): the
