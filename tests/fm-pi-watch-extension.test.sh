@@ -76,6 +76,116 @@ export const Type = {
 JS
 }
 
+# Replay only the confirmation decision: no arm script or live watcher runs.
+# The two recorded failures supply the exact dead-pid/recovery shapes.
+test_pi_dead_restoration_requires_proven_newer_marker() {
+  local repo home plugin out status
+  repo="$TMP_ROOT/pi-dead-restoration-root"
+  home="$TMP_ROOT/pi-dead-restoration-home"
+  mkdir -p "$home/state" "$home/config"
+  install_pi_watch_extension_fixture "$repo"
+  plugin="$repo/.pi/extensions/fm-primary-pi-watch.ts"
+  out=$(PLUGIN="$plugin" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_ROOT_OVERRIDE="$repo" node --input-type=module 2>&1 <<'EOF'
+import assert from "node:assert/strict";
+import childProcess from "node:child_process";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const originalSpawnSync = childProcess.spawnSync;
+const originalKill = process.kill;
+let watcherState = "dead";
+let status = 1;
+let executionError = false;
+childProcess.spawnSync = () => {
+  if (executionError) throw new Error("offline execution failure");
+  return { status, stderr: "offline rejection" };
+};
+syncBuiltinESMExports();
+process.kill = (_pid, signal) => {
+  assert.equal(signal, 0, "confirmation must only probe liveness");
+  if (watcherState === "live") return true;
+  throw Object.assign(new Error(watcherState), { code: watcherState === "dead" ? "ESRCH" : "EPERM" });
+};
+try {
+  const { confirmHandlingDelivery } = await import(pathToFileURL(process.env.PLUGIN).href);
+  const marker = `${process.env.FM_HOME}/state/.watcher-down`;
+  const failures = [];
+  function check(label, recovery, markerText, expected, pidState = "dead") {
+    rmSync(marker, { force: true, recursive: true });
+    if (markerText !== null) writeFileSync(marker, markerText);
+    watcherState = pidState;
+    const result = confirmHandlingDelivery(recovery);
+    try {
+      if (expected === "superseded") {
+        assert.deepEqual(result, { ok: false, detail: "", superseded: true });
+      } else if (expected === "confirmed") {
+        assert.deepEqual(result, { ok: true, detail: "" });
+      } else {
+        assert.equal(result.ok, false);
+        assert.equal(result.superseded, undefined);
+        assert.match(result.detail, /^watcher: FAILED - handling delivery confirmation /);
+      }
+    } catch {
+      failures.push(`${label}: expected ${expected}, got ${JSON.stringify(result)}`);
+    }
+  }
+  const first = { generation: "14432.1793752187.QJ6qvU", watcherPid: "9418" };
+  const second = { generation: "9418.1793752263.E6cD7f", watcherPid: "43849" };
+  for (const recovery of [first, second]) {
+    const newer = recovery === first
+      ? `announced:handling:${second.generation}\n`
+      : "announced:handling:43849.1793752300.offline\n";
+    check(`recorded ${recovery.generation}`, recovery, newer, "superseded");
+    for (const phase of ["pending", "announced", "acked"]) {
+      for (const kind of ["handling", "downtime"]) {
+        check("advanced marker", recovery, newer.replace("announced:handling:", `${phase}:${kind}:`), "superseded");
+        check("same generation", recovery, `${phase}:${kind}:${recovery.generation}\n`, "failed");
+      }
+    }
+    check("live pid", recovery, newer, "failed", "live");
+    check("unknown pid liveness", recovery, newer, "failed", "unknown");
+    check("missing marker", recovery, null, "failed");
+    check("older marker", recovery, "announced:handling:14432.1793752100.old\n", "failed");
+    const epoch = recovery.generation.split(".")[1];
+    check("unordered same-second generation", recovery, `acked:handling:123.${epoch}.other\n`, "failed");
+    for (const malformed of ["", "corrupt\n", newer.trimEnd(), `${newer}extra\n`, `${newer}\n`, "pending:handling:not-minted\n"]) {
+      check("malformed marker", recovery, malformed, "failed");
+    }
+    check("unreadable marker", recovery, null, "failed");
+    mkdirSync(marker);
+    assert.match(confirmHandlingDelivery(recovery).detail, /^watcher: FAILED/);
+    rmSync(marker, { recursive: true });
+    const target = `${marker}.target`;
+    writeFileSync(target, newer);
+    symlinkSync(target, marker);
+    assert.match(confirmHandlingDelivery(recovery).detail, /^watcher: FAILED/);
+    rmSync(marker);
+    status = 0;
+    check("successful confirmation", recovery, newer, "confirmed", "live");
+    status = 3;
+    check("protocol superseded", recovery, null, "superseded", "live");
+    status = null;
+    check("no exit status", recovery, newer, "failed");
+    status = 1;
+    executionError = true;
+    check("execution error", recovery, newer, "failed");
+    executionError = false;
+  }
+  assert.deepEqual(failures, []);
+} finally {
+  process.kill = originalKill;
+  childProcess.spawnSync = originalSpawnSync;
+  syncBuiltinESMExports();
+}
+EOF
+)
+  status=$?
+  expect_code 0 "$status" "Pi must suppress only proven dead-pid/newer-marker restorations: $out"
+  [ -z "$out" ] || fail "Pi dead restoration test printed output: $out"
+  pass "Pi dead restoration decisions suppress superseded alarms and preserve real failures"
+}
+
 test_pi_extension_reports_external_healthy_watcher() {
   local repo home plugin out status
   repo="$TMP_ROOT/pi-external-healthy-root"
@@ -6507,6 +6617,7 @@ EOF
   pass "OpenCode turn-end guard survives an encoder that never reads stdin"
 }
 
+test_pi_dead_restoration_requires_proven_newer_marker
 test_pi_extension_reports_external_healthy_watcher
 test_pi_tool_returns_agent_tool_result
 test_pi_redundant_tool_call_is_owned_noop
