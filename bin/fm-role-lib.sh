@@ -222,12 +222,18 @@ fm_role_git_common_dir() {
 }
 
 # fm_role_publication_target <git-dir> - the repository a default publication
-# (gh pr/issue, a no-mistakes PR) would reach: the first of upstream, github,
-# origin that is configured, in the order gh prefers, normalized to
-# host/owner/repo or path:<abs>. Empty when the repo has no such remote.
+# would reach: remote.pushDefault, the current branch's configured remote,
+# then origin, github, upstream, normalized to host/owner/repo or path:<abs>.
+# Empty when the repo has no candidate remote.
 fm_role_publication_target() {
-  local dir=$1 remote url=
-  for remote in upstream github origin; do
+  local dir=$1 remote url='' push_default branch branch_remote=''
+  push_default=$(git -C "$dir" config --get remote.pushDefault 2>/dev/null) || push_default=
+  branch=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || branch=
+  if [ -n "$branch" ]; then
+    branch_remote=$(git -C "$dir" config --get "branch.$branch.remote" 2>/dev/null) || branch_remote=
+  fi
+  for remote in "$push_default" "$branch_remote" origin github upstream; do
+    [ -n "$remote" ] || continue
     if url=$(git -C "$dir" remote get-url "$remote" 2>/dev/null) && [ -n "$url" ]; then
       break
     fi
