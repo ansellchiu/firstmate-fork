@@ -859,6 +859,66 @@ EOF
   pass "fm-startup-network: a held publish lock ends the worker inside its budget with a failed-rerun record"
 }
 
+# The locked worker is detached on purpose, so the shell that started it is not
+# what ends it. When that shell was the fleet-lock holder and it is gone, the
+# sweep has nobody left to serve and must not keep running until its own budget.
+reap_pid_tree() {  # <pid>
+  local pid=$1 child
+  case "$pid" in ''|*[!0-9]*) return 0 ;; esac
+  for child in $(ps -axo pid=,ppid= | awk -v p="$pid" '$2 == p { print $1 }'); do
+    reap_pid_tree "$child"
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
+test_locked_worker_stops_when_its_lock_pid_dies() {
+  local rec home root log worker_pid report
+  rec=$(new_world lock-pid-dies)
+  IFS='|' read -r home root log <<EOF
+$rec
+EOF
+
+  # A separate session owns the lock, starts the detached worker, and exits
+  # only once the sweep is actually in progress. The worker's parent is gone
+  # with that session; the lock file still names it.
+  worker_pid=$(bash -c '
+    home=$1
+    root=$2
+    log=$3
+    printf "%s\n" "$$" > "$home/state/.lock"
+    PATH="$root/bin:$PATH" FM_FAKE_HARNESS_PID="$$" \
+      FM_HOME="$home" FM_ROOT_OVERRIDE="$root" \
+      FM_FAKE_BOOTSTRAP_LOG="$log" FM_FAKE_BOOTSTRAP_SLEEP=30 \
+      FM_FAKE_BOOTSTRAP_OUT="sweep finished" \
+      "$root/bin/fm-startup-network.sh" start --locked 1 --harvest-pid "$$" >/dev/null \
+      || exit 1
+    waited=0
+    while ! grep -q "network=only" "$log" 2>/dev/null && [ "$waited" -lt 80 ]; do
+      sleep 0.1
+      waited=$((waited + 1))
+    done
+    grep -q "network=only" "$log" || exit 1
+    sed -n "s/^pid=//p" "$home/state/.startup-network.status"
+  ' _ "$home" "$root" "$log") || fail "the lock-holding session never started the sweep"
+  case "$worker_pid" in
+    ''|*[!0-9]*) fail "the detached worker did not record a pid: $worker_pid" ;;
+  esac
+
+  if ! await_pid_exit "$worker_pid" 50; then
+    reap_pid_tree "$worker_pid"
+    fail "the locked worker was still running 5s after its lock pid died"
+  fi
+  if grep -q "sweep finished" "$log" 2>/dev/null; then
+    fail "the sweep ran to completion after its lock pid died"
+  fi
+  report=$(run_stage "$home" "$root" report)
+  assert_contains "$report" "is gone" \
+    "a worker that stopped for a dead lock holder did not say so: $report"
+  assert_contains "$report" "pid $(cat "$home/state/.lock")" \
+    "the stop notice did not name the dead lock holder"
+  pass "fm-startup-network: a locked worker stops when its lock pid dies"
+}
+
 test_wait_fails_without_a_published_stage
 test_start_returns_without_holding_the_callers_stdout
 test_harvest_acknowledgement_suppresses_the_wake_and_no_claim_produces_it
@@ -880,4 +940,5 @@ test_timings_are_published_and_only_the_on_demand_report_prints_them
 test_a_bounded_run_still_publishes_the_timings_it_managed_to_record
 test_the_timing_artifact_cannot_carry_a_command_line_or_forge_records
 test_a_held_publish_lock_cannot_keep_the_worker_alive_past_its_budget
+test_locked_worker_stops_when_its_lock_pid_dies
 echo "# fm-startup-network.test.sh: all assertions passed"
