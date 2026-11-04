@@ -4,6 +4,10 @@
 # Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] [--attention-override] [--herdr-resume-lock-wait]
 #        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] [--attention-override] [--herdr-resume-lock-wait]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] --secondmate
+#   <project-dir> is required on the ship and scout forms. A call with only a
+#   task id and --scout is not a supported form: it is refused before any task
+#   work with a line naming the missing project directory. The secondmate home
+#   positional stays optional.
 #   --mode and --yolo are this task's delivery contract, REQUIRED for every ship
 #   spawn and refused on --scout and --secondmate spawns. Firstmate resolves both
 #   per task at intake (AGENTS.md section 7); data/projects.md holds the captain's
@@ -1901,6 +1905,15 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   done
   exit "$rc"
 fi
+# A fresh ship or scout has no record to take a project directory from.
+# Refusing here, before task-id checks and any state, lock, or endpoint work,
+# is what keeps `fm-spawn.sh <task-id> --scout` from dying under set -u on the
+# positional read below. Batch pairs already exited above. Relaunch and
+# secondmate resolve their directory from the task record or registry.
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "${#POS[@]}" -lt 2 ]; then
+  echo "error: missing project directory; pass <project-dir> after the task id" >&2
+  exit 1
+fi
 ID=${POS[0]}
 fm_task_id_creation_valid "$ID" || {
   echo "error: invalid task id" >&2
@@ -2297,7 +2310,10 @@ elif [ "$KIND" = secondmate ]; then
     ;;
   esac
 else
-  PROJ=${POS[1]}
+  # The early refusal above guarantees this positional for a fresh ship or
+  # scout. The default expansion is what keeps a missed guard from dying
+  # under set -u; an empty directory still fails the project check below.
+  PROJ=${POS[1]:-}
   ARG3=${POS[2]:-}
 fi
 [ -z "$HARNESS_ARG" ] || ARG3=$HARNESS_ARG

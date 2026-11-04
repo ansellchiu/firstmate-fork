@@ -133,6 +133,47 @@ test_batch_requires_the_shared_delivery_contract() {
   pass "batch dispatch requires the shared ship delivery contract before any pair runs"
 }
 
+# Argument-parse cases for a single positional. A scout invocation with only a
+# task id must refuse the missing project directory before any task record
+# exists, and must not die on an unset positional. A project directory that is
+# present must get past that refusal even when the directory is absent.
+test_one_argument_form_refuses_missing_project_directory() {
+  local label args expect out status home
+  home="$TMP_ROOT/onearg-home"
+  mkdir -p "$home/data" "$home/state" "$home/config"
+  while IFS='|' read -r label args expect; do
+    [ -n "$label" ] || continue
+    # shellcheck disable=SC2086  # args is an intentional word-split arg list
+    out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+      FM_CONFIG_OVERRIDE="$home/config" FM_SPAWN_NO_GUARD=1 FM_BACKEND=tmux \
+      "$SPAWN" $args 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] || fail "$label: expected a non-zero exit"
+    printf '%s\n' "$out" | grep -F 'unbound variable' >/dev/null \
+      && fail "$label: died on an unset positional: $out"
+    if [ -n "$expect" ]; then
+      printf '%s\n' "$out" | grep -Fx "error: missing project directory; pass <project-dir> after the task id" >/dev/null \
+        || fail "$label: expected the missing project directory refusal, got: $out"
+      [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq 1 ] || fail "$label: refusal was not one line: $out"
+    else
+      printf '%s\n' "$out" | grep -F 'missing project directory' >/dev/null \
+        && fail "$label: a supplied project directory was refused as missing: $out"
+    fi
+    assert_absent "$home/state/onearg-scout-s1.meta" "$label: refusal wrote task metadata"
+  done <<'ROWS'
+one-argument scout|onearg-scout-s1 --scout|missing
+one-argument scout with flags|onearg-scout-s1 --scout --harness claude --base-branch main|missing
+one-argument ship|onearg-ship-s2 --mode no-mistakes --yolo off|missing
+scout with a project directory|onearg-scout-s1 /nonexistent/project-dir --scout|
+ROWS
+  out=$("$SPAWN" --help 2>&1)
+  printf '%s\n' "$out" | grep -F 'fm-spawn.sh <task-id> <project-dir> --scout' >/dev/null \
+    || fail "usage no longer shows the required project directory on the scout form"
+  printf '%s\n' "$out" | grep -F 'fm-spawn.sh <task-id> --scout' >/dev/null \
+    && fail "usage advertises the one-argument scout form"
+  pass "one-argument scout form refuses the missing project directory without crashing"
+}
+
 # A scout batch has no delivery contract to share, so the flags are refused rather
 # than accepted and ignored.
 test_scout_batch_refuses_delivery_flags() {
@@ -148,5 +189,6 @@ test_scout_batch_refuses_delivery_flags() {
 test_batch_dispatches_every_pair
 test_batch_mode_boundaries
 test_batch_requires_the_shared_delivery_contract
+test_one_argument_form_refuses_missing_project_directory
 test_scout_batch_refuses_delivery_flags
 test_projects_path_scoping
