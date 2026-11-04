@@ -1,0 +1,18 @@
+## A dead pid, marker advanced
+raw: status=1 stdout="" stderr=""
+ext: {"ok":false,"detail":"","superseded":true}
+## B1 live pid, marker advanced
+raw: status=1 stdout="" stderr=""
+ext: {"ok":false,"detail":"watcher: FAILED - handling delivery confirmation was rejected (status=1 generation=100.1000.aaa watcherPid=35936)"}
+## B2 dead pid, marker unchanged
+raw: status=1 stdout="" stderr=""
+ext: {"ok":false,"detail":"watcher: FAILED - handling delivery confirmation was rejected (status=1 generation=100.1000.aaa watcherPid=35920)"}
+## B3 dead pid, marker older
+raw: status=1 stdout="" stderr=""
+ext: {"ok":false,"detail":"watcher: FAILED - handling delivery confirmation was rejected (status=1 generation=100.2000.aaa watcherPid=35920)"}
+## B4 dead pid, marker missing
+raw: status=1 stdout="" stderr=""
+ext: {"ok":false,"detail":"watcher: FAILED - handling delivery confirmation was rejected (status=1 generation=100.1000.aaa watcherPid=35920)"}
+## B5 dead pid, marker malformed
+raw: status=1 stdout="" stderr=""
+ext: {"ok":false,"detail":"watcher: FAILED - handling delivery confirmation was rejected (status=1 generation=100.1000.aaa watcherPid=35920)"}

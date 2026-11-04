@@ -1,0 +1,8 @@
+ok - OpenCode established clean closes stop at the configured retry limit
+ok - OpenCode close handler verifies session-lock ownership before successor launch
+ok - OpenCode watcher plugin coordinates with the turn-end guard
+ok - OpenCode healthy arm output does not suppress the turn-end guard
+ok - a catch-up burst delivers one follow-up and leaves every durable row queued
+ok - an accepted but unconsumed follow-up cannot mute the captain
+ok - a wake is delivered without its burst count when the count wedges or cannot be taken
+ok - OpenCode turn-end guard survives an encoder that never reads stdin
