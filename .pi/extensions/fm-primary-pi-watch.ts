@@ -38,7 +38,7 @@
 // consumption changes.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
@@ -408,6 +408,73 @@ function appendExtensionLog(detail: string): void {
     renameSync(temporary, extensionLog);
   } catch {
     // Diagnostic only: never fail supervision for observability.
+  }
+}
+
+// A dead restoration child cannot pass the arm's live-lock precondition, so
+// it never reaches the shell's generation-mismatch verdict. Prove supersession
+// here without changing the arm protocol; uncertainty must still report FAILED.
+function restorationIsSuperseded(recovery: { generation: string; watcherPid: string }): boolean {
+  if (!/^[1-9][0-9]*$/.test(recovery.watcherPid)) return false;
+  const pid = Number(recovery.watcherPid);
+  if (!Number.isSafeInteger(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    // EPERM and other probe errors are not evidence that the child exited.
+    if (nodeErrorCode(error) !== "ESRCH") return false;
+  }
+  try {
+    const recoveryMarker = `${state}/.watcher-down`;
+    if (!lstatSync(recoveryMarker).isFile()) return false;
+    const token = readFileSync(recoveryMarker, "utf8");
+    const current = /^(?:pending|announced|acked):(?:handling|downtime):([A-Za-z0-9._-]+)\n$/.exec(token);
+    if (!current || current[0] !== token) return false;
+    // Generations are minted as pid.epoch.suffix. Different tokens minted in
+    // the same second have no provable order, so keep their rejection visible.
+    const minted = /^[1-9][0-9]*\.([0-9]+)\.[A-Za-z0-9_-]+$/;
+    const previous = minted.exec(recovery.generation);
+    const next = minted.exec(current[1]);
+    return previous !== null && previous[0] === recovery.generation && next !== null &&
+      BigInt(next[1]) > BigInt(previous[1]);
+  } catch {
+    return false;
+  }
+}
+
+export function confirmHandlingDelivery(recovery: { generation: string; watcherPid: string }): {
+  ok: boolean;
+  detail: string;
+  superseded?: boolean;
+} {
+  try {
+    const result = spawnSync(
+      "bash",
+      [armScript, "--handling-delivered", recovery.generation, "--watcher-pid", recovery.watcherPid],
+      {
+        cwd: fmRoot,
+        encoding: "utf8",
+        env: { ...process.env, FM_HOME: fmHome, FM_STATE_OVERRIDE: state, FM_ROOT_OVERRIDE: fmRoot },
+      },
+    );
+    if (result.status === 0) return { ok: true, detail: "" };
+    if (result.status === 3 || (result.status !== null && restorationIsSuperseded(recovery))) {
+      // The marker advanced past this restoration's generation mid-restore,
+      // so a newer pipeline owns the episode now: superseded, not rejected.
+      return { ok: false, detail: "", superseded: true };
+    }
+    const stderr = (result.stderr || "").trim();
+    return {
+      ok: false,
+      detail: `watcher: FAILED - handling delivery confirmation was rejected (status=${result.status ?? "none"} generation=${recovery.generation} watcherPid=${recovery.watcherPid})${stderr ? `\n${stderr}` : ""}`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      detail: `watcher: FAILED - handling delivery confirmation could not be executed (generation=${recovery.generation} watcherPid=${recovery.watcherPid})\n${message}`,
+    };
   }
 }
 
@@ -786,41 +853,6 @@ export default function (pi: ExtensionAPI) {
         schedulePendingCleanup(owner);
       }
       return;
-    }
-  }
-
-  function confirmHandlingDelivery(recovery: { generation: string; watcherPid: string }): {
-    ok: boolean;
-    detail: string;
-    superseded?: boolean;
-  } {
-    try {
-      const result = spawnSync(
-        "bash",
-        [armScript, "--handling-delivered", recovery.generation, "--watcher-pid", recovery.watcherPid],
-        {
-          cwd: fmRoot,
-          encoding: "utf8",
-          env: { ...process.env, FM_HOME: fmHome, FM_STATE_OVERRIDE: state, FM_ROOT_OVERRIDE: fmRoot },
-        },
-      );
-      if (result.status === 0) return { ok: true, detail: "" };
-      if (result.status === 3) {
-        // The marker advanced past this restoration's generation mid-restore,
-        // so a newer pipeline owns the episode now: superseded, not rejected.
-        return { ok: false, detail: "", superseded: true };
-      }
-      const stderr = (result.stderr || "").trim();
-      return {
-        ok: false,
-        detail: `watcher: FAILED - handling delivery confirmation was rejected (status=${result.status ?? "none"} generation=${recovery.generation} watcherPid=${recovery.watcherPid})${stderr ? `\n${stderr}` : ""}`,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        ok: false,
-        detail: `watcher: FAILED - handling delivery confirmation could not be executed (generation=${recovery.generation} watcherPid=${recovery.watcherPid})\n${message}`,
-      };
     }
   }
 
