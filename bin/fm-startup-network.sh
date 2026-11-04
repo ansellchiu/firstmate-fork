@@ -616,8 +616,11 @@ EOF
         sweep=$!
         trap "stop_sweep; exit 124" TERM INT HUP
         rc=0
+        # set -m makes bash print "[1]+ Done ..." job notices to its own stderr,
+        # which is the report file, so the monitor runs with stderr discarded.
         # A finished child is a zombie until wait, and kill -0 is true for a
         # zombie, so the loop watches process state and reaps with wait after.
+        {
         while :; do
           stat=$(ps -o stat= -p "$sweep" 2>/dev/null | tr -d "[:space:]" || true)
           case "$stat" in
@@ -630,6 +633,7 @@ EOF
           sleep 0.2
         done
         wait "$sweep" || rc=$?
+        } 2>/dev/null
         exit "$rc"
       ' _ "$SCRIPT_DIR" "$lock_pid" >"$out" 2>&1 || rc=$?
   else
