@@ -603,4 +603,19 @@ test_recorded_line_stays_recorded_across_a_resolve() {
   pass "a recorded line stays recorded across a later resolve"
 }
 
+test_resolved_lines_close_a_gate_key_and_a_new_decision_reopens_it() {
+  local dir f key='nm-01JABC-fix_review' open
+  dir=$(case_dir gate-key-resolved)
+  f="$dir/t.status"
+  printf 'needs-decision [at=1] [key=%s]: ask-user findings=a,b file=/x\n' "$key" > "$f"
+  printf 'resolved [at=2] [key=%s]: answered\n' "$key" >> "$f"
+  printf 'resolved [at=3] [key=%s]: answered again\n' "$key" >> "$f"
+  assert_fold "$f" "" "one needs-decision then two resolved lines for the same key"
+  printf 'needs-decision [at=4] [key=%s]: new findings\n' "$key" >> "$f"
+  open=$(printf '%s\tneeds-decision\tnew findings' "$key")
+  assert_fold "$f" "$open" "a later needs-decision with the same key reopens it"
+  pass "resolved lines close a gate key and a later needs-decision reopens it"
+}
+
 test_recorded_line_stays_recorded_across_a_resolve
+test_resolved_lines_close_a_gate_key_and_a_new_decision_reopens_it
