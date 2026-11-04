@@ -640,7 +640,7 @@ The file holds exactly one directive line, with blank lines and `#` comment line
 | `maintainer <host>/<owner>/<repo>` | This home may dispatch publishing work that targets the one named firstmate upstream. |
 
 A scope names the publication target repository (where a pull request lands), normalized to lowercase for comparison, not a push destination.
-A fork maintainer contributing to the parent repository uses per-task consent rather than a second standing scope.
+A fork home may hold a standing maintainer scope naming its fork; contributing to the parent repository uses per-task consent rather than a second standing scope.
 Write the primary home's file by hand; firstmate never grants itself a role, and the file never travels through git.
 Supported secondmate propagation writes or removes the inherited copy as described below.
 A malformed, unreadable, or symlinked file - including one with a second directive anywhere - resolves to user/operator; the role fails closed rather than guessing.
@@ -650,7 +650,7 @@ Role is never inferred from GitHub identity, forge permissions, remotes, reposit
 `bin/fm-role.sh report` prints the resolved role with no network call, and the session-start digest shows it in the HOME ROLE subsection.
 
 `bin/fm-role-lib.sh` owns the fail-closed parser, self-repository detection, and the gate that `bin/fm-brief.sh`, `bin/fm-spawn.sh`, and `bin/fm-promote.sh` apply.
-The publication target is selected from the first configured remote in the order `upstream`, `github`, `origin`; see `bin/fm-role-lib.sh` for URL and local-path normalization.
+The publication target is selected from `remote.pushDefault`, then the current branch's configured remote (`branch.<name>.remote`), then `origin`, `github`, `upstream`; see `bin/fm-role-lib.sh` for URL and local-path normalization.
 A task's project counts as the firstmate repository when it shares the code root's lineage - the same git common dir, or a root commit of the code root's history, which every fork, the parent, and any clone of either share - computed offline; undeterminable lineage (for example a shallow clone sharing no root commit) and an undeterminable publication target are refused, even under task consent.
 Secondmate homes inherit the primary's resolved role, never its raw file: a primary file that resolves to user for any reason propagates as revocation.
 In a secondmate home the file is honored only while the inheritance receipt `config/.fm-inherit-firstmate-role.generation` proves the exact bytes the primary last published (`bin/fm-config-inherit-lib.sh`); a role file with no matching receipt or a stale grant authorizes nothing.

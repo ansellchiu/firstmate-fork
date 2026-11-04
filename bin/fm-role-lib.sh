@@ -37,9 +37,9 @@
 # of the code root's history covers any fork, the parent, and any clone of
 # either. Lineage that cannot be determined (no code root history, or a shallow
 # side sharing no root) refuses rather than permits. The publication target is
-# compared only against a maintainer scope or task consent: the first remote
-# named upstream, github, or origin (the order gh prefers when resolving a
-# default repository), reduced to lowercase host/owner/repo; a local-path remote
+# compared only against a maintainer scope or task consent: the remote chosen
+# from remote.pushDefault, the current branch's remote, then origin, github,
+# upstream (see fm_role_publication_target), reduced to lowercase host/owner/repo; a local-path remote
 # is resolved one hop through that repository's own origin, and left as
 # path:<abs> when unreadable. An unknown target never permits.
 #
@@ -222,12 +222,18 @@ fm_role_git_common_dir() {
 }
 
 # fm_role_publication_target <git-dir> - the repository a default publication
-# (gh pr/issue, a no-mistakes PR) would reach: the first of upstream, github,
-# origin that is configured, in the order gh prefers, normalized to
-# host/owner/repo or path:<abs>. Empty when the repo has no such remote.
+# would reach: remote.pushDefault, the current branch's configured remote,
+# then origin, github, upstream, normalized to host/owner/repo or path:<abs>.
+# Empty when the repo has no candidate remote.
 fm_role_publication_target() {
-  local dir=$1 remote url=
-  for remote in upstream github origin; do
+  local dir=$1 remote url='' push_default branch branch_remote=''
+  push_default=$(git -C "$dir" config --get remote.pushDefault 2>/dev/null) || push_default=
+  branch=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || branch=
+  if [ -n "$branch" ]; then
+    branch_remote=$(git -C "$dir" config --get "branch.$branch.remote" 2>/dev/null) || branch_remote=
+  fi
+  for remote in "$push_default" "$branch_remote" origin github upstream; do
+    [ -n "$remote" ] || continue
     if url=$(git -C "$dir" remote get-url "$remote" 2>/dev/null) && [ -n "$url" ]; then
       break
     fi
@@ -514,7 +520,7 @@ fm_role_gate_self_publish() {
   fi
   if [ -z "$FM_ROLE_PUB_TARGET" ]; then
     # shellcheck disable=SC2034 # Output global, read by the sourcing caller.
-    FM_ROLE_PUB_DENIAL="this task targets firstmate's own repository but no publication target can be determined (no upstream, github, or origin remote on $proj)"
+    FM_ROLE_PUB_DENIAL="this task targets firstmate's own repository but no publication target can be determined (no pushDefault, branch, origin, github, or upstream remote on $proj)"
     return 1
   fi
   if [ -n "$consent" ] && [ "$consent" = "$FM_ROLE_PUB_TARGET" ]; then
