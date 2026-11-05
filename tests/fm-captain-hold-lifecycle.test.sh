@@ -1746,7 +1746,7 @@ test_bound_channel_answers_close_at_answer_time() {
   run_captain "$home" hold sample-old-reconcile-note --title "Captain call: old annotated reconcile" \
     --reason "captain old annotated reconcile pending" --repo sample --origin "$id" >/dev/null
   for c in note-only free-value note-select; do
-    run_captain "$home" hold sample-$c --title "Captain call: $c" \
+    run_captain "$home" hold sample-"$c" --title "Captain call: $c" \
       --reason "captain $c pending" --repo sample --origin "$id" >/dev/null
   done
   tasks_in "$home" add sample-gated-work "Gated sample work" --kind ship --repo sample \
@@ -1879,7 +1879,7 @@ SH
   assert_contains "$show" "state: queued" "a bare legacy freeform answer closed its task"
   assert_contains "$show" "held: yes" "a bare legacy freeform answer released its task"
   for c in sample-note-only sample-free-value; do
-    show=$(tasks_in "$home" show $c --full)
+    show=$(tasks_in "$home" show "$c" --full)
     assert_contains "$show" "state: queued" "$c was closed without an authored option"
     assert_contains "$show" "held: yes" "$c was released without an authored option"
   done
