@@ -4,7 +4,7 @@
 //
 // Usage: node board-render-harness.mjs <built-board.html>
 // Prints one JSON document:
-//   { stats:[{n,label}], underway:[{title,sub,badges}],
+//   { stats:[{n,label}], captains_call:[text], underway:[{title,sub,badges}],
 //     charted:[{title,sub,badges,pickable}], decisions:[{context,tag,open}], empty, more, error }
 import { readFileSync } from "node:fs";
 
@@ -27,6 +27,13 @@ class Node {
     this.classList = {
       add: (c) => { this.className = (this.className + " " + c).trim(); },
       contains: (c) => this.className.split(/\s+/).includes(c),
+      toggle: (c, force) => {
+        const classes = new Set(this.className.split(/\s+/).filter(Boolean));
+        const enabled = force ?? !classes.has(c);
+        if (enabled) classes.add(c); else classes.delete(c);
+        this.className = [...classes].join(" ");
+        return enabled;
+      },
     };
   }
   get textContent() {
@@ -110,6 +117,9 @@ const rowsOf = (container) =>
 
 const uw = byId.get("bb-underway") || new Node("div");
 const underway = rowsOf(uw);
+const captains_call = (byId.get("bb-call") || new Node("div")).children
+  .filter((n) => n.className.split(/\s+/).includes("bb-decision"))
+  .map((n) => n.textContent);
 
 const ch = byId.get("bb-charted") || new Node("div");
 const charted = rowsOf(ch);
@@ -134,4 +144,4 @@ const decisions = cardsRoot.querySelectorAll(".bb-decision").map((card) => {
 });
 
 process.stdout.write(
-  JSON.stringify({ stats, underway, charted, decisions, empty, more, error: errorText }) + "\n");
+  JSON.stringify({ stats, captains_call, underway, charted, decisions, empty, more, error: errorText }) + "\n");
