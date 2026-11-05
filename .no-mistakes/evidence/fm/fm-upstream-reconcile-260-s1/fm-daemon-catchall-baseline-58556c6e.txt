@@ -1,0 +1,9 @@
+ok - stuck inbox escalation reaches supervision in away mode and survives buffering failure
+ok - stuck inbox escalation reaches supervision in quiet mode and survives buffering failure
+ok - write inbox escalation reaches supervision in away mode and survives buffering failure
+ok - write inbox escalation reaches supervision in quiet mode and survives buffering failure
+ok - reset inbox escalation reaches supervision in away mode and survives buffering failure
+ok - reset inbox escalation reaches supervision in quiet mode and survives buffering failure
+ok - the away-mode catch-all scan honours the watcher backstop's marker
+ok - the catch-all scan still escalates events past the watcher backstop marker
+not ok - the catch-all did not commit its own re-read span

@@ -1,0 +1,16 @@
+ok - stuck inbox escalation reaches supervision in away mode and survives buffering failure
+ok - stuck inbox escalation reaches supervision in quiet mode and survives buffering failure
+ok - write inbox escalation reaches supervision in away mode and survives buffering failure
+ok - write inbox escalation reaches supervision in quiet mode and survives buffering failure
+ok - reset inbox escalation reaches supervision in away mode and survives buffering failure
+ok - reset inbox escalation reaches supervision in quiet mode and survives buffering failure
+ok - the away-mode catch-all scan honours the watcher backstop's marker
+ok - the catch-all scan still escalates events past the watcher backstop marker
+ok - two catch-all scans escalate an event past the watcher marker exactly once
+ok - a catch-all scan from the watcher's position leaves a pending signal wake escalatable
+ok - a catch-all escalation past the watcher's position leaves a pending signal wake escalatable
+ok - captain signal escalate marks seen so the catch-all scan does not re-fire
+ok - catch-all routine scans advance before later actionable appends
+ok - catch-all markers advance only after escalation buffering succeeds
+ok - the away-mode catch-all scan surfaces a masked event once
+SUBSET-DONE

@@ -1,0 +1,12 @@
+=== [baseline-58556c6e] daemon bin: <tmp-copy>/bin
+--- catch-all scans observed (.subsuper-last-scan present): yes
+--- daemon own marker vs log size:
+v2	r1:3433007374726f6e673a31363737373233333a3136393735303539393a313537373830383030302e30303030303030303000526567756c61722046696c653a313030363434002d007265616461626c65007265616461626c65	43@strong:16777233:169750599:1577808000.000000000 log=      43
+--- digests injected into supervisor pane (submitted lines mentioning the event):
+1
+  live-t.status: needs-decision: pick A or B (catch-all scan) (pre-read; re-arm not needed — watcher daemon-managed)
+--- digest archive event count:
+0
+--- daemon routing log:
+  [2026-11-06T06:21:47+0800] daemon starting (pid 17134); target=%0; target_source=FM_SUPERVISOR_TARGET; backend=tmux; backend_source=FM_SUPERVISOR_BACKEND; afk=on; inject_skip='heartbeat'; stale_escalate=999999s; batch=0s
+--- daemon stderr tail:
