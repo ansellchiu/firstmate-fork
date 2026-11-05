@@ -1707,6 +1707,10 @@ housekeeping() {  # <state>
       own=$(status_seen_offset "$state" "$task")
       record=$(status_span_first_actionable_record "$f" "$start")
       rc=$?
+      if [ "$rc" -eq 0 ] && [ "$start" != "$own" ]; then
+        record=$(status_span_first_actionable_record "$f" "$own")
+        rc=$?
+      fi
       if [ "$rc" -eq 2 ]; then
         ident=$(status_observed_signature "$f")
         status_catchall_reported_seen "$state" "$task" "$ident" && continue
@@ -1720,8 +1724,7 @@ housekeeping() {  # <state>
       rest=${record#*$'\t'}; ident=${rest%%$'\t'*}
       if [ "$rc" -eq 0 ]; then
         event=${rest#*$'\t'}
-        if escalate_add "$state" "$(basename "$f"): $event (catch-all scan)" \
-          && [ "$start" = "$own" ]; then
+        if escalate_add "$state" "$(basename "$f"): $event (catch-all scan)"; then
           mark_status_seen "$state" "$task" "$endpoint" "$ident" || true
         fi
       elif [ "$start" != "$own" ]; then

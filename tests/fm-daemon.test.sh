@@ -1973,6 +1973,24 @@ test_catchall_scan_still_escalates_past_watcher_marker() {
   pass "the catch-all scan still escalates events past the watcher backstop marker"
 }
 
+test_catchall_scan_escalates_past_watcher_marker_once() {
+  local dir state
+  dir=$(make_supercase scan-cross-layer-partial-twice)
+  state="$dir/state"
+  printf 'working: setup\n' > "$state/cross-t5.status"
+  hb_surfaced_through "$state" cross-t5
+  printf 'needs-decision: pick A or B\n' >> "$state/cross-t5.status"
+  rm -f "$state/.subsuper-last-scan"
+  FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  [ "$(status_seen_offset "$state" cross-t5)" = "$(log_size "$state/cross-t5.status")" ] \
+    || fail "the catch-all did not commit its own re-read span"
+  rm -f "$state/.subsuper-last-scan"
+  FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  [ "$(grep -Fc 'needs-decision: pick A or B' "$state/.subsuper-escalations")" -eq 1 ] \
+    || fail "two catch-all scans did not escalate the backstop-only event exactly once"
+  pass "two catch-all scans escalate an event past the watcher marker exactly once"
+}
+
 # The daemon's own watcher marks a status log surfaced when it hands the daemon
 # that log's signal wake. A catch-all scan that runs between that mark and the
 # daemon handling the wake must not commit the daemon's own position from the
@@ -2006,6 +2024,8 @@ test_catchall_scan_escalation_does_not_consume_a_pending_signal_wake() {
   FM_STATE_OVERRIDE="$state" housekeeping "$state"
   grep -F 'needs-decision: pick C or D' "$state/.subsuper-escalations" >/dev/null \
     || fail "the catch-all scan did not escalate the event past the watcher's position"
+  grep -F 'failed: tests red' "$state/.subsuper-escalations" >/dev/null \
+    || fail "the catch-all did not present the pending signal event before committing"
   FM_STATE_OVERRIDE="$state" handle_wake "signal: $state/cross-t4.status" "$state"
   grep -F 'failed: tests red' "$state/.subsuper-escalations" >/dev/null \
     || fail "a catch-all escalation past the watcher's mark swallowed the pending signal wake's event"
@@ -3883,6 +3903,7 @@ test_escalate_batch_age_uses_first_append
 test_heartbeat_scan_dedup
 test_catchall_scan_honors_watcher_backstop_marker
 test_catchall_scan_still_escalates_past_watcher_marker
+test_catchall_scan_escalates_past_watcher_marker_once
 test_catchall_scan_does_not_consume_a_pending_signal_wake
 test_catchall_scan_escalation_does_not_consume_a_pending_signal_wake
 test_handle_wake_routes_self_and_escalate
