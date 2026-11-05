@@ -1983,6 +1983,7 @@ handle_wake() {  # <reason> <state>
                 *) case "$stale_detail" in
                      idle\ *s,\ possible\ wedge,\ escalation\ *)
                        last=$(status_declared_wait_line "$state/$task.status")
+                       # shellcheck disable=SC2031 # The rate-limit probe's backend adapter re-defaults FM_HOME inside a $(...) capture; the parent value is unchanged.
                        if ! status_is_paused_or_captain_held "$last" \
                          && ! { [ -e "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/wedge-defer-worker-wait" ] \
                                 && status_worker_wait_verb "$state/$task.status" >/dev/null; }; then

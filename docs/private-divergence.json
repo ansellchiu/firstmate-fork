@@ -201,9 +201,10 @@
         "bin/fm-control.sh",
         "bin/fm-spawn.sh",
         "tests/fm-spawn-launch-postcondition.test.sh",
-        "tests/lib.sh"
+        "tests/lib.sh",
+        "tests/fm-secondmate-busy-contract-live-e2e.test.sh"
       ],
-      "intent": "A spawn confirms the agent is alive before reporting the task as spawned, so a dead launch is never recorded as dispatched work.",
+      "intent": "A spawn confirms the agent is alive before reporting the task as spawned, so a dead launch is never recorded as dispatched work. A live test that launches into a real tmux pane gives that check a short real wait instead of the suite's single immediate read, which could land while the pane's launch script is still a shell.",
       "provenance": {
         "commits": [
           "b36ef90"
@@ -287,9 +288,10 @@
         "tests/fm-backend-orca.test.sh",
         "tests/fm-backend-herdr-launcher-workspace-e2e.test.sh",
         "tests/fm-backend-herdr-workspace-per-home-e2e.test.sh",
-        "tests/fm-spawn-pool-base-freshen.test.sh"
+        "tests/fm-spawn-pool-base-freshen.test.sh",
+        "tests/fm-watch-wedge-cap.test.sh"
       ],
-      "intent": "A worker that never started stops escalating forever: the watcher stands the task down once, preserves its brief, and raises one loud check wake instead of an endless stale ladder.",
+      "intent": "A worker that never started stops escalating forever: the watcher stands the task down once, preserves its brief, and raises one loud check wake instead of an endless stale ladder. The stale-escalation count restarts when the underlying-state signature changed, so an upstream test that pre-seeds the count drops the prior signature.",
       "provenance": {
         "commits": [
           "b9d709d"
@@ -308,9 +310,10 @@
         "bin/fm-afk-start.sh",
         "tests/fm-watch-triage.test.sh",
         "tests/fm-wake-daemon-lifecycle-e2e.test.sh",
-        "tests/wake-helpers.sh"
+        "tests/wake-helpers.sh",
+        "tests/fm-watch-wedge-cap.test.sh"
       ],
-      "intent": "Away mode is read from a lock a live daemon actually holds, verified portably, so a stale flag cannot silence the watcher after the daemon is gone.",
+      "intent": "Away mode is read from a lock a live daemon actually holds, verified portably, so a stale flag cannot silence the watcher after the daemon is gone. Upstream tests that drive the watcher's away-mode route seed a live daemon lock beside the flag.",
       "provenance": {
         "commits": [
           "c3b13aa"
@@ -664,9 +667,10 @@
       "paths": [
         "bin/fm-claude-stop-autoarm.sh",
         "tests/fm-claude-stop-autoarm.test.sh",
-        "tests/fm-supervision-host-hook.test.sh"
+        "tests/fm-supervision-host-hook.test.sh",
+        "tests/fm-turnend-guard.test.sh"
       ],
-      "intent": "An actionable Claude Stop wake always forces its continuation. The rewake commit accepts a handling recovery marker, and commits UNBOUND when the marker is acked or absent, instead of refusing into a silent exit 0 that would discard the banner already printed and stop the session on an unhandled supervision wake; an unbound entry names no recovery generation, so it still never claims mid-turn health.",
+      "intent": "An actionable Claude Stop wake always forces its continuation. The rewake commit accepts a handling recovery marker, and commits UNBOUND when the marker is acked or absent, instead of refusing into a silent exit 0 that would discard the banner already printed and stop the session on an unhandled supervision wake; an unbound entry names no recovery generation, so it still never claims mid-turn health. Upstream's lost-handback attended-alarm variants, which assert that a hand-back on a pending or announced handling marker refuses its rewake, are dropped from the turn-end guard test.",
       "provenance": {
         "commits": [
           "478c974",
@@ -763,7 +767,9 @@
         "tests/fm-public-followup.test.sh",
         "tests/fm-teardown-endpoint-safety.test.sh",
         ".agents/skills/ship-landing/SKILL.md",
-        "tests/fm-project-capacity.test.sh"
+        "tests/fm-project-capacity.test.sh",
+        "tests/fm-record-export-remote-home.test.sh",
+        "tests/fm-backend-hc-appdetect-smoke.test.sh"
       ],
       "intent": "Every landing path writes a typed completion receipt before reporting success and records PR assignment to the authenticated account, and a closed-unmerged PR is reported as such, so teardown can refuse a task whose landing was never proved and the captain sees every review-ready PR in the GitHub inbox. Upstream tests that clean up a landed ship task record its receipt first.",
       "provenance": {

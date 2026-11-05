@@ -42,6 +42,12 @@ make_remote_home() {  # <name>
   printf 'pending remote-home steer\n' > "$home/state/$TASK.inbox/001.msg"
   printf 'handled remote-home steer\n' > "$home/state/$TASK.inbox/handled/002.msg"
   printf '# Task\n' > "$home/data/$TASK/brief.md"
+  FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+    FM_ROOT_OVERRIDE="$ROOT" "$ROOT/bin/fm-receipt.sh" write-landing --task "$TASK" \
+      --project-fallback project \
+      --commit-sha "$(git -C "$project" rev-parse HEAD)" \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not record the remote-home fixture's landing receipt"
   printf '%s\n' "$home"
 }
 

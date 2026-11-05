@@ -131,6 +131,11 @@ spawn_one() {  # <id> <launch-line> -> spawn with the caller's extra env already
 
 teardown_one() {  # <id>
   WT=$(grep '^worktree=' "$STATE/$1.meta" 2>/dev/null | cut -d= -f2-)
+  FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" FM_ROOT_OVERRIDE="$ROOT" \
+    "$ROOT/bin/fm-receipt.sh" write-landing --task "$1" --project-fallback project \
+      --commit-sha 1111111111111111111111111111111111111111 \
+      --sha-source 'fixture commit' >/dev/null \
+    || fail "could not record $1's landing receipt"
   FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
     FM_CONFIG_OVERRIDE="$CONFIG" \
     "$ROOT/bin/fm-teardown.sh" "$1" >/dev/null 2>&1 \

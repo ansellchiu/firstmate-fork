@@ -101,11 +101,14 @@ spawn_mate() {  # <case> <id> <harness> <sleeper-dir> <shim-dir>
   mkdir -p "$case_dir" "$user_home"
   fm_test_spawn_home "$primary" "$harness"
   seed_home "$sm" "$id"
+  # The pane runs the sleeper script, whose bash phase reads as a confident
+  # `dead` foreground; a short real launch wait (the suite default is one
+  # immediate read) settles on the sleeper's exec'd process instead.
   FM_BACKEND=tmux FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$primary" \
     HOME="$user_home" CLAUDE_CONFIG_DIR='' \
     FM_STATE_OVERRIDE="$primary/state" FM_DATA_OVERRIDE="$primary/data" \
     FM_PROJECTS_OVERRIDE="$primary/projects" FM_CONFIG_OVERRIDE="$primary/config" \
-    FM_SPAWN_NO_GUARD=1 \
+    FM_SPAWN_NO_GUARD=1 FM_SPAWN_LAUNCH_WAIT=5 FM_SPAWN_LAUNCH_POLL=0.05 \
     env -u TMUX -u TMUX_PANE \
     PATH="$sleeper:$shim:$PATH" \
     "$ROOT/bin/fm-spawn.sh" "$id" "$sm" "$harness" --secondmate
