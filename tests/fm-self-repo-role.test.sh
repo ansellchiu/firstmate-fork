@@ -35,8 +35,9 @@ export FM_BACKEND=tmux
 
 # The code root under test is this checkout, so self-repo detection reaches it
 # through the shared git common dir. Its publication target is derived, never
-# assumed: a checkout without an upstream/github/origin remote resolves to the
-# undeterminable path and the scope-bound cases adapt.
+# assumed: a checkout with neither a gh-resolved=base remote nor an
+# upstream/github/origin remote resolves to the undeterminable path and the
+# scope-bound cases adapt.
 PUB_TARGET=$(fm_role_publication_target "$ROOT")
 ORIGIN_URL=$(git -C "$ROOT" remote get-url upstream 2>/dev/null) \
   || ORIGIN_URL=$(git -C "$ROOT" remote get-url github 2>/dev/null) \
@@ -358,6 +359,47 @@ test_publication_target_local_origin() {
   assert_equals "path:$missing" "$(fm_role_publication_target "$outer")" \
     "an unreadable local origin must retain its absolute path identity"
   pass "publication target: local origins retain one-hop resolution and unreadable-path fallback"
+}
+
+# gh's explicitly selected remote wins; without the selection marker the
+# push-default, branch-remote, then origin/github/upstream order holds.
+test_check_gh_resolved_base_selects_fork() {
+  local fork user_home fork_home out rc
+  fork=$(make_lineage_root resolved-fork https://github.com/someone/firstmate-fork)
+  git -C "$fork" remote add upstream https://github.com/kunchenguid/firstmate
+  user_home=$(make_role_home resolved-user)
+  fork_home=$(make_role_home resolved-maint 'maintainer github.com/someone/firstmate-fork')
+
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 0 "$rc" "without a marker origin must remain the publication target (got: $out)"
+  out=$(check_as "$fork" "$user_home" "$fork" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "without a marker parent consent must not cover origin (got: $out)"
+
+  git -C "$fork" config remote.origin.gh-resolved base
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 0 "$rc" "the selected fork maintainer scope must authorize (got: $out)"
+  out=$(check_as "$fork" "$user_home" "$fork" upstream-consent github.com/someone/firstmate-fork); rc=$?
+  expect_code 0 "$rc" "consent for the selected fork must authorize (got: $out)"
+  out=$(check_as "$fork" "$user_home" "$fork" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "parent consent must not cover the selected fork (got: $out)"
+
+  git -C "$fork" remote rename origin publishing
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 0 "$rc" "the base marker must work on a custom remote name (got: $out)"
+  git -C "$fork" config remote.publishing.gh-resolved head
+  out=$(check_as "$fork" "$fork_home" "$fork"); rc=$?
+  expect_code 1 "$rc" "a non-base marker must not select the fork (got: $out)"
+  assert_contains "$out" "no publication authority for github.com/kunchenguid/firstmate" \
+    "a non-base marker must preserve upstream precedence"
+
+  git -C "$fork" config remote.publishing.gh-resolved base
+  git -C "$fork" remote set-url publishing "$TMP_ROOT/unreadable-target"
+  out=$(check_as "$fork" "$user_home" "$fork" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "an unreadable selected target must not fall back to authorized upstream (got: $out)"
+  git -C "$fork" config --unset remote.publishing.url
+  out=$(check_as "$fork" "$user_home" "$fork" upstream-consent github.com/kunchenguid/firstmate); rc=$?
+  expect_code 1 "$rc" "a selected remote without a URL must not fall back to authorized upstream (got: $out)"
+  pass "fm-role.sh check: gh-resolved base selects the exact remote target, otherwise the fallback order holds"
 }
 
 # Lineage that cannot be determined refuses, and a firstmate-lineage project
@@ -768,6 +810,7 @@ test_check_fork_lineage_reaches_the_gate
 test_publication_target_remote_order
 test_check_fork_publication_authority
 test_publication_target_local_origin
+test_check_gh_resolved_base_selects_fork
 test_check_undeterminable_lineage_and_target_refuse
 test_check_task_consent_authorizes_one_task
 test_secondmate_cannot_self_grant

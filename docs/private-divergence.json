@@ -29,7 +29,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "automic-vault-injection",
@@ -55,7 +55,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "token-spend-view",
@@ -85,10 +85,8 @@
         "bin/fm-bootstrap.sh",
         "bin/fm-busy-lib.sh",
         "bin/fm-test-run.sh",
-        ".agents/skills/harness-adapters/SKILL.md",
         "AGENTS.md",
         "docs/configuration.md",
-        "docs/trace-context.md",
         "docs/documentation-audiences.json",
         "tests/fm-spawn-dispatch-profile.test.sh",
         "bin/fm-composer-lib.sh",
@@ -105,7 +103,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "rate-limit-classification",
@@ -127,7 +125,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "unmetered-quota-report",
@@ -149,7 +147,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "pi-branch-rotation",
@@ -171,7 +169,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "wake-batch-coalescing",
@@ -193,7 +191,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "spawn-launch-postcondition",
@@ -203,9 +201,10 @@
         "bin/fm-control.sh",
         "bin/fm-spawn.sh",
         "tests/fm-spawn-launch-postcondition.test.sh",
-        "tests/lib.sh"
+        "tests/lib.sh",
+        "tests/fm-secondmate-busy-contract-live-e2e.test.sh"
       ],
-      "intent": "A spawn confirms the agent is alive before reporting the task as spawned, so a dead launch is never recorded as dispatched work.",
+      "intent": "A spawn confirms the agent is alive before reporting the task as spawned, so a dead launch is never recorded as dispatched work. A live test that launches into a real tmux pane gives that check a short real wait instead of the suite's single immediate read, which could land while the pane's launch script is still a shell.",
       "provenance": {
         "commits": [
           "b36ef90"
@@ -213,7 +212,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "upstream-reconciliation",
@@ -242,7 +241,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "stale-repeat-suppression",
@@ -256,7 +255,8 @@
         "docs/configuration.md",
         "AGENTS.md",
         "tests/fm-wake-queue.test.sh",
-        "tests/fm-watch-triage.test.sh"
+        "tests/fm-watch-triage.test.sh",
+        "tests/fm-watch-triage-pause.test.sh"
       ],
       "intent": "An UNDECLARED stale notification firstmate already handled and acknowledged is not re-presented byte-identically inside a bounded horizon, so a churny idle pane cannot spend a full-context turn per poll; a declared external wait is bounded by its own declaration instead, because the bare payload cannot tell one declaration from the next.",
       "provenance": {
@@ -266,7 +266,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "auto-standdown",
@@ -288,9 +288,10 @@
         "tests/fm-backend-orca.test.sh",
         "tests/fm-backend-herdr-launcher-workspace-e2e.test.sh",
         "tests/fm-backend-herdr-workspace-per-home-e2e.test.sh",
-        "tests/fm-spawn-pool-base-freshen.test.sh"
+        "tests/fm-spawn-pool-base-freshen.test.sh",
+        "tests/fm-watch-wedge-cap.test.sh"
       ],
-      "intent": "A worker that never started stops escalating forever: the watcher stands the task down once, preserves its brief, and raises one loud check wake instead of an endless stale ladder.",
+      "intent": "A worker that never started stops escalating forever: the watcher stands the task down once, preserves its brief, and raises one loud check wake instead of an endless stale ladder. The stale-escalation count restarts when the underlying-state signature changed, so an upstream test that pre-seeds the count drops the prior signature.",
       "provenance": {
         "commits": [
           "b9d709d"
@@ -298,7 +299,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "daemon-lock-liveness",
@@ -309,9 +310,10 @@
         "bin/fm-afk-start.sh",
         "tests/fm-watch-triage.test.sh",
         "tests/fm-wake-daemon-lifecycle-e2e.test.sh",
-        "tests/wake-helpers.sh"
+        "tests/wake-helpers.sh",
+        "tests/fm-watch-wedge-cap.test.sh"
       ],
-      "intent": "Away mode is read from a lock a live daemon actually holds, verified portably, so a stale flag cannot silence the watcher after the daemon is gone.",
+      "intent": "Away mode is read from a lock a live daemon actually holds, verified portably, so a stale flag cannot silence the watcher after the daemon is gone. Upstream tests that drive the watcher's away-mode route seed a live daemon lock beside the flag.",
       "provenance": {
         "commits": [
           "c3b13aa"
@@ -319,7 +321,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "claims-audit",
@@ -341,7 +343,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "batched-captain-answers",
@@ -359,7 +361,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "scout-research-standards",
@@ -378,7 +380,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "delivery-posture-gate",
@@ -398,7 +400,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "pi-primary-growth",
@@ -435,7 +437,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "portfolio-attention-limit",
@@ -465,7 +467,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "herdr-native-submit-proof",
@@ -484,7 +486,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "pr-forge-state-classification",
@@ -503,7 +505,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "teardown-dedupe-marker-sync",
@@ -523,14 +525,13 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "config-inherit-single-owner",
       "area": "Secondmate provisioning",
       "paths": [
         "bin/fm-config-inherit-lib.sh",
-        ".agents/skills/secondmate-provisioning/SKILL.md",
         "docs/configuration.md",
         "tests/fm-secondmate-harness.test.sh"
       ],
@@ -542,7 +543,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "changed-selection-deletions",
@@ -559,7 +560,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "away-escalation-delivery",
@@ -581,7 +582,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "catch-all-marker-crosscheck",
@@ -601,7 +602,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "rearm-resurface-empty-queue",
@@ -610,7 +611,9 @@
         "bin/fm-wake-lib.sh",
         "tests/fm-watch-arm.test.sh",
         "tests/fm-watcher-lock.test.sh",
-        "tests/fm-watch-checkpoint.test.sh"
+        "tests/fm-watch-checkpoint.test.sh",
+        "tests/fm-supervision-host-hook.test.sh",
+        "tests/supervision-host-helpers.sh"
       ],
       "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued. Upstream's never-announced-recovery checkpoint case therefore queues a real durable wake before asserting the one announcement.",
       "provenance": {
@@ -620,7 +623,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "herdr-native-idle-unknown",
@@ -639,7 +642,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "session-lock-harness-case",
@@ -656,7 +659,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "autoarm-actionable-rewake",
@@ -664,9 +667,10 @@
       "paths": [
         "bin/fm-claude-stop-autoarm.sh",
         "tests/fm-claude-stop-autoarm.test.sh",
-        "tests/fm-supervision-host.test.sh"
+        "tests/fm-supervision-host-hook.test.sh",
+        "tests/fm-turnend-guard.test.sh"
       ],
-      "intent": "An actionable Claude Stop wake always forces its continuation. The rewake commit accepts a handling recovery marker, and commits UNBOUND when the marker is acked or absent, instead of refusing into a silent exit 0 that would discard the banner already printed and stop the session on an unhandled supervision wake; an unbound entry names no recovery generation, so it still never claims mid-turn health.",
+      "intent": "An actionable Claude Stop wake always forces its continuation. The rewake commit accepts a handling recovery marker, and commits UNBOUND when the marker is acked or absent, instead of refusing into a silent exit 0 that would discard the banner already printed and stop the session on an unhandled supervision wake; an unbound entry names no recovery generation, so it still never claims mid-turn health. Upstream's lost-handback attended-alarm variants, which assert that a hand-back on a pending or announced handling marker refuses its rewake, are dropped from the turn-end guard test.",
       "provenance": {
         "commits": [
           "478c974",
@@ -675,7 +679,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "mail-plane-input-hardening",
@@ -699,9 +703,10 @@
       "area": "Remote secondmates",
       "paths": [
         "bin/fm-remote-doctor.sh",
-        "tests/fm-remote-doctor.test.sh"
+        "tests/fm-remote-doctor.test.sh",
+        "bin/fm-remote-entrypoint.sh"
       ],
-      "intent": "The Aqua launch-agent plist escapes the guard exec command as well as the login shell, so an ampersand or angle bracket in the repo root, the resolved herdr path, or the session name cannot render a malformed plist whose only symptom is an undiagnosable launchctl bootstrap error.",
+      "intent": "The Aqua launch-agent plist escapes the guard exec command as well as the login shell, so an ampersand or angle bracket in the repo root, the resolved herdr path, or the session name cannot render a malformed plist whose only symptom is an undiagnosable launchctl bootstrap error. bin/fm-remote-entrypoint.sh pins DOCTOR_SHA256 to this private bin/fm-remote-doctor.sh, so the pin moves with every doctor change.",
       "provenance": {
         "commits": [
           "d0c2d76"
@@ -709,7 +714,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "macos-platform-binary-holder",
@@ -726,7 +731,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "herdr-relaunch-identity-release",
@@ -745,7 +750,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "merge-plane-completion-receipts",
@@ -762,7 +767,9 @@
         "tests/fm-public-followup.test.sh",
         "tests/fm-teardown-endpoint-safety.test.sh",
         ".agents/skills/ship-landing/SKILL.md",
-        "tests/fm-project-capacity.test.sh"
+        "tests/fm-project-capacity.test.sh",
+        "tests/fm-record-export-remote-home.test.sh",
+        "tests/fm-backend-hc-appdetect-smoke.test.sh"
       ],
       "intent": "Every landing path writes a typed completion receipt before reporting success and records PR assignment to the authenticated account, and a closed-unmerged PR is reported as such, so teardown can refuse a task whose landing was never proved and the captain sees every review-ready PR in the GitHub inbox. Upstream tests that clean up a landed ship task record its receipt first.",
       "provenance": {
@@ -776,7 +783,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "branch-outcome-repeat-suppression",
@@ -786,8 +793,8 @@
         "bin/fm-wake-drain.sh",
         "tests/fm-branch-supervision.test.sh",
         "tests/fm-wake-drain-outcome-backstop.test.sh",
-        "tests/fm-supervision-host.test.sh",
-        "docs/supervision-protocols/pi.md"
+        "docs/supervision-protocols/pi.md",
+        "tests/fm-supervision-host-drain.test.sh"
       ],
       "intent": "The outcome store records a presentation decision per row (present/repeat) so an identical routine fact the captain already read is suppressed within a window and later presented once with its repeat count, on Pi and in the off-Pi host drain alike; teardown forgets a task so its next note is presented fresh.",
       "provenance": {
@@ -798,7 +805,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "unreadable-posture-refusal",
@@ -842,7 +849,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "secondmate-same-origin-worktree",
@@ -862,7 +869,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "bearings-board-private",
@@ -872,10 +879,12 @@
         "tests/fm-bearings-board-render.test.sh",
         "tests/fm-bearings-snapshot.test.sh",
         "tests/fm-fleet-snapshot-view.test.sh",
-        ".github/workflows/ci.yml",
         "bin/fm-procevent-lavish.sh",
         "docs/verification/process-event-sources.md",
-        ".agents/skills/bearings/SKILL.md"
+        ".agents/skills/bearings/SKILL.md",
+        ".agents/skills/bearings/assets/board-template.html",
+        "bin/fm-bearings-board.sh",
+        "tests/assets/board-render-harness.mjs"
       ],
       "intent": "The bearings board shows a collapsed context disclosure on decision cards, parses snapshot dates structurally (non-ISO dates read as unknown), and a board note that selects no authored option never closes a captain call. Bearings reads clocks and report dates from the snapshot's local fields, so a UTC value is never shown as the captain's local time.",
       "provenance": {
@@ -888,7 +897,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "pi-idle-observer",
@@ -904,7 +913,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "contributions-read-concurrency",
@@ -921,7 +930,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "fleet-health-procevent",
@@ -937,7 +946,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "8f756bbc287c5bdfacc64a7cc09e8516c64fc919"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "private-ci-repo-references",
@@ -953,7 +962,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "lint-root-memory-cap",
@@ -970,7 +979,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "fede6197556c188dd2f451809d17851760d1ef46"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "portable-serial-ten-shards",
@@ -981,38 +990,37 @@
         "CONTRIBUTING.md",
         "docs/fm-test-portable-shards.md"
       ],
-      "intent": "Keep ten portable serial shards, with matching runner and workflow counts and required-check documentation, so the measured supervision host half-suite weights fit the packing budget under the 30-minute job cap; preserve those weights when reconciling upstream estimate-table changes.",
+      "intent": "Keep ten portable serial shards, with matching runner and workflow counts and required-check documentation, so the measured supervision host half-suite weights fit the packing budget under the 30-minute job cap. Superseded by upstream 840cebed: upstream now runs eleven portable serial shards in .github/workflows/ci.yml and bin/fm-test-run.sh and carries the FM_CI_SKIP_PUSH and FM_CI_SKIP_MACOS fork opt-outs itself, so the merge took upstream's workflow, runner lane count, and CONTRIBUTING.md verbatim.",
       "provenance": {
         "commits": [
           "5ced6bd8",
           "9338906d"
         ]
       },
-      "upstreamEquivalent": "unknown",
-      "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamEquivalent": "present",
+      "disposition": "superseded",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "supervision-host-suite-split",
       "area": "Repo checks",
       "paths": [
         "tests/fm-supervision-host.test.sh",
-        "tests/fm-supervision-host-engine.test.sh",
         "bin/fm-test-run.sh",
         "docs/fm-test-portable-shards.md",
         "docs/supervision-host.md",
         "docs/verification/supervision.md"
       ],
-      "intent": "Run every supervision host case exactly once across run_first_half and run_second_half on separate serial shards, keeping fixtures and case definitions in the original script; select both scripts when their shared owner changes and retain both verification entry points. Reconcile upstream case-list additions into the appropriate half without losing or duplicating coverage.",
+      "intent": "Run every supervision host case exactly once across two halves on separate serial shards. Superseded by upstream 840cebed: upstream split the suite into four serial members (tests/fm-supervision-host.test.sh, -drain, -hook, and -park, sharing tests/supervision-host-helpers.sh), so the merge took that split, removed the private tests/fm-supervision-host-engine.test.sh half and its runner mapping, and kept every private supervision-host case in upstream's members.",
       "provenance": {
         "commits": [
           "5ced6bd8",
           "5c8acef3"
         ]
       },
-      "upstreamEquivalent": "unknown",
-      "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamEquivalent": "present",
+      "disposition": "superseded",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "pi-deferred-close-test-removal",
@@ -1030,7 +1038,7 @@
       },
       "upstreamEquivalent": "unknown",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "orphan-watch-arm-reap",
@@ -1048,7 +1056,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "70f2ed3d0ce66d481a105a9b79877c861ec9552e"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "home-layout-private-rows",
@@ -1066,7 +1074,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "treehouse-ci-lease-pin",
@@ -1101,7 +1109,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "relaunch-pr-poll-authentication",
@@ -1118,7 +1126,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "inherited-ci-fixture-repairs",
@@ -1135,7 +1143,7 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     },
     {
       "id": "residual-private-drift",
@@ -1152,7 +1160,129 @@
       },
       "upstreamEquivalent": "none",
       "disposition": "retain",
-      "upstreamReviewedAt": "45dd50a5e12bc3f5e009a4e18fa35ce7f7a71681"
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "session-start-digest-ceiling",
+      "area": "Session start",
+      "paths": [
+        ".agents/skills/session-start-recovery/SKILL.md",
+        "bin/fm-session-start.sh",
+        "tests/fm-session-start.test.sh",
+        "tests/fm-wake-drain-open-decisions.test.sh"
+      ],
+      "intent": "The session-start digest stays bounded: every bulk section except the wake queue and supervision block has a byte ceiling with an `N more omitted - <command>` pointer, OPEN DECISIONS names every key its cap omits, per-task meta renders as a compact identity line, orphan status logs are counted rather than printed, and a DIGEST OVERSIZE banner marks a digest past 64 KB.",
+      "provenance": {
+        "commits": [
+          "ce05defb"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "wake-ack-lock-bound",
+      "area": "Wake queue",
+      "paths": [
+        "bin/fm-inactive-reconcile.sh",
+        "bin/fm-wake-drain.sh",
+        "tests/fm-wake-queue.test.sh"
+      ],
+      "intent": "A wake acknowledgement waits for the inactive-outcome scan lock only as long as FM_INACTIVE_ACK_LOCK_TIMEOUT allows; a held lock skips the acknowledgement with a re-run instruction and consumes nothing, so a long scan cannot hold an acknowledgement open.",
+      "provenance": {
+        "commits": [
+          "80a5cb59"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "self-repo-publication-target",
+      "area": "Firstmate role",
+      "paths": [
+        "bin/fm-role-lib.sh",
+        "tests/fm-self-repo-role.test.sh"
+      ],
+      "intent": "The self-repo publication target resolves from a gh-resolved base remote, then remote.pushDefault, then the current branch's remote, then origin, github, upstream, so a fork whose fetch-only upstream remote names the public repository is judged by where a publication would actually go.",
+      "provenance": {
+        "commits": [
+          "3de61417"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "startup-network-holder-liveness",
+      "area": "Session start",
+      "paths": [
+        "bin/fm-startup-network.sh",
+        "tests/fm-startup-network.test.sh"
+      ],
+      "intent": "The deferred startup network worker runs its sweep in its own process group and stops it as soon as the recorded session lock holder dies, reporting the unfinished checks for the next session start, so a detached worker never outlives the session that requested it.",
+      "provenance": {
+        "commits": [
+          "e4bf88dd"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "tool-update-condition-dedupe",
+      "area": "Tool updates",
+      "paths": [
+        "bin/fm-tool-update-check.sh",
+        "tests/fm-tool-update-check.test.sh"
+      ],
+      "intent": "A watched git tool's pending update is deduplicated on the tool and its behind condition rather than the moving upstream sha or commit count, so one pending update is reported once instead of on every upstream commit.",
+      "provenance": {
+        "commits": [
+          "697bc178"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "watch-arm-stderr-tail",
+      "area": "Watcher arm",
+      "paths": [
+        "bin/fm-watch-arm.sh",
+        "tests/fm-watch-arm.test.sh"
+      ],
+      "intent": "When a watcher cycle exits nonzero, the arm keeps a bounded tail of its stderr in state/.watch-cycle-stderr.log under a lock and size cap, so a silent watcher exit stays diagnosable; a clean exit passes stderr through unchanged.",
+      "provenance": {
+        "commits": [
+          "22fe21e4"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
+    },
+    {
+      "id": "scout-spawn-arity-refusal",
+      "area": "Spawn",
+      "paths": [
+        "bin/fm-spawn.sh",
+        "tests/fm-spawn-batch.test.sh"
+      ],
+      "intent": "A one-argument scout spawn is refused with a usage error instead of crashing on an unset argument.",
+      "provenance": {
+        "commits": [
+          "f9663159"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc"
     }
   ]
 }

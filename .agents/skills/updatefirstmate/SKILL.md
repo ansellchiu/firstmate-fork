@@ -1,7 +1,7 @@
 ---
 name: updatefirstmate
 description: >-
-  Self-update a running firstmate and its secondmates, after checking the public upstream firstmate repo.
+  Self-update a running firstmate and its secondmates from origin, or from a configured self-update source, after checking the public upstream firstmate repo.
   Use when the captain invokes /updatefirstmate (e.g. "/updatefirstmate", "update firstmate", "pull the latest firstmate").
   Checks canonical public upstream first, reconciles any genuinely new public commits through an isolated branch and a private pull request, then updates this firstmate repo's default branch and every local or remote secondmate through its guarded convergence path (never forced, never disruptive), re-reads AGENTS.md, and restarts every live second mate through the persist-gated restart, with a fallback re-read nudge only where a restart cannot be proven.
 user-invocable: true
@@ -24,7 +24,7 @@ This home has two remotes with different jobs, and the whole skill turns on the 
 Every invocation checks upstream first, and only then updates the fleet from origin.
 `bin/fm-upstream.sh` is the one owner of that check and of the reconciliation mechanics; read its header for exact flags and output lines.
 `bin/fm-private-divergence.sh` owns the inventory of intentional private divergence that the check consults.
-Updating is consumption, not publication: it only fetches from public upstream and pulls from origin, so every home runs it regardless of role, and the firstmate-repository publication boundary (`firstmate-self-repo`) never applies to it.
+Updating is consumption, not publication: it only fetches from public upstream and pulls from origin or the configured self-update source, so every home runs it regardless of role, and the firstmate-repository publication boundary (`firstmate-self-repo`) never applies to it.
 
 Pulling the files is only half of it.
 A running agent holds `AGENTS.md` and every skill it has already loaded frozen from the moment it launched, and no verified harness offers a reload, so new bytes on disk change nothing for it until it starts a fresh conversation.
@@ -37,6 +37,7 @@ The only live mates that do not restart are the ones whose home the update pass 
 
 **One-time rollout note:** the update that carries this change is still executed by the previous release, which restarts only the mates whose `AGENTS.md` or `.agents/skills/` moved on that pass. After it completes, run `bin/fm-secondmate-restart.sh <fm-id>...` once with every live second mate ID, not only the ones that release named; later updates follow the normal flow below.
 
+The source is `origin` unless this home has `config/self-update-source`, which names one remote branch for the primary to follow instead, with local secondmates following the primary's resulting commit; [`docs/configuration.md`](../../../docs/configuration.md#self-update-source-configself-update-source) owns that contract, including its remote-secondmate limit.
 The primary update is fast-forward only, while each secondmate uses the same guarded convergence path plus one narrow recovery for squash-merged local history.
 For a remote route, it updates the configured Firstmate code root on that host from its own origin, then guardedly fast-forwards the persistent home to that code-root commit.
 It never forces, never creates a merge commit, and never stashes.
@@ -118,7 +119,8 @@ Once the pull request has landed, continue to step 3 in the same session or the 
 bin/fm-update.sh
 ```
 
-It fast-forwards this firstmate repo's default branch from origin, then updates every registered local or remote secondmate home through its placement-specific guarded path.
+It fast-forwards this firstmate repo's default branch from origin, or from the configured self-update source, then updates every registered local or remote secondmate home through its placement-specific guarded path.
+When a source is configured it prints a `self-update source:` line first, and an unusable config file stops the whole update before anything moves; report that file to the captain rather than editing or removing it.
 It prints one status line per target (`updated <old>..<new>` / `reconciled redundant divergence <old>..<new>` / `already current` / `skipped: <reason>`), followed by three action lines:
 
 - `reread-firstmate: yes|no`

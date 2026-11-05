@@ -226,7 +226,8 @@ test_merge_local_writes_verified_landing() {
     "worktree=$TMP_ROOT/task-x-wt" \
     "project=$case_dir" \
     "kind=ship" \
-    "mode=local-only"
+    "mode=local-only" \
+    "local_done_head=$(git -C "$case_dir" rev-parse fm/task-x)"
   printf 'done: built it\n' > "$home/state/task-x.status"
   set +e
   FM_HOME="$home" FM_ROOT_OVERRIDE="$ROOT" "$MERGE_LOCAL" task-x >/dev/null 2>"$TMP_ROOT/ml.err"

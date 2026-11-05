@@ -37,8 +37,9 @@
 # of the code root's history covers any fork, the parent, and any clone of
 # either. Lineage that cannot be determined (no code root history, or a shallow
 # side sharing no root) refuses rather than permits. The publication target is
-# compared only against a maintainer scope or task consent: the remote chosen
-# from remote.pushDefault, the current branch's remote, then origin, github,
+# compared only against a maintainer scope or task consent: the first remote
+# whose remote.<name>.gh-resolved is base, otherwise the remote chosen from
+# remote.pushDefault, the current branch's remote, then origin, github,
 # upstream (see fm_role_publication_target), reduced to lowercase host/owner/repo; a local-path remote
 # is resolved one hop through that repository's own origin, and left as
 # path:<abs> when unreadable. An unknown target never permits.
@@ -222,11 +223,22 @@ fm_role_git_common_dir() {
 }
 
 # fm_role_publication_target <git-dir> - the repository a default publication
-# would reach: remote.pushDefault, the current branch's configured remote,
-# then origin, github, upstream, normalized to host/owner/repo or path:<abs>.
-# Empty when the repo has no candidate remote.
+# would reach: the first remote whose remote.<name>.gh-resolved is base,
+# otherwise remote.pushDefault, the current branch's configured remote, then
+# origin, github, upstream, normalized to host/owner/repo or path:<abs>. Empty
+# when the selected marked remote is unreadable or the repo has no candidate
+# remote. Resolution is entirely offline.
 fm_role_publication_target() {
-  local dir=$1 remote url='' push_default branch branch_remote=''
+  local dir=$1 remote remotes url='' push_default branch branch_remote=''
+  remotes=$(git -C "$dir" remote 2>/dev/null) || return 0
+  while IFS= read -r remote; do
+    [ -n "$remote" ] || continue
+    if [ "$(git -C "$dir" config --get "remote.$remote.gh-resolved" 2>/dev/null)" = base ]; then
+      url=$(git -C "$dir" remote get-url "$remote" 2>/dev/null) || return 0
+      fm_role_remote_identity "$url" "$dir"
+      return
+    fi
+  done <<< "$remotes"
   push_default=$(git -C "$dir" config --get remote.pushDefault 2>/dev/null) || push_default=
   branch=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null) || branch=
   if [ -n "$branch" ]; then
