@@ -6855,10 +6855,12 @@ test_pi_wake_survives_a_wedged_burst_count() {
       "$seq" "$seq" "$home/state" "$seq" >> "$home/state/.wake-queue"
   done
   if [ "$kind" = wedged ]; then
-    # Wedged well past the count timeout, yet short enough that the stalled
-    # count never outlives this suite's orphan check.
+    # Wedged past the count timeout until the case writes its stop file. The
+    # bounded count leads its own process group, out of this suite's group
+    # reap, so the stall must end on the stop file rather than a fixed sleep
+    # that a slow runner can carry past the orphan check.
     cat > "$repo/bin/fm-wake-lib.sh" <<'SH'
-sleep 8
+while [ ! -e "${FM_STOP_FILE:?}" ]; do sleep 0.05; done
 SH
   else
     chmod 000 "$home/state/.wake-queue" || fail "could not make the queue unreadable"
