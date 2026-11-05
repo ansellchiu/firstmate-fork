@@ -4249,6 +4249,10 @@ spawn_resolve_launch_wrap() {
   done <<WARN_EOF
 $FM_EXT_LAUNCHWRAP_WARN
 WARN_EOF
+  if [ "$BACKEND" = t3code ] && [ -n "$FM_EXT_LAUNCHWRAP_PREFIX" ]; then
+    echo "error: backend=t3code cannot run the extension launch-wrap prefix because T3 starts the agent itself; disable that launch-wrap hook or choose another backend" >&2
+    exit 1
+  fi
 }
 
 if [ "$KIND" = secondmate ]; then
@@ -4857,6 +4861,17 @@ spawn_endpoint_hint() {
   else
     printf 'inspect window %s' "$T"
   fi
+}
+
+# A slot another task's record still holds is never launched into, fresh or
+# relaunched: that task's worker may be parked in it, and either cleanup would
+# then be refused.
+spawn_slot_held_by() {
+  SPAWN_SLOT_HELD_BY=$(fm_treehouse_slot_record_claimants "$STATE" "$WT" "$ID") || {
+    echo "error: cannot enumerate local Firstmate homes to prove Treehouse pool slot $WT is free; refusing to launch $ID; $(spawn_endpoint_hint)" >&2
+    exit 1
+  }
+  SPAWN_SLOT_HELD_BY=$(printf '%s' "$SPAWN_SLOT_HELD_BY" | paste -sd, -)
 }
 
 validate_spawn_worktree() { # <source> <inspect-target>
@@ -5626,6 +5641,13 @@ EOF
       }
       [ -n "$WT" ] || { echo "error: treehouse get --lease did not report a worktree for $ID" >&2; exit 1; }
       validate_spawn_worktree "treehouse get --lease" "$WT (leased to $ID; once inspected, release it with 'treehouse return --force $WT' from $PROJ_ABS)"
+      if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
+        spawn_slot_held_by
+        [ -z "$SPAWN_SLOT_HELD_BY" ] || {
+          echo "error: Treehouse pool slot $WT is still recorded by $SPAWN_SLOT_HELD_BY; refusing to launch $ID into a copy another task record holds. It stays leased to $ID and untouched; reconcile with bin/fm-slot-audit.sh, release it with 'treehouse return --force $WT' from $PROJ_ABS, then respawn" >&2
+          exit 1
+        }
+      fi
       T3CODE_LEASED=1
       freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" "$PROJ_ABS" "$MODE" || {
         if [ "$?" -eq 2 ]; then
@@ -6135,17 +6157,6 @@ agy_spawn_fail() {  # <detail>
   printf '%s\n' "$(status_stamp_line "failed: $1")" >>"$STATE/$ID.status"
   echo "error: $1; inspect window $T" >&2
   rovo_endpoint_cleanup
-}
-
-# A slot another task's record still holds is never launched into, fresh or
-# relaunched: that task's worker may be parked in it, and either cleanup would
-# then be refused.
-spawn_slot_held_by() {
-  SPAWN_SLOT_HELD_BY=$(fm_treehouse_slot_record_claimants "$STATE" "$WT" "$ID") || {
-    echo "error: cannot enumerate local Firstmate homes to prove Treehouse pool slot $WT is free; refusing to launch $ID; $(spawn_endpoint_hint)" >&2
-    exit 1
-  }
-  SPAWN_SLOT_HELD_BY=$(printf '%s' "$SPAWN_SLOT_HELD_BY" | paste -sd, -)
 }
 
 # Step the pane out of a held pool slot: lease it state-only under a holder
