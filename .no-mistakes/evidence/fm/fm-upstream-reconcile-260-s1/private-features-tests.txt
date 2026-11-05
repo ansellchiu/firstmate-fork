@@ -1,0 +1,242 @@
+FM_TEST_BEGIN 2026-11-05T14:56:58Z tests/fm-upstream.test.sh family=session-bootstrap expected_gate_skip=none
+FM_TEST_BEGIN 2026-11-05T14:56:58Z tests/fm-private-divergence.test.sh family=session-bootstrap expected_gate_skip=none
+ok - T1 a missing inventory is a hard failure
+ok - T2 schema errors fail hard with a deterministic reason
+ok - T3 a clean inventory reports ok
+ok - T4 stale paths and unresolved provenance are reported
+ok - T5 dispositions that need a human decision are surfaced
+ok - T6 uncovered drift is computed from git, not from the file
+ok - T7 the recorded review point gates when an entry resurfaces
+ok - T8 an unconfirmed upstream-equivalence claim is challenged
+ok - T9 an unresolvable revision reports why, and the other checks still run
+ok - T10 the inventory this repo ships is schema-valid
+ok - T11 an uncomputable comparison never reports a false unconfirmed equivalence
+# all fm-private-divergence tests passed
+FM_TEST_END 2026-11-05T14:57:07Z tests/fm-private-divergence.test.sh exit=0 duration_ms=8632 gate_skip=false
+ok - T1 public upstream with no new commits reports current
+ok - T2 patch-equivalent upstream work is reported as already contained
+ok - T3 divergence reconciles on an isolated branch, preserving both sides
+ok - T4 a conflicting reconciliation aborts cleanly and stops for a decision
+ok - T5 a home with no public upstream remote degrades to origin-only updating
+ok - T5b reconcile with no public upstream remote is not-required, not a refusal
+ok - T5c an upstream whose push url reaches the public repo refuses
+ok - T6 an upstream that is the private origin refuses
+ok - T7 an unreachable public upstream degrades to origin-only updating
+ok - T7b reconcile against an unreachable public upstream is not-required
+ok - T8 a landed reconciliation reaches the home through the guarded fast-forward
+ok - T9 cleanup removes the scratch worktree and keeps the branch
+ok - T10 cleanup refuses to discard uncommitted reconciliation work
+ok - T11 a missing or schema-invalid inventory refuses with its own exit code
+ok - T12 a refused reconciliation leaves nothing behind and a retry succeeds
+ok - T13 no reconcile decision is printed before its invariants are proven
+ok - T14 the reported merged-commit count matches what the merge actually brings in
+ok - T15 a teardown that could not complete says so and names what was left
+ok - T16 a degraded check never compares against the cached upstream ref
+ok - T17 a broken reconciliation invariant returns the dedicated invariant code
+ok - T18 a fetch that fails without output still reports a concrete reason
+ok - T19 a conflict whose teardown cannot complete reports the kept scratch
+ok - T20 a withheld comparison and an unresolvable revision report different reasons
+ok - T21 a public repo with no matching default branch degrades to origin-only updating
+ok - T22 a merge git refuses outright reports a failure, not a conflict
+ok - T23 a requested comparison with no merge base says the merge base could not be computed
+# all fm-upstream tests passed
+FM_TEST_END 2026-11-05T14:57:33Z tests/fm-upstream.test.sh exit=0 duration_ms=34052 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T14:57:33Z tests/fm-pi-branch-extension.test.sh family=standalone expected_gate_skip=none
+ok - fm_branch_outcomes and fm_branch_processed call headers match stock on Pi before and from 0.99
+skip: installed @earendil-works/pi-coding-agent package not found
+skip: installed @earendil-works/pi-coding-agent package not found
+ok - branch owns accepted wakes with a stable prefix and deterministic verdict-driven delivery
+ok - a captain outcome reaches main's model as one typed, sequence-keyed processing request while routine notes stay plain
+ok - requested and unsolicited healthy outcomes keep distinct delivery and event ownership
+ok - captain outcomes are exact and exactly once across crash, reload, busy main, compaction, and an unrelated assistant response
+ok - a captain outcome opens one sequence-keyed processing turn, survives empty and unrelated answers, is re-presented at run end and session start, and closes only on its acknowledgement
+ok - Pi: an abbreviated processing request points to the full outcome and instructs main to read it first
+ok - Pi: a marker-less >1 MiB backlog is presented oldest first in bounded requests and continues after batch acknowledgement
+ok - an unprocessed captain row the store lists without its age is reported to main, never formatted undated, and stays unprocessed until the store is healthy
+ok - scopeForUnreadWake excludes every main-only class without vetoing eligible task-local rows, and writes the eligible snapshot
+ok - scopeForUnreadWake resolves unique Orca terminal owners and refuses conflicting aliases alongside another eligible row
+ok - scope and CLI keep projects with canonical owners in both discovery orders
+ok - second-mate signal rows route by their new span while crewmate and stale routing stay unchanged
+ok - branch prompt_cache_key is stable per home across sessions and distinct between homes
+ok - branch default-on eligibility (task-scoped, heartbeat, legacy flag ignored) binds and a broken branch rejects to watcher fallback
+ok - under the away-posture record the wake carries the verbatim read-back tail, claims every row, opens no processing turn, cancels a pending request, and presents the accumulated rows after archive
+ok - Pi branch: an unchanged held outcome reaches the captain once across cadences, and a later red check on the task still does
+ok - an accepted away-only wake rejects after archive, while a drained task-local wake stays a quiet no-op
+ok - a claimed heartbeat row on a non-heartbeat away wake lifts task scoping for the fleet report
+ok - a heartbeat review survives a check row arriving before its drain
+ok - fm_branch_report refuses a task the wake did not name, fleet included, while a heartbeat is unscoped
+ok - pre-drain eligibility re-check excludes a newly main-owned row without deferring eligible work
+ok - a co-present needs-decision row neither vetoes nor falsely settles routine branch delivery
+ok - a settled branch turn without a durable outcome falls back and releases its grant for main replay
+ok - provider-error latches cool down, re-probe once with backoff, and recover through a durable report
+ok - selection changes preserve in-flight transcript ownership and reset provider-error streaks
+ok - a stale main claim returns the durable wake to watcher delivery
+ok - pre-drain eligibility re-check no-ops an already-drained wake
+ok - dialog mirror filters tool and operational traffic, lands before wakes, and keeps a durable cursor
+ok - the dialog mirror re-anchors for each session's new branch conversation and stays incremental within it
+ok - every main session start begins a new branch conversation while one session keeps its own
+ok - the current pin state binds every branch build, and clearing it returns the branch to main's model
+ok - unpinned branches follow main model changes live while pinned branches stay fixed
+ok - supervision-model command persists the captain's pick and rebinds the live branch
+ok - supervision-model opens a bounded searchable list, follow main first, and pins the branch alone
+ok - branch model picker keeps follow main first and filters the eligible catalog
+ok - the effort pin binds every branch build, and clearing it returns the branch to main's effort
+ok - unpinned branches follow main effort changes live while pinned branches stay fixed
+ok - an extension-registered provider resolves in the isolated branch runtime
+ok - supervision-model runs an effort picker after the model picker and persists both independently
+ok - an unusable model pin rejects to watcher fallback and an unparseable one is treated as no pin
+ok - replacement activation cleans old branch leases and retries failed cleanup
+ok - branch activates on a cold start once the lock is acquired, never before
+ok - branch activates for its own Windows-tagged session lock only on Windows, never for a malformed tag
+ok - queued wakes and mirrors stop mutating branch state after lock ownership is lost
+ok - stale reports, shells, mirrors, cursors, leases, and prompts perform no side effects
+ok - a Pi session that does not own the lock accepts nothing and mutates no branch state
+ok - an extension rebind re-mirrors undelivered dialog instead of dropping it
+ok - rotation replaces the conversation only after a wake has settled, capturing first
+ok - a settled wake counts even when the durable-outcome guard rejects it
+ok - outcome delivery keeps the event loop running and interleaved reports stay ordered and exactly once
+ok - a session replaced mid-delivery cancels cleanly and the stored outcome still arrives exactly once
+ok - a failing store script surfaces to the branch and its outcome is neither lost nor delivered twice
+ok - a failed cursor write re-delivers a routine note exactly once more while a captain outcome stays deduplicated
+FM_TEST_END 2026-11-05T14:59:45Z tests/fm-pi-branch-extension.test.sh exit=0 duration_ms=131898 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T14:59:45Z tests/fm-av-inject.test.sh family=unclassified expected_gate_skip=none
+ok - fm_av_inject_mode is default-off; FM_AV_INJECT overrides with truthy/other precedence, unset/empty defers to the file
+ok - fm_av_inject_keys validates names, splits on commas and spaces, and refuses an empty selection
+ok - point-of-use injection refuses on an opted-out home instead of running the tool without its key
+ok - point-of-use injection refuses when enabled but the av CLI is missing
+ok - point-of-use injection rejects secret names outside [A-Za-z_][A-Za-z0-9_]*
+ok - fm-av-run.sh separates usage errors from refusals and documents its own syntax
+ok - an injected call requests exactly the named keys and nothing else
+ok - fm_secret_backend_mode defaults to automic, honors the override, and refuses garbage
+ok - varlock-op translates the spec to --filter, passes the token only by environment, and never calls av
+ok - key validation is not bypassed under varlock-op
+ok - a search-only varlock-op call runs through varlock without the av CLI
+ok - under varlock-op a non-search key keeps the unchanged Automic path
+ok - a mixed varlock-op call resolves each key through its own backend
+ok - search-only and mixed tools receive search keys without the bearer token
+ok - mixed calls refuse unusable varlock prerequisites before Automic preflight or approval
+ok - fm_varlock_op_exec itself serves only the allowlisted search keys
+ok - every requested search key must resolve non-empty before search-only or mixed execution
+ok - varlock-op refuses without running the tool on a missing or bad token, missing schema, or garbage backend
+ok - local and remote secondmate homes inherit config/varlock/.env.schema and resolve it
+ok - a down approval service refuses on a bounded poll instead of running the tool keyless
+ok - the vault preflight succeeds on one probe and never restarts a healthy approval service
+ok - the vault preflight starts the service once, bounds its wait, then refuses naming the service and the manual command
+ok - an approval slower than the fast liveness bound still runs the tool
+ok - an approval nobody answers is bounded and refuses instead of hanging the caller
+ok - a hung approval service stops at the total ceiling instead of paying every poll
+skip: python3 with tomllib not available, so the kimi turn-end hook cannot be installed (kimi crewmate spawn)
+ok - no verified adapter launch is wrapped in av inject, even on an opted-in home
+ok - spawning no longer depends on the Automic Vault CLI or its approval service
+FM_TEST_END 2026-11-05T15:01:12Z tests/fm-av-inject.test.sh exit=0 duration_ms=87054 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T15:01:12Z tests/fm-agy-preflight.test.sh family=backend-dispatch expected_gate_skip=none
+ok - the preflight passes a signed-in agy lane through to the launch path
+ok - a signed-out agy lane refuses before any endpoint, worktree, or metadata exists
+ok - an absent agy executable refuses before any endpoint, worktree, or metadata exists
+ok - a probe that never returns refuses instead of hanging the spawn
+ok - a refused agy launch never silently falls back to another harness
+ok - a relaunch is gated on the same authentication preflight as a fresh spawn
+ok - the probe is bounded, and keeps every verdict, on a machine with no GNU timeout
+ok - a machine with no way to bound the probe refuses rather than running it unbounded
+# all fm-agy-preflight tests passed
+FM_TEST_END 2026-11-05T15:01:25Z tests/fm-agy-preflight.test.sh exit=0 duration_ms=12862 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T15:01:25Z tests/fm-wake-batching.test.sh family=unclassified expected_gate_skip=none
+ok - only certified-routine signal/stale/heartbeat evidence is batchable
+ok - the batching window is env-overridable and 0 disables batching
+ok - a burst of routine events yields one bounded presentation, then a fresh window
+ok - the summary is bounded by both the row cap and the detail-line cap, and says what it dropped
+ok - a corrupt window marker surfaces the batch rather than holding it forever
+ok - only changed active records are rehydrated; retired ones drop out
+ok - a record that becomes unreadable reads as changed and gets looked at
+ok - a batched presentation carries the changed-record rehydration line
+ok - heartbeat wakes validate and advance streaks while other wakes reset them
+ok - check-kind and uncertain events are never folded into the batch and ring verbatim
+ok - an absorbed batch stays quiet when due and rolls into bounded local telemetry
+ok - an immediate wake carries any pending batch out with it, so no burst is stranded
+ok - with batching disabled, an already-absorbed event stays absorbed
+ok - batching is presentation-only and never writes the durable wake queue
+FM_TEST_END 2026-11-05T15:01:32Z tests/fm-wake-batching.test.sh exit=0 duration_ms=7309 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T15:01:32Z tests/fm-rate-limit.test.sh family=unclassified expected_gate_skip=none
+ok - GLM signals: the 1308 envelope (incident shape, explicit model), 429+phrase, Chinese; a loose 1308 never names a window
+ok - GLM weekly wall: the 1310 envelope with or without an adjacent 429, distinct from glm-1308; the newest envelope wins; loose digits, wall prose alone, and the 1311 envelope (even with usage prose) name no window
+ok - no line of the detector's own source is read as a GLM usage-limit window
+ok - DeepSeek signals: 429 rate_limit_error, 429 upstream, standalone load-saturation refusal; generic type token
+ok - Claude and generic 429 signals detected; vendor phrases stay family-scoped
+ok - negatives: bare 429, phrases without codes, busy output, and digit-boundary lookalikes never match
+ok - a rate-limited stale surfaces at once, named and classified as not a wedge
+ok - a pane on the GLM weekly wall surfaces classified as stalled on glm-1310, never as a possible wedge
+ok - an already-classified rate-limited episode absorbs silently on later polls
+ok - a pane whose rate-limit signal cleared drops the classification and resumes wedge aging
+ok - a rate-limited busy pane past its turn-age bound surfaces classified, never as a wedge
+ok - a bare-429 pane without a rate-limit phrase keeps the ordinary stale surface
+FM_TEST_END 2026-11-05T15:01:57Z tests/fm-rate-limit.test.sh exit=0 duration_ms=24906 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T15:01:57Z tests/fm-quota-unmetered.test.sh family=unclassified expected_gate_skip=none
+ok - the report uses quota-axi's schema v3 envelope
+ok - Z.ai usage windows come from the provider's own response
+ok - Z.ai effective headroom is the tightest bounding window
+ok - an unrecognized Z.ai period is reported as unknown rather than guessed
+ok - a non-model Z.ai window is reported without bounding model headroom
+ok - DeepSeek balance is reported as credits and never as quota
+ok - a DeepSeek account that can no longer call the API is surfaced
+ok - a missing credential is reported as unavailable rather than filled in
+ok - a rejected credential and a provider failure are reported differently
+ok - an unusable provider body is an error rather than a silent empty reading
+ok - one provider's outage does not hide the other's usage
+ok - a hanging provider endpoint is bounded and reported
+ok - a zero request bound falls back to a real bound
+ok - the credential never reaches the script's output
+ok - each provider receives the authorization form it requires
+ok - an environment credential overrides the credential store
+ok - naming a provider reports only that provider
+ok - an unregistered provider is a usage error
+ok - a repeated provider is a usage error
+ok - --help names the registered providers and their reporting limits
+ok - gemini reports no usage windows and makes no network call
+ok - gemini's auth status reflects the captain's confirmed OAuth login, not a live probe
+ok - naming gemini reports only gemini, independent of zai/deepseek credentials
+FM_TEST_END 2026-11-05T15:02:12Z tests/fm-quota-unmetered.test.sh exit=0 duration_ms=14819 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T15:02:12Z tests/fm-ext.test.sh family=unclassified expected_gate_skip=none
+ok - the install, status, update, and uninstall loop runs against a synthetic package
+ok - a missing symlink is a loud, named, actionable failure
+ok - a forced uninstall refuses a traversing extension name without touching the target
+ok - a forced uninstall ignores link paths the extension could not have placed in the home
+ok - a forced uninstall retires every link the damaged record still names
+ok - a stale receipt is a loud, named, actionable failure
+ok - a lost per-clone exclude entry is a loud, named, actionable failure
+ok - an absent-but-enabled extension refuses loudly with a named remedy
+ok - the ../ escape lint catches a violating package and blocks its install
+ok - a manifest requiring an unavailable capability refuses by name
+ok - a manifest requiring a provided capability installs
+ok - manifest validation refuses rather than defaulting
+ok - install never replaces a path it does not own
+FM_TEST_END 2026-11-05T15:02:20Z tests/fm-ext.test.sh exit=0 duration_ms=8165 gate_skip=false
+FM_TEST_BEGIN 2026-11-05T15:02:20Z tests/fm-ext-hook.test.sh family=unclassified expected_gate_skip=none
+ok - a healthy hook contributes a titled body and no diagnostic
+ok - a hook that deliberately contributes nothing prints no section and no diagnostic
+ok - a failing hook yields a typed diagnostic and its partial body is discarded
+ok - a hanging hook is killed at the bound instead of wedging the caller
+ok - the bound terminates the hook's whole process group, leaving no orphan
+ok - an oversized contribution is truncated at the cap with a visible marker
+ok - a registered hook that cannot run is reported rather than silently skipped
+ok - an unreadable install record is reported without asserting which hooks it registers
+ok - a repeated identical failure reports one line with a rising repeat count
+ok - a recovered hook clears the repeat count so a later failure reports afresh
+ok - control characters in hook stderr cannot forge a digest line
+ok - the timeout and byte cap are declared once and reported by fm-ext.sh status
+ALL TESTS PASSED
+FM_TEST_END 2026-11-05T15:02:35Z tests/fm-ext-hook.test.sh exit=0 duration_ms=14806 gate_skip=false
+FM_TEST_SUMMARY total=10 failed=0 skipped_gate=0 duration_ms=336491
+FM_TEST_SUMMARY_FAMILY family=backend-dispatch count=1 duration_ms=12862 failed=0
+FM_TEST_SUMMARY_FAMILY family=session-bootstrap count=2 duration_ms=42684 failed=0
+FM_TEST_SUMMARY_FAMILY family=standalone count=1 duration_ms=131898 failed=0
+FM_TEST_SUMMARY_FAMILY family=unclassified count=6 duration_ms=157059 failed=0
+FM_TEST_SLOWEST rank=1 script=tests/fm-pi-branch-extension.test.sh duration_ms=131898
+FM_TEST_SLOWEST rank=2 script=tests/fm-av-inject.test.sh duration_ms=87054
+FM_TEST_SLOWEST rank=3 script=tests/fm-upstream.test.sh duration_ms=34052
+FM_TEST_SLOWEST rank=4 script=tests/fm-rate-limit.test.sh duration_ms=24906
+FM_TEST_SLOWEST rank=5 script=tests/fm-quota-unmetered.test.sh duration_ms=14819
+FM_TEST_SLOWEST rank=6 script=tests/fm-ext-hook.test.sh duration_ms=14806
+FM_TEST_SLOWEST rank=7 script=tests/fm-agy-preflight.test.sh duration_ms=12862
+FM_TEST_SLOWEST rank=8 script=tests/fm-private-divergence.test.sh duration_ms=8632
+FM_TEST_SLOWEST rank=9 script=tests/fm-ext.test.sh duration_ms=8165
+FM_TEST_SLOWEST rank=10 script=tests/fm-wake-batching.test.sh duration_ms=7309

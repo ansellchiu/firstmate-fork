@@ -1,0 +1,85 @@
+### home-post: origin/main=46e78620 upstream fake=4869cf58
+$ bin/fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upstream-lab.sPPSNU/origin-post.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upstream-lab.sPPSNU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 4869cf58
+origin-ref: origin/main 46e78620
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: current
+reconcile-required: no
+inventory: attention
+inventory-entries: 62
+inventory-entry: extension-contract unresolved-provenance: 878d5ff
+inventory-entry: automic-vault-injection unresolved-provenance: 57868e0,6b936e7
+inventory-entry: token-spend-view unresolved-provenance: f9266d3
+inventory-entry: agy-harness-preflight unresolved-provenance: 69e375e
+inventory-entry: rate-limit-classification unresolved-provenance: f7205a1
+inventory-entry: unmetered-quota-report unresolved-provenance: 2382d33
+inventory-entry: pi-branch-rotation unresolved-provenance: 6277477
+inventory-entry: wake-batch-coalescing unresolved-provenance: 1d5b398
+inventory-entry: spawn-launch-postcondition unresolved-provenance: b36ef90
+inventory-entry: upstream-reconciliation unresolved-provenance: ecfcdf0
+inventory-entry: stale-repeat-suppression unresolved-provenance: 636c4ba
+inventory-entry: auto-standdown unresolved-provenance: b9d709d
+inventory-entry: daemon-lock-liveness unresolved-provenance: c3b13aa
+inventory-entry: claims-audit unresolved-provenance: c3cbf27,1cc00e2
+inventory-entry: batched-captain-answers unresolved-provenance: f3a4f14
+inventory-entry: scout-research-standards unresolved-provenance: 94d362e
+inventory-entry: delivery-posture-gate unresolved-provenance: 1c68a87
+inventory-entry: pi-primary-growth unresolved-provenance: 47566fc
+inventory-entry: portfolio-attention-limit unresolved-provenance: 42cd407
+inventory-entry: herdr-native-submit-proof unresolved-provenance: 0dd04ef
+inventory-entry: pr-forge-state-classification unresolved-provenance: 099dfb5
+inventory-entry: teardown-dedupe-marker-sync unresolved-provenance: 16a1a08
+inventory-entry: config-inherit-single-owner unresolved-provenance: a418b46
+inventory-entry: changed-selection-deletions unresolved-provenance: a1b2b24
+inventory-entry: away-escalation-delivery unresolved-provenance: b353bf25,3348e080
+inventory-entry: catch-all-marker-crosscheck unresolved-provenance: 05507d1c
+inventory-entry: rearm-resurface-empty-queue unresolved-provenance: 950421c7
+inventory-entry: herdr-native-idle-unknown unresolved-provenance: a80d6499
+inventory-entry: session-lock-harness-case unresolved-provenance: ee2f2a4c
+inventory-entry: autoarm-actionable-rewake unresolved-provenance: 478c974,d0c2d76
+inventory-entry: mail-plane-input-hardening unresolved-provenance: 478c974
+inventory-entry: launch-agent-xml-escaping unresolved-provenance: d0c2d76
+inventory-entry: macos-platform-binary-holder unresolved-provenance: 0a6e6a7
+inventory-entry: herdr-relaunch-identity-release unresolved-provenance: 0a6e6a7
+inventory-entry: merge-plane-completion-receipts ok
+inventory-entry: branch-outcome-repeat-suppression ok
+inventory-entry: unreadable-posture-refusal ok
+inventory-entry: calm-composer-shapes ok
+inventory-entry: secondmate-same-origin-worktree ok
+inventory-entry: bearings-board-private ok
+inventory-entry: pi-idle-observer ok
+inventory-entry: contributions-read-concurrency ok
+inventory-entry: fleet-health-procevent ok
+inventory-entry: private-ci-repo-references ok
+inventory-entry: lint-root-memory-cap ok
+inventory-entry: portable-serial-ten-shards unresolved-provenance: 5ced6bd8,9338906d
+inventory-entry: portable-serial-ten-shards upstream-equivalent-unconfirmed
+inventory-entry: portable-serial-ten-shards superseded: retire this entry once upstream lands
+inventory-entry: supervision-host-suite-split unresolved-provenance: 5ced6bd8,5c8acef3
+inventory-entry: supervision-host-suite-split upstream-equivalent-unconfirmed
+inventory-entry: supervision-host-suite-split superseded: retire this entry once upstream lands
+inventory-entry: pi-deferred-close-test-removal unresolved-provenance: b6088db0,c1f59ab0
+inventory-entry: orphan-watch-arm-reap ok
+inventory-entry: home-layout-private-rows ok
+inventory-entry: treehouse-ci-lease-pin ok
+inventory-entry: cursor-placeholder-busy-token ok
+inventory-entry: relaunch-pr-poll-authentication ok
+inventory-entry: inherited-ci-fixture-repairs ok
+inventory-entry: residual-private-drift ok
+inventory-entry: session-start-digest-ceiling ok
+inventory-entry: wake-ack-lock-bound ok
+inventory-entry: self-repo-publication-target ok
+inventory-entry: startup-network-holder-liveness ok
+inventory-entry: tool-update-condition-dedupe ok
+inventory-entry: watch-arm-stderr-tail ok
+inventory-entry: scout-spawn-arity-refusal ok
+inventory-drift: compared 4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc..origin/main vs 4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc..upstream/main
+inventory-uncovered-count: 0
+exit=0

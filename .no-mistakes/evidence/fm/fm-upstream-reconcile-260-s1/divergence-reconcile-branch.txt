@@ -1,0 +1,228 @@
+$ bin/fm-private-divergence.sh --base 70f2ed3d0ce66d481a105a9b79877c861ec9552e --head 46e78620 --upstream 4869cf58
+inventory: attention
+inventory-entries: 62
+inventory-entry: extension-contract ok
+inventory-entry: automic-vault-injection ok
+inventory-entry: token-spend-view ok
+inventory-entry: agy-harness-preflight ok
+inventory-entry: rate-limit-classification ok
+inventory-entry: unmetered-quota-report ok
+inventory-entry: pi-branch-rotation ok
+inventory-entry: wake-batch-coalescing ok
+inventory-entry: spawn-launch-postcondition ok
+inventory-entry: upstream-reconciliation ok
+inventory-entry: stale-repeat-suppression ok
+inventory-entry: auto-standdown ok
+inventory-entry: daemon-lock-liveness ok
+inventory-entry: claims-audit ok
+inventory-entry: batched-captain-answers ok
+inventory-entry: scout-research-standards ok
+inventory-entry: delivery-posture-gate ok
+inventory-entry: pi-primary-growth ok
+inventory-entry: portfolio-attention-limit ok
+inventory-entry: herdr-native-submit-proof ok
+inventory-entry: pr-forge-state-classification ok
+inventory-entry: teardown-dedupe-marker-sync ok
+inventory-entry: config-inherit-single-owner ok
+inventory-entry: changed-selection-deletions ok
+inventory-entry: away-escalation-delivery ok
+inventory-entry: catch-all-marker-crosscheck ok
+inventory-entry: rearm-resurface-empty-queue ok
+inventory-entry: herdr-native-idle-unknown ok
+inventory-entry: session-lock-harness-case ok
+inventory-entry: autoarm-actionable-rewake ok
+inventory-entry: mail-plane-input-hardening ok
+inventory-entry: launch-agent-xml-escaping ok
+inventory-entry: macos-platform-binary-holder ok
+inventory-entry: herdr-relaunch-identity-release ok
+inventory-entry: merge-plane-completion-receipts ok
+inventory-entry: branch-outcome-repeat-suppression ok
+inventory-entry: unreadable-posture-refusal ok
+inventory-entry: calm-composer-shapes ok
+inventory-entry: secondmate-same-origin-worktree ok
+inventory-entry: bearings-board-private ok
+inventory-entry: pi-idle-observer ok
+inventory-entry: contributions-read-concurrency ok
+inventory-entry: fleet-health-procevent ok
+inventory-entry: private-ci-repo-references ok
+inventory-entry: lint-root-memory-cap ok
+inventory-entry: portable-serial-ten-shards superseded: retire this entry once upstream lands
+inventory-entry: supervision-host-suite-split superseded: retire this entry once upstream lands
+inventory-entry: pi-deferred-close-test-removal ok
+inventory-entry: orphan-watch-arm-reap ok
+inventory-entry: home-layout-private-rows ok
+inventory-entry: treehouse-ci-lease-pin ok
+inventory-entry: cursor-placeholder-busy-token ok
+inventory-entry: relaunch-pr-poll-authentication ok
+inventory-entry: inherited-ci-fixture-repairs ok
+inventory-entry: residual-private-drift ok
+inventory-entry: session-start-digest-ceiling ok
+inventory-entry: wake-ack-lock-bound ok
+inventory-entry: self-repo-publication-target ok
+inventory-entry: startup-network-holder-liveness ok
+inventory-entry: tool-update-condition-dedupe ok
+inventory-entry: watch-arm-stderr-tail ok
+inventory-entry: scout-spawn-arity-refusal ok
+inventory-drift: compared 70f2ed3d0ce66d481a105a9b79877c861ec9552e..46e7862064c9b0341afd9bb9c8a0b6bf76fe04c9 vs 70f2ed3d0ce66d481a105a9b79877c861ec9552e..4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc
+inventory-contended: .agents/skills/afk/SKILL.md
+inventory-contended: .agents/skills/agent-skill-trigger-index/SKILL.md
+inventory-contended: .agents/skills/bearings/SKILL.md
+inventory-contended: .agents/skills/bootstrap-diagnostics/SKILL.md
+inventory-contended: .agents/skills/captain-hold-lifecycle/SKILL.md
+inventory-contended: .agents/skills/harness-adapters/references/harness/agy.md
+inventory-contended: .agents/skills/harness-adapters/references/harness/cursor.md
+inventory-contended: .agents/skills/operational-home-layout/SKILL.md
+inventory-contended: .agents/skills/process-event-sources/SKILL.md
+inventory-contended: .agents/skills/project-management/SKILL.md
+inventory-contended: .agents/skills/quota-array-dispatch/SKILL.md
+inventory-contended: .agents/skills/session-start-recovery/SKILL.md
+inventory-contended: .agents/skills/ship-landing/SKILL.md
+inventory-contended: .agents/skills/updatefirstmate/SKILL.md
+inventory-contended: .pi/extensions/fm-branch-supervision.ts
+inventory-contended: .pi/extensions/fm-primary-pi-watch.ts
+inventory-contended: .pi/extensions/lib/fm-branch-dispatch.ts
+inventory-contended: AGENTS.md
+inventory-contended: README.md
+inventory-contended: bin/backends/herdr.sh
+inventory-contended: bin/fm-afk-launch.sh
+inventory-contended: bin/fm-afk-return.sh
+inventory-contended: bin/fm-afk-start.sh
+inventory-contended: bin/fm-backend.sh
+inventory-contended: bin/fm-bearings-snapshot.sh
+inventory-contended: bin/fm-bootstrap.sh
+inventory-contended: bin/fm-brief.sh
+inventory-contended: bin/fm-busy-lib.sh
+inventory-contended: bin/fm-captain-hold.sh
+inventory-contended: bin/fm-classify-lib.sh
+inventory-contended: bin/fm-claude-stop-autoarm.sh
+inventory-contended: bin/fm-claude-trust.sh
+inventory-contended: bin/fm-composer-lib.sh
+inventory-contended: bin/fm-config-inherit-lib.sh
+inventory-contended: bin/fm-contributions.sh
+inventory-contended: bin/fm-control-lib.sh
+inventory-contended: bin/fm-control.sh
+inventory-contended: bin/fm-crew-state.sh
+inventory-contended: bin/fm-fleet-snapshot.sh
+inventory-contended: bin/fm-home-seed.sh
+inventory-contended: bin/fm-inactive-reconcile.sh
+inventory-contended: bin/fm-merge-local.sh
+inventory-contended: bin/fm-nm-run-lib.sh
+inventory-contended: bin/fm-pr-check.sh
+inventory-contended: bin/fm-pr-lib.sh
+inventory-contended: bin/fm-pr-merge.sh
+inventory-contended: bin/fm-pr-poll.sh
+inventory-contended: bin/fm-procevent-lavish.sh
+inventory-contended: bin/fm-project-mode.sh
+inventory-contended: bin/fm-promote.sh
+inventory-contended: bin/fm-push-transition-lib.sh
+inventory-contended: bin/fm-remote-doctor.sh
+inventory-contended: bin/fm-remote-entrypoint.sh
+inventory-contended: bin/fm-role-lib.sh
+inventory-contended: bin/fm-secondmate-restart.sh
+inventory-contended: bin/fm-send.sh
+inventory-contended: bin/fm-session-lock-lib.sh
+inventory-contended: bin/fm-session-start.sh
+inventory-contended: bin/fm-spawn.sh
+inventory-contended: bin/fm-startup-network.sh
+inventory-contended: bin/fm-supervise-daemon.sh
+inventory-contended: bin/fm-teardown.sh
+inventory-contended: bin/fm-test-run.sh
+inventory-contended: bin/fm-tool-update-check.sh
+inventory-contended: bin/fm-update.sh
+inventory-contended: bin/fm-wake-drain.sh
+inventory-contended: bin/fm-wake-lib.sh
+inventory-contended: bin/fm-watch-arm.sh
+inventory-contended: bin/fm-watch.sh
+inventory-contended: docs/agent-control.md
+inventory-contended: docs/architecture.md
+inventory-contended: docs/calm-mode-feasibility.md
+inventory-contended: docs/calm.md
+inventory-contended: docs/captain-hold-lifecycle.md
+inventory-contended: docs/configuration.md
+inventory-contended: docs/documentation-audiences.json
+inventory-contended: docs/fm-test-portable-shards.md
+inventory-contended: docs/gitlab-merge-watch.md
+inventory-contended: docs/herdr-backend.md
+inventory-contended: docs/orca-backend.md
+inventory-contended: docs/pi-supervision-branch.md
+inventory-contended: docs/scripts.md
+inventory-contended: docs/tmux-backend.md
+inventory-contended: docs/verification/dispatch-auth.md
+inventory-contended: docs/verification/process-event-sources.md
+inventory-contended: docs/verification/runtime-backends.md
+inventory-contended: docs/watcher-continuity.md
+inventory-contended: tests/assets/board-render-harness.mjs
+inventory-contended: tests/fm-afk-return.test.sh
+inventory-contended: tests/fm-agy-harness.test.sh
+inventory-contended: tests/fm-backend-herdr-presentation-e2e.test.sh
+inventory-contended: tests/fm-backend-herdr.test.sh
+inventory-contended: tests/fm-backlog-atomicity.test.sh
+inventory-contended: tests/fm-bearings-board-render.test.sh
+inventory-contended: tests/fm-bearings-board.test.sh
+inventory-contended: tests/fm-bearings-snapshot.test.sh
+inventory-contended: tests/fm-bootstrap.test.sh
+inventory-contended: tests/fm-branch-supervision.test.sh
+inventory-contended: tests/fm-brief.test.sh
+inventory-contended: tests/fm-busy-state.test.sh
+inventory-contended: tests/fm-calm-pi-extension.test.sh
+inventory-contended: tests/fm-captain-hold-lifecycle.test.sh
+inventory-contended: tests/fm-claude-stop-autoarm.test.sh
+inventory-contended: tests/fm-claude-trust.test.sh
+inventory-contended: tests/fm-composer-lib.test.sh
+inventory-contended: tests/fm-contributions.test.sh
+inventory-contended: tests/fm-control-herdr-smoke.test.sh
+inventory-contended: tests/fm-control-relaunch.test.sh
+inventory-contended: tests/fm-control.test.sh
+inventory-contended: tests/fm-crew-state.test.sh
+inventory-contended: tests/fm-daemon.test.sh
+inventory-contended: tests/fm-fleet-snapshot-view.test.sh
+inventory-contended: tests/fm-gate-refuse.test.sh
+inventory-contended: tests/fm-gotmp.test.sh
+inventory-contended: tests/fm-kimi-harness.test.sh
+inventory-contended: tests/fm-lint.test.sh
+inventory-contended: tests/fm-pi-branch-extension.test.sh
+inventory-contended: tests/fm-pi-branch-live-e2e.test.sh
+inventory-contended: tests/fm-pi-primary-types.test.sh
+inventory-contended: tests/fm-pi-watch-extension.test.sh
+inventory-contended: tests/fm-pr-check-security.test.sh
+inventory-contended: tests/fm-pr-merge.test.sh
+inventory-contended: tests/fm-project-capacity.test.sh
+inventory-contended: tests/fm-public-followup.test.sh
+inventory-contended: tests/fm-remote-doctor.test.sh
+inventory-contended: tests/fm-remote-secondmate-lifecycle-e2e.test.sh
+inventory-contended: tests/fm-secondmate-harness.test.sh
+inventory-contended: tests/fm-secondmate-liveness.test.sh
+inventory-contended: tests/fm-secondmate-restart.test.sh
+inventory-contended: tests/fm-secondmate-safety.test.sh
+inventory-contended: tests/fm-secondmate-sync.test.sh
+inventory-contended: tests/fm-self-repo-role.test.sh
+inventory-contended: tests/fm-session-lock-ancestry.test.sh
+inventory-contended: tests/fm-session-start.test.sh
+inventory-contended: tests/fm-shared-captain-inheritance.test.sh
+inventory-contended: tests/fm-spawn-batch.test.sh
+inventory-contended: tests/fm-spawn-dispatch-profile.test.sh
+inventory-contended: tests/fm-spawn-pool-base-freshen.test.sh
+inventory-contended: tests/fm-startup-network.test.sh
+inventory-contended: tests/fm-supervision-host-drain.test.sh
+inventory-contended: tests/fm-supervision-host-hook.test.sh
+inventory-contended: tests/fm-task-delivery.test.sh
+inventory-contended: tests/fm-teardown-endpoint-safety.test.sh
+inventory-contended: tests/fm-teardown.test.sh
+inventory-contended: tests/fm-test-fixture-cleanup.test.sh
+inventory-contended: tests/fm-test-run.test.sh
+inventory-contended: tests/fm-tmux-submit-busy.test.sh
+inventory-contended: tests/fm-tool-update-check.test.sh
+inventory-contended: tests/fm-wake-drain-outcome-backstop.test.sh
+inventory-contended: tests/fm-wake-queue.test.sh
+inventory-contended: tests/fm-watch-arm.test.sh
+inventory-contended: tests/fm-watch-checkpoint.test.sh
+inventory-contended: tests/fm-watch-recovery-loop.test.sh
+inventory-contended: tests/fm-watch-triage-pause.test.sh
+inventory-contended: tests/fm-watch-triage.test.sh
+inventory-contended: tests/fm-watcher-lock.test.sh
+inventory-contended: tests/lib.sh
+inventory-contended: tests/secondmate-helpers.sh
+inventory-contended: tests/supervision-host-helpers.sh
+inventory-contended: tests/wake-helpers.sh
+inventory-uncovered-count: 0
+exit=0

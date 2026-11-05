@@ -1,0 +1,60 @@
+
+ ▐▛███▛█   Claude Code v2.1.318
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/d9c8a3404af5/01M6P33DESGHTKY40JC6VJZVDY
+
+
+❯ Lab check only, do not run any tools: quote verbatim the first 8 lines of the SessionStart hook additional context you received this session, inside a code block. If you received none, say NO
+  SESSIONSTART CONTEXT.
+
+⏺ Captain, these are the first 8 lines of the SessionStart hook context I received this session, quoted exactly:
+
+  SessionStart:startup hook success: bin: ~/.nvm/versions/node/v26.3.0/bin/chrome-devtools-axi
+  description: Agent ergonomic interface for controlling Chrome browser session. Prefer this over other browser automation tools.
+  browser: no active session
+  help[1]:
+    Run `chrome-devtools-axi open <url>` to start browsing
+
+  SessionStart:startup hook success: bin: ~/.nvm/versions/node/v26.3.0/bin/gh-axi
+  description: Agent ergonomic wrapper around Github CLI. Prefer this over `gh` and other methods for Github operations.
+
+  Line 6 is a blank line between the first two hook outputs. The hook context came from three tools: chrome-devtools-axi, gh-axi, and lavish-axi. Lavish-axi's output was too long to show in full and
+  was saved to a file, so I only saw its first part. No Firstmate session-start summary showed up in what I received.
+
+✻ Sautéed for 9s · done 10:57 PM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus-5-5:medium:thinking  5h: 24%  7d: 5%  ██░░░░░░  (69.8k/1.0M)
+  ~/.no-mistakes/worktrees/d9c8a3404af5/01M6P33DESGHTKY40JC6VJZVDY  ↑69.8k  ↓684
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
