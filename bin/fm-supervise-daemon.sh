@@ -1697,13 +1697,14 @@ housekeeping() {  # <state>
   #     resolution lives in status_scan_parent_channel_exclude.
   if [ "$(_file_age "$state/.subsuper-last-scan")" -ge "${FM_HEARTBEAT_SCAN_SECS:-$HEARTBEAT_SCAN_SECS_DEFAULT}" ]; then
     _now > "$state/.subsuper-last-scan"
-    local event record rest endpoint ident rc exclude start
+    local event record rest endpoint ident rc exclude start own
     exclude=$(status_scan_parent_channel_exclude "$state")
     for f in "$state"/*.status; do
       [ -e "$f" ] || [ -L "$f" ] || continue
       [ "$f" = "$exclude" ] && continue
       task=$(basename "$f"); task="${task%.status}"
       start=$(status_catchall_seen_offset "$state" "$task")
+      own=$(status_seen_offset "$state" "$task")
       record=$(status_span_first_actionable_record "$f" "$start")
       rc=$?
       if [ "$rc" -eq 2 ]; then
@@ -1719,14 +1720,15 @@ housekeeping() {  # <state>
       rest=${record#*$'\t'}; ident=${rest%%$'\t'*}
       if [ "$rc" -eq 0 ]; then
         event=${rest#*$'\t'}
-        if escalate_add "$state" "$(basename "$f"): $event (catch-all scan)"; then
+        if escalate_add "$state" "$(basename "$f"): $event (catch-all scan)" \
+          && [ "$start" = "$own" ]; then
           mark_status_seen "$state" "$task" "$endpoint" "$ident" || true
         fi
-      elif [ "$start" != "$(status_seen_offset "$state" "$task")" ]; then
-        # Nothing new past the watcher's position, but that position may be a
-        # signal wake the watcher handed this daemon and it has not handled
-        # yet; committing it here would make that wake read as already
-        # escalated. The per-wake path owns this daemon's position.
+      elif [ "$start" != "$own" ]; then
+        # The watcher's position may be a signal wake the watcher handed this
+        # daemon and it has not handled yet; committing past it here would make
+        # that wake read as already escalated. The per-wake path owns this
+        # daemon's position.
         :
       elif ! mark_status_seen "$state" "$task" "$endpoint" "$ident"; then
         escalate_add "$state" "$(basename "$f"): status position commit failed (catch-all scan)"

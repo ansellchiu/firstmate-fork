@@ -1992,6 +1992,26 @@ test_catchall_scan_does_not_consume_a_pending_signal_wake() {
   pass "a catch-all scan from the watcher's position leaves a pending signal wake escalatable"
 }
 
+# The same pending wake must survive a catch-all scan that does find something
+# new past the watcher's position: escalating that later event must not commit
+# the daemon's own position past the earlier event the wake still carries.
+test_catchall_scan_escalation_does_not_consume_a_pending_signal_wake() {
+  local dir state
+  dir=$(make_supercase scan-cross-layer-pending-wake-later)
+  state="$dir/state"
+  printf 'failed: tests red\n' > "$state/cross-t4.status"
+  hb_surfaced_through "$state" cross-t4
+  printf 'needs-decision: pick C or D\n' >> "$state/cross-t4.status"
+  rm -f "$state/.subsuper-last-scan"
+  FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  grep -F 'needs-decision: pick C or D' "$state/.subsuper-escalations" >/dev/null \
+    || fail "the catch-all scan did not escalate the event past the watcher's position"
+  FM_STATE_OVERRIDE="$state" handle_wake "signal: $state/cross-t4.status" "$state"
+  grep -F 'failed: tests red' "$state/.subsuper-escalations" >/dev/null \
+    || fail "a catch-all escalation past the watcher's mark swallowed the pending signal wake's event"
+  pass "a catch-all escalation past the watcher's position leaves a pending signal wake escalatable"
+}
+
 test_handle_wake_routes_self_and_escalate() {
   local dir state
   dir=$(make_supercase handle)
@@ -3864,6 +3884,7 @@ test_heartbeat_scan_dedup
 test_catchall_scan_honors_watcher_backstop_marker
 test_catchall_scan_still_escalates_past_watcher_marker
 test_catchall_scan_does_not_consume_a_pending_signal_wake
+test_catchall_scan_escalation_does_not_consume_a_pending_signal_wake
 test_handle_wake_routes_self_and_escalate
 test_needs_decision_queued_row_escalates_once_as_the_decision
 test_captain_held_decision_owned_row_is_self_handled

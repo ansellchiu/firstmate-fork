@@ -6949,6 +6949,7 @@ process.exit(0);
 EOF
   )
   status=$?
+  : > "$stop"
   [ "$kind" = wedged ] || chmod 600 "$home/state/.wake-queue"
   expect_code 0 "$status" "a $kind burst count must not delay, drop, or invent a number for the wake it decorates"
   [ -z "$out" ] || fail "Pi $kind-count test printed output: $out"
