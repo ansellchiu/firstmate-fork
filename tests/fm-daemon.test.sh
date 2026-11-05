@@ -1973,6 +1973,25 @@ test_catchall_scan_still_escalates_past_watcher_marker() {
   pass "the catch-all scan still escalates events past the watcher backstop marker"
 }
 
+# The daemon's own watcher marks a status log surfaced when it hands the daemon
+# that log's signal wake. A catch-all scan that runs between that mark and the
+# daemon handling the wake must not commit the daemon's own position from the
+# watcher's, or the per-wake path reads the event as already escalated and it
+# never reaches the digest.
+test_catchall_scan_does_not_consume_a_pending_signal_wake() {
+  local dir state
+  dir=$(make_supercase scan-cross-layer-pending-wake)
+  state="$dir/state"
+  printf 'needs-decision: pick A or B\n' > "$state/cross-t3.status"
+  hb_surfaced_through "$state" cross-t3
+  rm -f "$state/.subsuper-last-scan"
+  FM_STATE_OVERRIDE="$state" housekeeping "$state"
+  FM_STATE_OVERRIDE="$state" handle_wake "signal: $state/cross-t3.status" "$state"
+  grep -F 'needs-decision: pick A or B' "$state/.subsuper-escalations" >/dev/null \
+    || fail "a catch-all scan between the watcher's mark and its signal wake swallowed the event"
+  pass "a catch-all scan from the watcher's position leaves a pending signal wake escalatable"
+}
+
 test_handle_wake_routes_self_and_escalate() {
   local dir state
   dir=$(make_supercase handle)
@@ -3844,6 +3863,7 @@ test_escalate_batch_age_uses_first_append
 test_heartbeat_scan_dedup
 test_catchall_scan_honors_watcher_backstop_marker
 test_catchall_scan_still_escalates_past_watcher_marker
+test_catchall_scan_does_not_consume_a_pending_signal_wake
 test_handle_wake_routes_self_and_escalate
 test_needs_decision_queued_row_escalates_once_as_the_decision
 test_captain_held_decision_owned_row_is_self_handled
