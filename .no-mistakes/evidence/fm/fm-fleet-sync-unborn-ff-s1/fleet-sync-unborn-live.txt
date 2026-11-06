@@ -1,0 +1,36 @@
+Live run of bin/fm-fleet-sync.sh (target df29110f) against a disposable lab FM_HOME
+(bin/fm-lab-home.sh create) with file:// bare origins created EMPTY, cloned (unborn main), then pushed to.
+
+BEFORE: secondbrain-build: "## No commits yet on main...origin/main [gone]"
+
+Base b3598ddd script on an unborn clone whose origin now has commits:
+  base-repro: skipped: local main does not exist
+Target df29110f script, same clone:
+  base-repro: recovered: created main from origin/main (was unborn), synced to 8973b08
+  -> git status: "## main...origin/main"
+
+RUN 1 (whole fleet form, no arg):
+deep-prefix: skipped: cannot fast-forward unborn main: x/y already exists in the work tree
+empty-origin: skipped: cannot determine default branch
+ignored-exact: skipped: cannot fast-forward unborn main: secret.env already exists in the work tree
+ignored-prefix: skipped: cannot fast-forward unborn main: a already exists in the work tree
+ignored-symlink-prefix: skipped: cannot fast-forward unborn main: a already exists in the work tree
+secondbrain-build: recovered: created main from origin/main (was unborn), synced to 0cb76fc
+untracked-conflict: STUCK: on branch main with uncommitted changes, ? commits behind origin/main - needs attention
+rc=0
+
+AFTER RUN 1:
+-- secondbrain-build: ## main...origin/main | HEAD=0cb76fc origin=0cb76fc upstream=origin/main  (files: README.md src/app.txt)
+-- empty-origin / untracked-conflict / ignored-* / deep-prefix: still unborn, untouched
+untracked README: mine            (local untracked content preserved)
+ignored-exact secret.env: PRECIOUS (ignored file at exact origin path preserved)
+ignored-prefix a: PRECIOUS        (ignored FILE 'a' vs origin 'a/b' preserved - review-round-1 fix)
+symlink a -> lab/outside; outside: keep   (ignored SYMLINK 'a' vs origin 'a/b' preserved, target untouched)
+deep x/y: PRECIOUS                (ignored file at nested leading dir x/y vs origin x/y/z preserved)
+
+RUN 2 (after empty-origin receives its first commit):
+empty-origin: recovered: created main from origin/main (was unborn), synced to 348ef40
+secondbrain-build: already current
+(other guarded clones unchanged, same skip/STUCK lines)
+
+RUN 3 (single-project form): secondbrain-build: already current  rc=0
