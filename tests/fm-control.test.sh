@@ -1031,6 +1031,53 @@ exit_picker_screen() {
     'Enter to confirm · Esc to cancel'
 }
 
+# agy's separated composer carries a bare `>` shell glyph, so the composer
+# classifier proves it only from the recorded harness plus agy's idle status row
+# on the same screen (_fm_composer_agy_verdict in bin/fm-composer-lib.sh). The
+# fake cursor parks on row 1, which these screens use for the `>` row.
+agy_screen() {  # <content-row> <status-row>
+  local rule
+  rule=$(printf '─%.0s' $(seq 1 60))
+  printf '%s\n%s\n%s\n%s\n' "$rule" "$1" "$rule" "$2"
+}
+
+test_agy_exit_accepts_an_idle_composer_and_refuses_the_rest() {
+  local dir out rc
+  dir=$(new_case agy-idle)
+  add_task "$dir" t1 agy
+  alive_as_harness "$dir" agy
+  agy_screen '>' '? for shortcuts' > "$dir/fake/pane"
+  out=$(run_control "$dir" t1 exit); rc=$?
+  expect_code 0 "$rc" "an idle agy composer should accept the exit command"$'\n'"$out"
+  [ "$(literals "$dir")" = "/quit" ] || fail "idle agy should be sent /quit, got: $(literals "$dir")"
+
+  dir=$(new_case agy-typed)
+  add_task "$dir" t1 agy
+  alive_as_harness "$dir" agy
+  agy_screen '> half typed' '? for shortcuts' > "$dir/fake/pane"
+  out=$(run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "typed agy text should refuse"$'\n'"$out"
+  [ ! -s "$dir/fake/literal" ] || fail "pending agy text must not be typed over"
+
+  dir=$(new_case agy-shell)
+  add_task "$dir" t1 agy
+  alive_as_harness "$dir" agy
+  agy_screen '>' '' > "$dir/fake/pane"
+  out=$(run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "a bare > without agy's status row should refuse"$'\n'"$out"
+  assert_contains "$out" "not proven empty" "the refusal should say the composer is unproven"
+  [ ! -s "$dir/fake/literal" ] || fail "an unproven agy composer must not be typed into"
+
+  dir=$(new_case agy-other-harness)
+  add_task "$dir" t1 claude
+  alive_as "$dir" claude
+  agy_screen '>' '? for shortcuts' > "$dir/fake/pane"
+  out=$(run_control "$dir" t1 exit); rc=$?
+  expect_code 1 "$rc" "an agy-looking screen on a non-agy task should refuse"$'\n'"$out"
+  [ ! -s "$dir/fake/literal" ] || fail "a non-agy task must not be typed into on agy's proof"
+  pass "fm-control exit: idle agy is accepted; typed, shell-like, and non-agy panes are refused"
+}
+
 test_exit_refuses_an_open_background_picker() {
   local dir out rc
   dir=$(new_case open-picker)
@@ -1343,6 +1390,7 @@ EOF
 }
 
 test_exit_types_each_harness_verified_command
+test_agy_exit_accepts_an_idle_composer_and_refuses_the_rest
 test_opencode_exit_matches_recorded_major
 test_opencode2_exit_retries_ctrl_c_once
 test_interrupt_sends_each_harness_verified_key
