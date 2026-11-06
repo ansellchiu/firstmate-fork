@@ -2161,27 +2161,24 @@ fm_test_picker_state() {
 # caller on a task recorded as agy whose same screen shows agy's idle status row.
 test_agy_separated_composer_needs_recorded_harness_and_idle_status_row() {
   local rule screen out caps
-  local FM_COMPOSER_AGY_IDLE_PROOF
   rule=$(printf '─%.0s' $(seq 1 60))
   mk() { printf 'quota exhausted\n\n%s\n%s\n%s\n%s' "$rule" "$1" "$rule" "$2"; }
   for caps in '' 'cursor=1'; do
     local cy=''
     [ -z "$caps" ] || cy=3
-    unset FM_COMPOSER_AGY_IDLE_PROOF
-    out=$(FM_COMPOSER_HARNESS=agy fm_composer_classify_screen "$caps" "$(mk '>' '? for shortcuts')" "$cy")
+    out=$(FM_COMPOSER_AGY_IDLE_PROOF='' FM_COMPOSER_HARNESS=agy fm_composer_classify_screen "$caps" "$(mk '>' '? for shortcuts')" "$cy")
     [ "$out" = unknown ] || fail "idle agy (caps='$caps') without the opt-in must stay unknown, got '$out'"
-    FM_COMPOSER_AGY_IDLE_PROOF=1
-    out=$(FM_COMPOSER_HARNESS=agy fm_composer_classify_screen "$caps" "$(mk '>' '? for shortcuts')" "$cy")
+    out=$(FM_COMPOSER_AGY_IDLE_PROOF=1 FM_COMPOSER_HARNESS=agy fm_composer_classify_screen "$caps" "$(mk '>' '? for shortcuts')" "$cy")
     [ "$out" = empty ] || fail "idle agy (caps='$caps') must read empty, got '$out'"
   done
-  out=$(FM_COMPOSER_HARNESS=agy fm_composer_classify_screen '' "$(mk '> draft' '? for shortcuts')")
+  out=$(FM_COMPOSER_AGY_IDLE_PROOF=1 FM_COMPOSER_HARNESS=agy fm_composer_classify_screen '' "$(mk '> draft' '? for shortcuts')")
   [ "$out" = pending ] || fail "agy with typed text must read pending, got '$out'"
-  out=$(FM_COMPOSER_HARNESS=agy fm_composer_classify_screen '' "$(mk '>' 'esc to cancel')")
+  out=$(FM_COMPOSER_AGY_IDLE_PROOF=1 FM_COMPOSER_HARNESS=agy fm_composer_classify_screen '' "$(mk '>' 'esc to cancel')")
   [ "$out" = unknown ] || fail "busy agy must stay unknown, got '$out'"
-  out=$(FM_COMPOSER_HARNESS=agy fm_composer_classify_screen '' "$(printf 'user@host %% ls\nfoo\n>')")
+  out=$(FM_COMPOSER_AGY_IDLE_PROOF=1 FM_COMPOSER_HARNESS=agy fm_composer_classify_screen '' "$(printf 'user@host %% ls\nfoo\n>')")
   [ "$out" = unknown ] || fail "a dead shell with > must stay unknown, got '$out'"
   for h in claude kiro ''; do
-    out=$(FM_COMPOSER_HARNESS=$h fm_composer_classify_screen '' "$(mk '>' '? for shortcuts')")
+    out=$(FM_COMPOSER_AGY_IDLE_PROOF=1 FM_COMPOSER_HARNESS=$h fm_composer_classify_screen '' "$(mk '>' '? for shortcuts')")
     [ "$out" = unknown ] || fail "harness '$h' with an agy-looking screen must stay unknown, got '$out'"
   done
   pass "fm_composer_classify_screen: agy's bare > composer is proven only by the opt-in, the recorded harness, and its idle status row"
