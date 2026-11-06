@@ -4127,6 +4127,7 @@ startup_lock_failed() {
   exit 1
 }
 WATCHER_RECOVERY_PENDING=0
+WATCHER_MARKER_RECOVERY=0
 if [ -n "${FM_LOCK_RECOVERED_PID:-}" ]; then
   WATCHER_RECOVERY_PENDING=1
 fi
@@ -4141,6 +4142,7 @@ if [ "${FM_WATCH_HANDLING_SUCCESSOR:-0}" = 1 ]; then
   WATCHER_RECOVERY_PENDING=0
 elif [ "$FM_RECOVERY_MARKER_ACTION" = recover ]; then
   WATCHER_RECOVERY_PENDING=1
+  WATCHER_MARKER_RECOVERY=1
 fi
 # Side-band ledger publication, detached from the poll loop.
 #
@@ -4251,11 +4253,16 @@ resurface_after_downtime() {
     [ "$FM_RECOVERY_MARKER_QUEUED" = 1 ] || return 0
     wake "check: rearm-resurface"
   fi
-  if [ "$WATCHER_RECOVERY_PENDING" -ne 1 ]; then
-    if ! fm_recovery_marker_arm_check "$WATCHER_DOWNTIME_MARKER"; then
-      echo "watcher: recovery state could not be consumed safely" >&2
-      exit 1
-    fi
+  if ! fm_recovery_marker_arm_check "$WATCHER_DOWNTIME_MARKER"; then
+    echo "watcher: recovery state could not be consumed safely" >&2
+    exit 1
+  fi
+  if [ "$WATCHER_RECOVERY_PENDING" -eq 1 ]; then
+    # Recovering a dead predecessor's lock announces only real queued work;
+    # an empty durable queue has nothing to resurface unless the marker itself
+    # called for recovery (for example a quarantined malformed marker).
+    [ "$FM_RECOVERY_MARKER_QUEUED" = 1 ] || [ "$WATCHER_MARKER_RECOVERY" = 1 ] || return 0
+  else
     [ "$FM_RECOVERY_MARKER_ACTION" = recover ] || return 0
   fi
   wake "check: rearm-resurface"
