@@ -1,0 +1,12 @@
+# Successor-first legacy takeover x8 with hardened stop_outside_state_locks
+ok - disposable watcher refuses inherited state outside its marked lab
+ok - tombstone cleanup respects a live reaper and recovers a recycled reaper pid
+ok - iteration 1: successor-first takeover with queued work completes (no hang)
+ok - iteration 2: successor-first takeover with queued work completes (no hang)
+ok - iteration 3: successor-first takeover with queued work completes (no hang)
+ok - iteration 4: successor-first takeover with queued work completes (no hang)
+ok - iteration 5: successor-first takeover with queued work completes (no hang)
+ok - iteration 6: successor-first takeover with queued work completes (no hang)
+ok - iteration 7: successor-first takeover with queued work completes (no hang)
+ok - iteration 8: successor-first takeover with queued work completes (no hang)
+rc=0

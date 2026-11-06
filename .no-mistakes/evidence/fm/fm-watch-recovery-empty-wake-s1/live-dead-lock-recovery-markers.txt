@@ -1,0 +1,42 @@
+== [BASE, acknowledged marker + empty queue (main-home repro)] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.DwNdUk dead predecessor pid=999999 queued=0
+seeded .watcher-down marker: acked:downtime:111.1700000000.abc
+watcher exited status=0
+-- watcher output:
+check: rearm-resurface
+-- rearm-resurface wakes emitted: 1
+-- marker after: acked:downtime:97908.1793956363.eCb7Q2
+== [FIX, acknowledged marker + empty queue (main-home repro)] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.z94JPz dead predecessor pid=999999 queued=0
+seeded .watcher-down marker: acked:downtime:111.1700000000.abc
+watcher still running after 6s (pid=99196)
+-- watcher output:
+-- rearm-resurface wakes emitted: 0
+-- marker after: pending:downtime:99196.1793956378.jvovuq
+== [FIX, repeated takeover #1, empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.MnJ5Ik dead predecessor pid=999999 queued=0
+watcher still running after 6s (pid=22439)
+-- watcher output:
+-- rearm-resurface wakes emitted: 0
+-- marker after: pending:downtime:22439.1793956393.avuXJS
+== [FIX, repeated takeover #2, empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.z29xd0 dead predecessor pid=999999 queued=0
+watcher still running after 6s (pid=60275)
+-- watcher output:
+-- rearm-resurface wakes emitted: 0
+-- marker after: pending:downtime:60275.1793956408.Q6pirr
+== [FIX, repeated takeover #3, empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.zntbE5 dead predecessor pid=999999 queued=0
+watcher still running after 6s (pid=548)
+-- watcher output:
+-- rearm-resurface wakes emitted: 0
+-- marker after: pending:downtime:548.1793956423.oqu15A
+== [FIX adversarial, malformed marker + empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.4L5AS6 dead predecessor pid=999999 queued=0
+seeded .watcher-down marker: garbage-not-a-marker
+watcher still running after 6s (pid=37025)
+-- watcher output:
+-- rearm-resurface wakes emitted: 0
+-- marker after: pending:downtime:37025.1793956438.q0gqjA
+== [FIX, acknowledged marker + queued work] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.FlaqC2 dead predecessor pid=999999 queued=1
+queued one durable wake
+seeded .watcher-down marker: acked:downtime:111.1700000000.abc
+watcher exited status=0
+-- watcher output:
+check: rearm-resurface
+-- rearm-resurface wakes emitted: 1
+-- marker after: announced:downtime:62198.1793956439.o4vpMk

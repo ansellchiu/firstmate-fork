@@ -1,0 +1,3 @@
+ok - disposable watcher refuses inherited state outside its marked lab
+ok - tombstone cleanup respects a live reaper and recovers a recycled reaper pid
+not ok - dead-lock recovery on an empty queue exited: check: rearm-resurface

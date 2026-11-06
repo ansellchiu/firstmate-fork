@@ -1,0 +1,86 @@
+# Real bin/fm-watch.sh started after a dead predecessor's .watch.lock; base=b3598ddd (pre-fix), cur=f9bffb5c (fix)
+== tree=base mode=empty dead predecessor pid=999999
+-- durable queue before start:
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- lock now held by: none
+
+== tree=base mode=queued dead predecessor pid=999999
+-- durable queue before start:
+1793953664	1	check	startup-network	check: queued before recovery
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- lock now held by: none
+
+== tree=01M6QYGFHPA216B406AWGFH7TY mode=empty dead predecessor pid=999999
+-- durable queue before start:
+-- watcher still running after 4s (no wake emitted, stayed armed)
+-- watcher output:
+-- lock now held by: none
+
+== tree=01M6QYGFHPA216B406AWGFH7TY mode=queued dead predecessor pid=999999
+-- durable queue before start:
+1793953685	1	check	startup-network	check: queued before recovery
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- lock now held by: none
+
+== tree=base mode=empty dead predecessor pid=999999
+-- marker before: acked:downtime:gen1
+-- durable queue before start:
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- marker after: acked:downtime:79187.1793953947.Jr1jQO; quarantine: 0
+
+== tree=01M6QYGFHPA216B406AWGFH7TY mode=empty dead predecessor pid=999999
+-- marker before: acked:downtime:gen1
+-- durable queue before start:
+-- watcher still running after 4s (no wake emitted, stayed armed)
+-- watcher output:
+-- marker after: pending:downtime:87832.1793953961.HBiACd; quarantine: 0
+
+== tree=base mode=empty dead predecessor pid=999999
+-- marker before: garbage
+-- durable queue before start:
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- marker after: acked:downtime:8489.1793953966.PGM0S3; quarantine: 0
+
+== tree=01M6QYGFHPA216B406AWGFH7TY mode=empty dead predecessor pid=999999
+-- marker before: garbage
+-- durable queue before start:
+-- watcher still running after 4s (no wake emitted, stayed armed)
+-- watcher output:
+-- marker after: pending:downtime:16892.1793953981.KedYlW; quarantine: 0
+
+== tree=01M6QYGFHPA216B406AWGFH7TY mode=queued dead predecessor pid=999999
+-- marker before: acked:downtime:gen1
+-- durable queue before start:
+1793953985	1	check	startup-network	check: queued before recovery
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- marker after: announced:downtime:34765.1793953985.QtSs0X; quarantine: 0
+
+# No dead lock, malformed marker, empty queue (marker-requested recovery must still wake)
+== tree=base mode=empty dead predecessor pid=none
+-- marker before: garbage
+-- durable queue before start:
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- marker after: announced:downtime:66308.1793954005.mnWKgQ; quarantine: 1
+
+== tree=01M6QYGFHPA216B406AWGFH7TY mode=empty dead predecessor pid=none
+-- marker before: garbage
+-- durable queue before start:
+-- watcher exited rc=0 (wake delivered)
+-- watcher output:
+check: rearm-resurface
+-- marker after: announced:downtime:79905.1793954013.x4JvCy; quarantine: 1
+

@@ -1,0 +1,66 @@
+ok - disposable watcher refuses inherited state outside its marked lab
+ok - tombstone cleanup respects a live reaper and recovers a recycled reaper pid
+ok - wait deadline diagnoses and reaps a stopped test child without hanging
+ok - simultaneous watcher starts leave exactly one live process
+ok - fm_pid_identity real ps fallback is locale-invariant
+ok - fm_pid_identity is locale-invariant across LC_ALL/LC_TIME
+ok - fm_pid_identity ps fallback is terminal-width-invariant
+ok - /proc process identity ignores simulated btime changes
+ok - /proc process identity detects pid reuse
+ok - MSYS /proc process identity regression skipped on non-Windows host
+ok - killed watcher stale lock is reclaimed
+ok - dead-lock recovery with an empty queue emits no synthetic wake
+ok - dead-lock recovery with queued work still announces
+ok - dead watcher reclaim fails promptly when downtime marker cannot be published
+ok - stale watcher reclaim publishes durable recovery evidence before clear
+ok - live watcher lock with stale heartbeat is actionable
+ok - live watcher lock with a beacon past the hard bound is replaced, under it is still refused
+ok - a fresh watcher replaces a live holder whose pre-UTC-pin identity no longer recomputes, and the old holder stands down unsignalled
+ok - a replaced holder stands down cleanly even when its successor has already exited and released the lock
+ok - guard banner leads when down with pending wakes (repair-after-drain) and stays silent when live and fresh
+ok - concurrent fm_lock_try_acquire yields exactly one winner
+ok - dead-pid stale lock is reclaimed by a single acquirer
+ok - concurrent stale-lock steal yields exactly one winner
+ok - dead steal owner is reclaimed once without a nested steal marker
+ok - dead nested steal chain from an interrupted reclaim is recovered
+ok - a competing reaper cannot remove the successor's steal mutex
+ok - a steal mutex abandoned by this process does not block its own reclaim
+ok - a steal reap interrupted in this process is resumed from its own tombstone
+ok - live steal mutex is not reclaimed
+ok - live-held lock is not stolen
+ok - lock whose recorded holder pid was reused by a live process is reclaimed
+ok - live holder matching its recorded start time keeps its lock
+ok - lock whose recorded identity no longer recomputes is reclaimed without signalling its pid; a matching or unrecorded identity stays held
+ok - live supervise-daemon lock with a stale local-time identity and no start time is not reclaimed
+ok - empty mid-acquire lock keeps a minimum grace
+ok - late original claimant cannot claim a recreated lock
+ok - bounded wait earns one grace window for an unpublished-pid lock, still bounds a live holder
+ok - bounded deadline with an unpublished holder is retriable
+ok - bounded deadline with an exited holder is retriable
+ok - bounded deadline with a released lock is retriable
+ok - bounded deadline preserves the live holder advisory
+ok - bounded deadline rejects malformed pid data and non-directory locks
+ok - paused mid-acquire claimant backs off to active stealer
+ok - watch restart preserves recovery without signaling a reused pid
+ok - watch restart attaches to a verified healthy peer and later surfaces a successor gap
+ok - watcher self-evicts when the lock pid no longer names it
+ok - watcher exits 1 with its reason when its state directory is torn down and recreated during startup
+ok - arm turns clean self-eviction without a successor into a typed failure
+ok - arm attaches to a live fresh watcher and fails loudly when that cycle has no successor
+ok - attached arm signals record a classified lifecycle entry
+ok - arm starts cleanly and resurfaces recovery after a dead-pid lock
+ok - arm cleans child watcher and temp output on HUP
+ok - arm defers TERM until startup watcher can run its lock cleanup
+ok - arm TERM waits out a stalled singleton claim past the deadline and leaves no lock evidence
+ok - arm propagates an immediate watcher wake before confirmation
+ok - arm attaches to a peer watcher after child stands down and surfaces a missing successor
+ok - arm reports FAILED and exits non-zero when no fresh watcher can be confirmed
+ok - cycle-exit ledger links a verified successor and remains size-capped
+ok - arm confirms a watcher whose post-claim startup exceeds the legacy budget
+ok - arm relays a live-holder startup-lock refusal and keeps the downtime drainable
+ok - staged-owner cleanup removes only unpublished empty or self-owned staging
+ok - startup cleanup waits for in-flight staging and publication, preserving foreign owners
+ok - a stop forced before the safe point waits for it and leaves no lock evidence
+ok - a watcher that cannot publish its identity exits through its cleanup
+ok - SIGSTOP distinguishes live PID from stale beacon and termination records the exit class
+rc=0

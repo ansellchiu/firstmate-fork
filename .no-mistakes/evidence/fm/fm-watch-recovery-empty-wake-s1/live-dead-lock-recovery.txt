@@ -1,0 +1,15 @@
+== [BASE b3598ddd, empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.N9dzEb dead predecessor pid=999999 queued=0
+watcher exited status=0
+-- watcher output:
+check: rearm-resurface
+-- rearm-resurface wakes emitted: 1
+== [FIX faf91842, empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.4ROjJs dead predecessor pid=999999 queued=0
+watcher still running after 6s (pid=64985)
+-- watcher output:
+-- rearm-resurface wakes emitted: 0
+== [FIX faf91842, queued work] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.qGcVuw dead predecessor pid=999999 queued=1
+queued one durable wake
+watcher exited status=0
+-- watcher output:
+check: rearm-resurface
+-- rearm-resurface wakes emitted: 1

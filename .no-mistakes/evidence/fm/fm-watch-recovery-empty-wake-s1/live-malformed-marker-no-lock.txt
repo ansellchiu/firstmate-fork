@@ -1,0 +1,18 @@
+== [BASE, no dead lock, malformed marker + empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.CMVaYI dead predecessor pid=999999 queued=0
+seeded .watcher-down marker: garbage-not-a-marker
+watcher exited status=0
+-- watcher output:
+check: rearm-resurface
+-- rearm-resurface wakes emitted: 1
+-- marker after: announced:downtime:76252.1793956449.wAbL6K
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.CMVaYI/state/.watcher-down.invalid.C921rg
+(malformed marker quarantined)
+== [FIX, no dead lock, malformed marker + empty queue] lab=/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.9Djaws dead predecessor pid=999999 queued=0
+seeded .watcher-down marker: garbage-not-a-marker
+watcher exited status=0
+-- watcher output:
+check: rearm-resurface
+-- rearm-resurface wakes emitted: 1
+-- marker after: announced:downtime:78191.1793956449.XzbfPq
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.9Djaws/state/.watcher-down.invalid.ShKz22
+(malformed marker quarantined)
