@@ -335,9 +335,18 @@ test_live_stalled_watch_lock_is_replaced_past_hard_bound() {
 # Stop <pid> at a moment it holds no state lock but the watch lock, so a
 # successor never waits on a lock the stopped holder cannot release.
 stop_outside_state_locks() {  # <pid> <state>
-  local pid=$1 state=$2 i=0 lock held
+  local pid=$1 state=$2 i=0 j lock held
   while [ "$i" -lt 100 ]; do
     kill -STOP "$pid" 2>/dev/null || return 1
+    # SIGSTOP is delivered asynchronously: until the process is actually
+    # stopped it can still take a state lock after the scan below, which would
+    # strand any later lock-waiting step behind a stopped holder.
+    j=0
+    until case "$(ps -p "$pid" -o stat= 2>/dev/null)" in *T*) true ;; *) false ;; esac; do
+      [ "$j" -lt 100 ] || return 1
+      sleep 0.01
+      j=$((j + 1))
+    done
     held=0
     for lock in "$state"/.*.lock "$state"/.*.lock.steal "$state"/*.lock; do
       [ "$lock" != "$state/.watch.lock" ] || continue
