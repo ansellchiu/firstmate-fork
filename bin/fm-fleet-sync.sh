@@ -429,12 +429,20 @@ sync_project() {
     if [ "$cur" = "$DEFAULT" ] && ! git -C "$PROJ" rev-parse --verify --quiet HEAD >/dev/null; then
       # Git silently overwrites an IGNORED file in the way, which status does not
       # show; refuse when any path the checkout would write already exists.
-      while IFS= read -r -d '' unborn_path; do
-        if [ -e "$PROJ/$unborn_path" ] || [ -L "$PROJ/$unborn_path" ]; then
+      while IFS= read -r -d '' unborn_entry; do
+        unborn_path=${unborn_entry#*$'\t'}
+        unborn_type=${unborn_entry#* }
+        unborn_type=${unborn_type%% *}
+        if [ "$unborn_type" = tree ]; then
+          if [ -L "$PROJ/$unborn_path" ] || { [ -e "$PROJ/$unborn_path" ] && [ ! -d "$PROJ/$unborn_path" ]; }; then
+            echo "$label: skipped: cannot fast-forward unborn $DEFAULT: $unborn_path already exists in the work tree"
+            return 0
+          fi
+        elif [ -e "$PROJ/$unborn_path" ] || [ -L "$PROJ/$unborn_path" ]; then
           echo "$label: skipped: cannot fast-forward unborn $DEFAULT: $unborn_path already exists in the work tree"
           return 0
         fi
-      done < <(git -C "$PROJ" ls-tree -r -z --name-only "$BASE" 2>/dev/null)
+      done < <(git -C "$PROJ" ls-tree -r -t -z "$BASE" 2>/dev/null)
       if ! unborn_output=$(git -C "$PROJ" checkout --quiet --track -b "$DEFAULT" "$BASE" 2>&1); then
         reason="cannot fast-forward unborn $DEFAULT"
         if [ -n "$unborn_output" ]; then

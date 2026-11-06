@@ -894,6 +894,45 @@ test_unborn_default_with_conflicting_ignored_file_is_untouched() {
   pass "unborn default with a conflicting ignored file is left untouched"
 }
 
+test_unborn_default_with_ignored_file_at_leading_dir_is_untouched() {
+  local home clone work out
+  home=$(new_home)
+  clone=$(build_unborn "$home" unborn-prefix)
+  work="$home/work-unborn-prefix"
+  mkdir -p "$work/a"
+  commit_file "$work" a/b v0 C0
+  git -C "$work" push -q origin main
+  printf '%s\n' a >> "$clone/.git/info/exclude"
+  printf '%s\n' precious > "$clone/a"
+
+  out=$(run_sync "$home" "$clone")
+
+  assert_contains "$out" "unborn-prefix: skipped: cannot fast-forward unborn main: a already exists" "ignored file at a leading directory skips with a reason"
+  if git -C "$clone" rev-parse --verify --quiet HEAD >/dev/null; then fail "clone advanced over an ignored leading-directory file"; fi
+  [ -f "$clone/a" ] && [ "$(cat "$clone/a")" = precious ] || fail "ignored leading-directory file was lost"
+  pass "unborn default with an ignored file at a leading directory is left untouched"
+}
+
+test_unborn_default_with_existing_ignored_dir_still_advances() {
+  local home clone work out
+  home=$(new_home)
+  clone=$(build_unborn "$home" unborn-dir)
+  work="$home/work-unborn-dir"
+  mkdir -p "$work/a"
+  commit_file "$work" a/b v0 C0
+  git -C "$work" push -q origin main
+  printf '%s\n' a/keep >> "$clone/.git/info/exclude"
+  mkdir -p "$clone/a"
+  printf '%s\n' kept > "$clone/a/keep"
+
+  out=$(run_sync "$home" "$clone")
+
+  assert_contains "$out" "unborn-dir: recovered: created main from origin/main (was unborn)" "existing directory on a tree path does not block"
+  [ "$(cat "$clone/a/b")" = v0 ] || fail "origin file not checked out"
+  [ "$(cat "$clone/a/keep")" = kept ] || fail "ignored file inside directory was lost"
+  pass "unborn default with an existing directory on a tree path advances"
+}
+
 test_detached_clean_ancestor_recovers
 test_detached_unique_commit_is_stuck_untouched
 test_detached_clean_ancestor_with_diverged_local_default_is_stuck_untouched
@@ -926,3 +965,5 @@ test_unborn_default_with_empty_origin_is_skipped
 test_unborn_default_with_origin_commits_advances
 test_unborn_default_with_conflicting_untracked_file_is_untouched
 test_unborn_default_with_conflicting_ignored_file_is_untouched
+test_unborn_default_with_ignored_file_at_leading_dir_is_untouched
+test_unborn_default_with_existing_ignored_dir_still_advances
