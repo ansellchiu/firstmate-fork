@@ -135,14 +135,16 @@
 # ghost text observed - but its content row carries a bare `>` (a SHELL glyph,
 # already in FM_COMPOSER_SHELL_PROMPT_GLYPHS below), unlike pi's glyph-free
 # separated rows. No agy identity probe exists (no hook or plugin surface was
-# found on live verification), so identity comes from two facts the caller and
-# the screen supply together (_fm_composer_agy_verdict): the recorded harness is
-# agy (FM_COMPOSER_HARNESS) AND the same screen shows agy's idle status row
-# `? for shortcuts` directly below the closing rule. Then a bare `>` reads
-# `empty` and text after it reads `pending`. Without that conjunction the shape
-# stays `unknown` under THE SAFETY RULE below: a dead login shell shows no agy
-# status row, a busy agy shows `esc to cancel` instead, and every other harness
-# never reaches the proof.
+# found on live verification), so identity comes from facts the caller and the
+# screen supply together (_fm_composer_agy_verdict): the caller opts in with
+# FM_COMPOSER_AGY_IDLE_PROOF=1 (only fm-control's exit/relaunch composer check
+# does), the recorded harness is agy (FM_COMPOSER_HARNESS), AND the same screen
+# shows agy's idle status row `? for shortcuts` directly below the closing rule.
+# Then a bare `>` reads `empty` and text after it reads `pending`. Without that
+# conjunction the shape stays `unknown` under THE SAFETY RULE below: fm-send,
+# the fm-watch steering doorbell and fm-procevent never opt in, a dead login
+# shell shows no agy status row, a busy agy shows `esc to cancel` instead, and
+# every other harness never reaches the proof.
 #
 # THE SAFETY RULE for glyphs: a bare shell prompt glyph (`>` `$` `%` `#`) -
 # what a pane shows once its agent has exited to a plain login shell - is a
@@ -2722,14 +2724,16 @@ _fm_composer_classify_bare_pi_overlap() {  # <screen> <styled> <has-identity> <i
 # _fm_composer_agy_verdict: the agy identity proof for the separated composer.
 # agy draws full-width `─` rules around one `>` content row (a SHELL glyph, so
 # THE SAFETY RULE keeps it unknown on its own) with its idle status row
-# `? for shortcuts` directly below the closing rule. Only when the caller names
-# the recorded harness agy (FM_COMPOSER_HARNESS) AND that status row is on the
-# same screen is the pair agy's composer: a bare `>` is then empty and text
-# after it is pending. A dead shell has no such status row, a busy agy shows
-# `esc to cancel` instead, and any other harness never reaches this proof, so
-# all of those stay unknown. Prints nothing when the proof does not hold.
+# `? for shortcuts` directly below the closing rule. Only when the caller opts
+# in (FM_COMPOSER_AGY_IDLE_PROOF=1, set solely by fm-control exit/relaunch),
+# names the recorded harness agy (FM_COMPOSER_HARNESS) AND that status row is
+# on the same screen is the pair agy's composer: a bare `>` is then empty and
+# text after it is pending. Callers that do not opt in, a dead shell with no
+# such status row, a busy agy showing `esc to cancel`, and any other harness
+# all stay unknown. Prints nothing when the proof does not hold.
 _fm_composer_agy_verdict() {  # <screen> <styled>
   local screen=$1 styled=$2 plain status raw content
+  [ "${FM_COMPOSER_AGY_IDLE_PROOF:-}" = 1 ] || return 1
   [ "${FM_COMPOSER_HARNESS:-}" = agy ] || return 1
   [ "$FM_COMPOSER_SCAN_PI_PAIR_VALID" = 1 ] || return 1
   [ "$FM_COMPOSER_SCAN_PI_OPEN_TITLED" != 1 ] || return 1
