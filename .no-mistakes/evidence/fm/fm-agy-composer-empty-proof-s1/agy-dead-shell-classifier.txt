@@ -1,0 +1,10 @@
+== dead login shell (PS1='> ') under agy's leftover frame:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+== classifier:
+harness=agy no-opt-in: unknown
+harness=agy FM_COMPOSER_AGY_IDLE_PROOF=1: unknown
+harness=claude no-opt-in: unknown
+harness=claude FM_COMPOSER_AGY_IDLE_PROOF=1: unknown

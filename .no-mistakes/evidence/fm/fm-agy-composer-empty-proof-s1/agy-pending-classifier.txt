@@ -1,0 +1,10 @@
+== live agy pane with typed text:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> half typed draft
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                 Gemini 3.8 Flash · high
+== classifier:
+harness=agy no-opt-in: unknown
+harness=agy FM_COMPOSER_AGY_IDLE_PROOF=1: unknown
+harness=claude no-opt-in: unknown
+harness=claude FM_COMPOSER_AGY_IDLE_PROOF=1: unknown

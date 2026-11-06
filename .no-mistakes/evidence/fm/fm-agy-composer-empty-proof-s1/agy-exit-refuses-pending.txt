@@ -1,0 +1,14 @@
+== before: pending draft in live agy
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> half typed draft
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                 Gemini 3.8 Flash · high
+== $ fm-control.sh t1 exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.kRhQQb
+error: task t1's composer state is 'unknown', not proven empty; refusing to type the /quit exit command because it could concatenate onto existing text. Clear the composer, then retry 'exit'
+rc=1
+== after (draft must be intact, no /quit typed):
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+> half typed draft
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                 Gemini 3.8 Flash · high

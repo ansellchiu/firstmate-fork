@@ -1,0 +1,29 @@
+== before: idle live agy (pane command: agy)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                               	 Gemini 3.8 Flash · high
+== $ fm-control.sh t1 relaunch --harness agy --note 'quota exhausted; moving runtime'
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.kRhQQb
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.kRhQQb
+warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.kRhQQb/data/t1/launch-brief.md records no ship branch; defaulting to legacy branch fm/t1
+relaunched t1 harness=agy from=agy model=default effort=default backend=tmux endpoint=agyw:fm-t1 worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-agywt-task.98627
+rc=0
+== windows after:
+agyw:fm-t1 agy
+== replacement agy pane after relaunch:
+  include Firstmate specification or other mixed Task content.
+  Preserve those words without adding speaker labels or direct address.
+  Firstmate-authored constraints, acceptance criteria, implementation details, decisions, and tradeoffs are
+  specification, not captain intent.
+  The Definition of done's rule that `--intent` must be self-sufficient still governs the string you pass: resolve any
+  report, decision, or PR the intent below refers to into its substance rather than passing the pointer.
+  ## Captain intent authorized for --intent
+  Reply with the word ready and then wait.
+○ Thought for 5.1s (I'm thinking through how to approach this.)
+● Ran (find '/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.kRhQQb/state/t1.i...) (ctrl+o to expand)
+  ready
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                                  Gemini 3.8 Flash · high
