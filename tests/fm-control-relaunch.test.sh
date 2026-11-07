@@ -3342,6 +3342,59 @@ test_relaunch_concentration_ignores_secondmate_tasks() {
   pass "fm-control relaunch: concentration check ignores secondmate tasks"
 }
 
+test_relaunch_secondmate_is_not_refused_by_worker_concentration() {
+  local dir out rc
+  dir=$(new_case conc_sm_self rl93)
+  add_ship_task "$dir" rl93 claude
+  add_ship_task "$dir" rl94 codex fmses "$dir/wt-rl94"
+  add_ship_task "$dir" rl95 codex fmses "$dir/wt-rl95"
+  git -C "$dir/proj" worktree add --quiet -b sm2-branch "$dir/wt-sm2"
+  mkdir -p "$dir/wt-sm2/state" "$dir/wt-sm2/data" "$dir/wt-sm2/bin" "$dir/home/data/rl96"
+  printf '# secondmate brief\n' > "$dir/home/data/rl96/brief.md"
+  printf 'rl96\n' > "$dir/wt-sm2/.fm-secondmate-home"
+  printf '# agents\n' > "$dir/wt-sm2/AGENTS.md"
+  {
+    echo "window=fmses:fm-rl96"
+    echo "endpoint_task_id=rl96"
+    echo "worktree=$dir/wt-sm2"
+    echo "project=$dir/wt-sm2"
+    echo "harness=claude"
+    echo "kind=secondmate"
+    echo "mode=secondmate"
+    echo "yolo=off"
+    echo "tasktmp=/tmp/fm-rl96"
+    echo "model=default"
+    echo "effort=default"
+    echo "home=$dir/wt-sm2"
+  } > "$dir/home/state/rl96.meta"
+  printf '%s\n' "fm-rl96" >> "$dir/fake/windows"
+  printf '%s' "$dir/wt-sm2" > "$dir/fake/cwd"
+  TASK_TMPS+=("/tmp/fm-rl96")
+  printf 'codex' > "$dir/fake/becomes"
+
+  out=$(run_control "$dir" rl96 relaunch --harness codex); rc=$?
+  expect_code 0 "$rc" "secondmate relaunch must not be refused by worker concentration limit"$'\n'"$out"
+  assert_contains "$out" "relaunched rl96 harness=codex" "outcome should report successful relaunch"
+  pass "fm-control relaunch: secondmate task being relaunched is not refused by worker concentration"
+}
+
+test_relaunch_unmapped_harness_calls_quota_axi_full_without_provider() {
+  local dir out rc
+  dir=$(new_case unmapped rl97)
+  add_ship_task "$dir" rl97 claude
+  cat > "$dir/fake/quota-axi-output" <<'EOF'
+windows[1]{provider,id,label,percentRemaining}:
+  stub,weekly,Stub weekly,100
+EOF
+  printf 'pi' > "$dir/fake/becomes"
+  out=$(run_control "$dir" rl97 relaunch --harness pi --note "switch to pi"); rc=$?
+  assert_contains "$(cat "$dir/fake/quota-axi-calls" 2>/dev/null)" "--full" \
+    "quota-axi should be invoked with --full"
+  assert_not_contains "$(cat "$dir/fake/quota-axi-calls" 2>/dev/null)" "--provider pi" \
+    "unsupported provider name should not be passed to quota-axi"
+  pass "fm-control relaunch: unmapped harness runs quota-axi without unsupported --provider"
+}
+
 test_relaunch_off_opencode_removes_tracked_wiring
 test_exit_and_relaunch_remove_the_dialog_file
 test_exit_removes_the_dialog_file_before_releasing_the_lock
@@ -3445,3 +3498,5 @@ test_relaunch_refuses_when_concentration_exceeds_two_workers_without_flag
 test_relaunch_concentration_override_with_accept_concentration
 test_relaunch_concentration_allows_two_live_workers_on_one_lane
 test_relaunch_concentration_ignores_secondmate_tasks
+test_relaunch_secondmate_is_not_refused_by_worker_concentration
+test_relaunch_unmapped_harness_calls_quota_axi_full_without_provider

@@ -141,7 +141,10 @@ unreached_count=0
 # readable line with its "error: " prefix dropped. A refusal's own words are the
 # most useful thing this report can carry, and its first line is often blank.
 first_reported_line() {  # <text>
-  printf '%s\n' "$1" | sed -n '/./{s/^error: //;s/[[:space:]]\{1,\}/ /g;p;q;}'
+  local line
+  line=$(printf '%s\n' "$1" | sed -n '/^error: /{s/^error: //;s/[[:space:]]\{1,\}/ /g;p;q;}')
+  [ -n "$line" ] || line=$(printf '%s\n' "$1" | sed -n '/./{s/^error: //;s/[[:space:]]\{1,\}/ /g;p;q;}')
+  printf '%s\n' "$line"
 }
 
 # Send the ordinary re-read steer to a mate this pass will not restart, and say

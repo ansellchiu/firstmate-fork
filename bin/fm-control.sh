@@ -215,6 +215,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-exclude-tools-lib.sh"
 # shellcheck source=bin/fm-quota-axi-lib.sh
 . "$SCRIPT_DIR/fm-quota-axi-lib.sh"
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$SCRIPT_DIR/fm-timeout-lib.sh"
 
 POLL=${FM_CONTROL_POLL:-0.5}
 SETTLE_WAIT=${FM_CONTROL_SETTLE_WAIT:-5}
@@ -1118,9 +1120,35 @@ resolve_relaunch_profile() {
 relaunch_target_provider() {  # <harness> [<model>]
   local h=$1 m=${2:-}
   local p
-  p=$(fm_quota_single_provider_for_harness "$h" 2>/dev/null) && [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
-  p=$(fm_quota_provider_for_harness "$h" "$m" 2>/dev/null) && [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
-  printf '%s\n' "$h"
+  case "$h" in
+    pi|pi-signed)
+      if [ -n "$m" ] && [ "$m" != default ]; then
+        p=${m%%/*}
+        [ "$p" != "codex-native" ] || p=codex
+      else
+        p=
+      fi
+      ;;
+    omp)
+      case "$m" in
+        openai-codex/*) p=codex ;;
+        claude-bridge/*) p=claude ;;
+        *) p= ;;
+      esac
+      ;;
+    *)
+      p=$(fm_quota_single_provider_for_harness "$h" 2>/dev/null) || p=
+      [ -n "$p" ] || p=$(fm_quota_provider_for_harness "$h" "$m" 2>/dev/null) || p=
+      ;;
+  esac
+
+  case "$p" in
+    claude|codex|cursor|copilot|grok|kimi|zai|agy|alibaba|opencode-go|commandcode|minimax|mimo|deepseek|openrouter|elevenlabs|devin|muse|higgsfield)
+      printf '%s\n' "$p"
+      ;;
+    *)
+      ;;
+  esac
 }
 
 relaunch_preflight_quota_and_concentration() {
@@ -1144,11 +1172,14 @@ relaunch_preflight_quota_and_concentration() {
     local target_prov
     target_prov=$(relaunch_target_provider "$TARGET_HARNESS" "$TARGET_MODEL")
     if [ -n "$target_prov" ]; then
-      quota-axi --provider "$target_prov" --full || true
+      fm_run_timed 10 quota-axi --provider "$target_prov" --full || true
     else
-      quota-axi --full || true
+      fm_run_timed 10 quota-axi --full || true
     fi
   fi
+
+  # Secondmate tasks have their own isolated homes and are not workers of this home
+  [ "$KIND" != secondmate ] || return 0
 
   # Count live workers of this home on target lane
   local lane_workers=1
