@@ -1,0 +1,15 @@
+ok - CI matrices cover every executable serial lane and canonical lint root exactly once
+ok - a newer push to one PR supersedes that PR's in-flight CI
+ok - distinct PRs get distinct concurrency groups
+ok - close main pushes keep only the newest run, apart from every PR group
+ok - only the full-ci label joins and supersedes the PR's group; other labels cancel nothing
+ok - an unlabelled outside PR runs only the quick checks and a failing Full suite naming full-ci
+ok - the full-ci label and later pushes run every job, and the verdict follows the lanes
+ok - main pushes, own branches and write-access authors still run every job and pass the verdict
+ok - an unrelated label runs no job on a waiting, labelled or owner PR
+ok - a late-finishing unrelated label run leaves a full-ci pass visible
+ok - an unrelated label after a failed or waiting suite leaves every earlier check as it was
+ok - the fork skip variables change nothing unless set, and each skips only its own run or job
+ok - the timing aggregate still runs after a failed lane unless the push run is skipped
+ok - every ci.yml job carries a finite timeout
+not ok - ci.yml must carry exactly four distinct job timeouts (fast, normal, extended, heavy), got 3
