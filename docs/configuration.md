@@ -95,7 +95,7 @@ Each effective `FM_HOME` contains private operational directories.
 
 - Project and secondmate registries.
 - Captain preferences and optional shared captain preferences.
-- Learnings, backlog, briefs, scout reports, optional task status archives, and the optional per-task no-mistakes pipeline-spend ledger.
+- Learnings, lane burn rates, backlog, briefs, scout reports, optional task status archives, and the optional per-task no-mistakes pipeline-spend ledger.
 - Explicitly installed content-addressed extension packages under `data/extensions/packages/`.
 
 `state/` holds runtime records:
@@ -1172,6 +1172,11 @@ Fleet-local operational facts and gotchas live locally in `data/learnings.md`; i
 The file is created lazily on first learning and follows the internal [`stow` skill's](../.agents/skills/stow/SKILL.md) aging-tier and cold-archive contract: inspect the current file first and curate it instead of appending forever.
 
 There is no shared learnings file by captain decision.
+
+## Lane burn rates (data/lane-burn-rates.md)
+
+Per-lane measured burn rates, in percentage points of the lane's limiting quota window per worker-hour, live locally in `data/lane-burn-rates.md`; it is gitignored and created lazily.
+The [`quota-array-dispatch` skill](../.agents/skills/quota-array-dispatch/SKILL.md) owns how dispatch records and reads it, including the default for a lane with no entry.
 
 ## External memory tiers (Memory layering section)
 

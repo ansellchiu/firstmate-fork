@@ -96,6 +96,7 @@ Load `session-start-recovery` when the digest reports unfinished checks, actiona
 `docs/configuration.md` owns dispatch-profile and runtime-backend schemas, `bin/fm-harness.sh` owns static resolution, and `bin/fm-spawn.sh` owns launch flags and fail-closed validation.
 When dispatch profiles exist, consult them at every crewmate or scout intake and pass the resolved concrete profile required by `fm-spawn`.
 Routing precedence is an explicit per-task captain override, then the best-fit configured rule, then the configured default, then the static crewmate harness.
+A captain's model suggestion for a group is the lead option, not an order to move every worker: apply the per-lane concentration cap in `quota-array-dispatch`, state the split in one line, and put the critical-path worker on the best-proven eligible model.
 Firstmate alone resolves a matched profile array: begin with `quota-axi`'s default TOON at that intake, using the skill's narrow TOON-then-`--json` fallback only for genuine ambiguity, evaluate every configured candidate against that current output, and choose under the skill's `preferred_provider` procedure with inspectable `spendPriority` as the one quota-perspective ranker after its eligibility, reasoning-class, and runway-feasibility gates.
 Account for every candidate with the catalog evidence, provider relationship, applicable quota and authentication facts, remaining uncertainty, fit and reasoning class, and the spendPriority and runway evidence used in selection; never omit a candidate, guess, fall back silently, or call the result quota-informed without them.
 Establish model support and provider family from that harness's own authoritative catalog, then apply the [account and scope matching rules in `quota-array-dispatch`](.agents/skills/quota-array-dispatch/SKILL.md#1-eligibility).
@@ -176,6 +177,7 @@ The captain carries one focus project and at most the configured number of proje
 A project consumes attention while a durable record keeps a captain lane open on it - a task held for the captain, an open decision or blocker, or a ship or scout whose merge word or report lands on the captain from the moment it is dispatched - and stays quiet while it is only registered, parked, or being worked autonomously.
 `bin/fm-attention-lib.sh` owns that classification and the limit including its `config/attention-limit` setting, `bin/fm-attention.sh` is the operator and intake surface over it, `bin/fm-spawn.sh` enforces it for work that opens a new captain lane, and a project is parked or made the focus with a `+parked` or `+focus` registry annotation the `project-management` skill owns.
 When intake would push the attention-active count past that limit, stop and ask the captain to finish or explicitly park one of the projects already holding a slot first; only a current explicit captain instruction starts it anyway, and it never becomes standing permission.
+Before dispatching a batch, also stop and give the captain the one-line burn estimate and split when `quota-array-dispatch`'s batch stop-and-ask trigger holds.
 
 Route by the nature of the work against each registered secondmate scope, not by a non-exclusive clone list.
 Keep `local-only` work in the main home.
@@ -210,6 +212,7 @@ The brief is the smallest packet the worker will see, and `fm-spawn` enforces th
 
 Treat file or subsystem overlap as a risk signal rather than an automatic reason to wait, and dispatch isolated work immediately with no concurrency cap when each change can be independently implemented and validated and the selected delivery path can reconcile ordinary rebases or conflicts.
 A project's declared machine capacity (`config/project-capacity`) still bounds that dispatch: a spawn beyond it exits 75 without launching, and its item stays queued rather than blocked.
+A batch of three or more workers follows the batch burn estimate in `quota-array-dispatch` before any spawn or relaunch.
 Serialize only for a true semantic dependency, shared mutable external state, incompatible concurrent migration, or another concrete condition that makes independent progress or reconciliation unsafe; same-file editing alone is insufficient, and genuine blockers remain durable.
 Write the task-specific brief under section 11 before spawning.
 Fill the task subsections according to section 11.
