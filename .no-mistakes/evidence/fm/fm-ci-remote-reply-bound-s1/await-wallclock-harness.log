@@ -1,0 +1,11 @@
+## result produced after 55s (a loaded runner slower than the old ~40s iteration bound)
+fn=fn-0a56e4e8.sh result_delay=55 rc=0 waited=55s
+fn=fn-16e94191.sh result_delay=55 rc=0 waited=55s
+## result never produced (bound must still terminate)
+fn=fn-16e94191.sh result_delay=never rc=1 waited=120s
+## no result, idle host: old iteration bound vs new wall-clock bound
+fn=fn-16e94191.sh result_delay=never rc=1 waited=120s
+fn=fn-0a56e4e8.sh result_delay=never rc=1 waited=161s
+## no result, 24 CPU hogs on 12 cores: new bound must stay ~120s wall-clock
+fn=fn-16e94191.sh result_delay=never rc=1 waited=120s
+fn=fn-16e94191.sh result_delay=70 rc=0 waited=70s
