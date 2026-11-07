@@ -51,7 +51,9 @@ else
   tokscale_args=("$@")
 fi
 
-RAW_OUTPUT=$(tokscale --light --group-by workspace,model "${tokscale_args[@]}") || exit $?
+# tokscale sizes its table to the terminal width and, when piped without a width,
+# drops the token columns (Input/Output/Cache/Total) entirely, so request a wide table.
+RAW_OUTPUT=$(COLUMNS=400 tokscale --light --group-by workspace,model "${tokscale_args[@]}") || exit $?
 
 printf '%s\n' "$RAW_OUTPUT" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g' | awk -F'│' '
 function format_num(n,   res, len, i) {
@@ -97,6 +99,12 @@ NF > 1 {
     }
   } else if (ws_col > 0 && $ws_col != "" && $ws_col != "Total" && index($0, "─") == 0) {
     ws = $(ws_col)
+    # tokscale 4.x labels worktree rows "repo ⑃ repo (<path>)", with the path either
+    # mangled or plain; key on the mangled path.
+    if (match(ws, /\([^()]*\)$/)) {
+      ws = substr(ws, RSTART + 1, RLENGTH - 2)
+      gsub(/[\/.]/, "-", ws)
+    }
     t_str = $(total_col)
     gsub(/,/, "", t_str)
     c_str = $(cost_col)
