@@ -1176,7 +1176,7 @@ There is no shared learnings file by captain decision.
 ## Lane burn rates (data/lane-burn-rates.md)
 
 Per-lane measured burn rates, in percentage points of the lane's limiting quota window per worker-hour, live locally in `data/lane-burn-rates.md`; it is gitignored and created lazily.
-The [`quota-array-dispatch` skill](../.agents/skills/quota-array-dispatch/SKILL.md) owns how a batch dispatch reads it, including the default for a lane with no entry.
+The [`quota-array-dispatch` skill](../.agents/skills/quota-array-dispatch/SKILL.md) owns how dispatch records and reads it, including the default for a lane with no entry.
 
 ## External memory tiers (Memory layering section)
 
