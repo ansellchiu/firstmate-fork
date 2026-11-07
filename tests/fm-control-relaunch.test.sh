@@ -197,7 +197,7 @@ if [ "${1:-}" = --version ]; then
 fi
 printf '%s\n' "$*" >> "$D/quota-axi-calls"
 if [ -f "$D/quota-axi-fail" ]; then
-  echo "error: quota-axi stub failure" >&2
+  echo "error: quota-axi stub failure"
   exit "$(cat "$D/quota-axi-fail")"
 fi
 if [ -f "$D/quota-axi-output" ]; then
@@ -3411,7 +3411,7 @@ test_relaunch_quota_provider_resolves_for_muse_devin_and_commandcode() {
   pass "fm-control relaunch: muse, devin and commandcode lanes read their own quota provider"
 }
 
-test_relaunch_reports_quota_read_failure_without_quota_axi_stderr() {
+test_relaunch_reports_quota_read_failure_without_quota_axi_error_output() {
   local dir out rc
   dir=$(new_case quotafail rl98)
   add_ship_task "$dir" rl98 claude
@@ -3421,8 +3421,24 @@ test_relaunch_reports_quota_read_failure_without_quota_axi_stderr() {
   assert_contains "$out" "quota windows unavailable for agy: read failed (exit 3)" \
     "failed quota read should print an unavailable notice"
   assert_not_contains "$out" "error: quota-axi stub failure" \
-    "quota-axi stderr must not reach the relaunch output"
-  pass "fm-control relaunch: failed quota read prints an unavailable notice and hides quota-axi stderr"
+    "quota-axi error output must not reach the relaunch output"
+  pass "fm-control relaunch: failed quota read prints an unavailable notice and hides quota-axi error output"
+}
+
+test_relaunch_reports_missing_quota_axi() {
+  local dir out rc
+  if command -v quota-axi >/dev/null 2>&1; then
+    pass "fm-control relaunch: missing quota-axi notice (skipped: quota-axi installed on host PATH)"
+    return 0
+  fi
+  dir=$(new_case quotamissing rl9m)
+  add_ship_task "$dir" rl9m claude
+  printf 'agy' > "$dir/fake/becomes"
+  rm -f "$dir/fakebin/quota-axi"
+  out=$(run_control "$dir" rl9m relaunch --harness agy --model gemini-4-argon-medium --note "switch" 2>&1); rc=$?
+  assert_contains "$out" "quota windows unavailable for agy gemini-4-argon-medium: quota-axi not installed" \
+    "missing quota-axi should print an unavailable notice"
+  pass "fm-control relaunch: missing quota-axi prints an unavailable notice"
 }
 
 test_relaunch_reports_quota_read_timeout() {
@@ -3543,5 +3559,6 @@ test_relaunch_concentration_ignores_secondmate_tasks
 test_relaunch_secondmate_is_not_refused_by_worker_concentration
 test_relaunch_unmapped_harness_prints_no_quota_provider_and_skips_quota_axi
 test_relaunch_quota_provider_resolves_for_muse_devin_and_commandcode
-test_relaunch_reports_quota_read_failure_without_quota_axi_stderr
+test_relaunch_reports_quota_read_failure_without_quota_axi_error_output
+test_relaunch_reports_missing_quota_axi
 test_relaunch_reports_quota_read_timeout

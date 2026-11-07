@@ -1169,18 +1169,20 @@ relaunch_preflight_quota_and_concentration() {
     local target_prov
     target_prov=$(relaunch_target_provider "$TARGET_HARNESS" "$TARGET_MODEL")
     if [ -n "$target_prov" ]; then
-      local qrc=0
-      fm_run_timed 10 quota-axi --provider "$target_prov" --full 2>/dev/null || qrc=$?
-      if [ "$qrc" -ne 0 ]; then
-        if fm_timed_out "$qrc"; then
-          printf 'quota windows unavailable for %s: timed out\n' "$target_prov"
-        else
-          printf 'quota windows unavailable for %s: read failed (exit %s)\n' "$target_prov" "$qrc"
-        fi
+      local qrc=0 qout
+      qout=$(fm_run_timed 10 quota-axi --provider "$target_prov" --full 2>/dev/null) || qrc=$?
+      if [ "$qrc" -eq 0 ]; then
+        [ -z "$qout" ] || printf '%s\n' "$qout"
+      elif fm_timed_out "$qrc"; then
+        printf 'quota windows unavailable for %s: timed out\n' "$target_prov"
+      else
+        printf 'quota windows unavailable for %s: read failed (exit %s)\n' "$target_prov" "$qrc"
       fi
     else
       printf 'no quota provider for %s\n' "$target_lane"
     fi
+  else
+    printf 'quota windows unavailable for %s: quota-axi not installed\n' "$target_lane"
   fi
 
   # Secondmate tasks have their own isolated homes and are not workers of this home
