@@ -102,6 +102,9 @@ Uncertainty and ineligibility are different findings:
 
 - No model-level window, no matching auth source, an unmeasurable or `unknown` scope, or a surface quota-axi does not model at all is disclosed uncertainty.
   Keep the candidate eligible, state the unknown, and prefer known viable evidence when otherwise comparable.
+- An `unresolved_windows` entry in `attention[]` for the candidate's provider is not a healthy scope row, so never read the row as healthy.
+  Read the raw windows with `quota-axi --provider <p> --full --json` and gate on the unresolved window's own percent remaining.
+  When it cannot be read, dispatch one probe worker, read the window again after about 15 minutes, compute points per worker-hour, and only then admit more workers under the batch rules below.
 - An expired credential is a short-lived session token the owning vendor renews on next use, not a sign-out.
 - Only concrete contradictory evidence blocks: an authoritative catalog proving the model unsupported, or proof that the credential the candidate actually selects is unusable.
 - Reserve login wording for that proven-unusable case, and name the harness, model, surface, and evidence.
@@ -128,6 +131,24 @@ Read `runway` from the `quota[]` row: `through_reset` passes this generic feasib
 A high `spendPriority` on a nearly empty window that will exhaust soon must not route into a mid-task stall.
 Unknown or unmeasurable runway stays eligible with disclosed uncertainty and is never assumed to pass.
 Do not invent a generic percentage floor, and honor an explicit captain floor for a candidate when one exists.
+
+## Batch dispatch
+
+This section applies to dispatching or relaunching three or more workers in one turn, including a captain's model suggestion for the group and a relaunch that skips the intake gates above.
+Before any spawn or relaunch, write one line per lane: workers x expected hours x the lane's burn rate (percentage points of its limiting window per worker-hour) = projected points.
+Take the burn rate from `data/lane-burn-rates.md`; when the lane has none, use 25 points per worker-hour and mark it a guess.
+Expected hours default to 2 per ship and 1 per scout until measured.
+Admit the batch to a lane only when its projected points are at most half of that lane's limiting-window percent remaining; spread the rest to the next eligible lane.
+No lane takes more than two workers or half the batch, whichever is larger, unless its limiting window is `through_reset` with at least 60% remaining.
+State the resulting split in one line.
+
+Stop and give the captain the one-line estimate and split before dispatching when any of these holds:
+
+- The batch's projected burn on any lane exceeds 70% of that lane's limiting window remaining.
+- The lane has an unresolved or unmeasured weekly window and the batch is larger than one worker.
+- The lane is outside the matched rule and the batch is larger than two.
+
+Otherwise state the split and proceed.
 
 ## Rank by spendPriority
 
