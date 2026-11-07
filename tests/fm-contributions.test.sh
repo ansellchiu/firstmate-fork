@@ -899,11 +899,12 @@ test_budget_exhaustion_keeps_prior_record() { # exhaust|hang
   wrap_forge "$home"
   mutate_record "$home" delivery '.records[0].checked_at="2026-09-15T08:00:00Z"'
   cp "$home/data/delivery/contributions.json" "$home/prior.json"
-  # Both modes freeze the clock: an unfrozen one can tick past a one-second
-  # budget before the first forge call, so nothing is ever observed.
+  # Both modes freeze the poll clock and allow process startup headroom under
+  # load. Exhaust jumps the clock past any budget between calls; three seconds
+  # still cuts off the four-second hang.
   /bin/date +%s > "$home/forge/clock"
   printf '%s\n' "$mode" > "$home/forge/fault"
-  out=$(with_home "$home" env FM_CONTRIBUTIONS_BUDGET=1 "$ROOT/bin/fm-contributions.sh" poll) \
+  out=$(with_home "$home" env FM_CONTRIBUTIONS_BUDGET=3 "$ROOT/bin/fm-contributions.sh" poll) \
     || fail "poll failed when its budget ran out ($mode)"
   [ -z "$out" ] || fail "budget exhaustion ($mode) printed a wake line: $out"
   grep -F 'api repos/o/r/pulls/8' "$home/forge/calls" >/dev/null \
