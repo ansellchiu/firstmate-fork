@@ -609,13 +609,14 @@
       "area": "Wake queue",
       "paths": [
         "bin/fm-wake-lib.sh",
+        "bin/fm-watch.sh",
         "tests/fm-watch-arm.test.sh",
         "tests/fm-watcher-lock.test.sh",
         "tests/fm-watch-checkpoint.test.sh",
         "tests/fm-supervision-host-hook.test.sh",
         "tests/supervision-host-helpers.sh"
       ],
-      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued. Upstream's never-announced-recovery checkpoint case therefore queues a real durable wake before asserting the one announcement.",
+      "intent": "Re-arming after watcher downtime with an empty durable queue resolves the downtime marker instead of emitting a synthetic recovery wake, so recovery never invents work that was never queued; a watcher start that recovers a dead predecessor's lock applies the same check in bin/fm-watch.sh. Upstream's never-announced-recovery checkpoint case therefore queues a real durable wake before asserting the one announcement.",
       "provenance": {
         "commits": [
           "950421c7"

@@ -372,6 +372,9 @@ test_attached_arm_hands_a_stalled_holder_to_its_replacement() {
   # The owner's retry: a fresh arm reaches the watcher's eviction path, and the
   # replacement surfaces an ordinary wake instead of the refusal that used to
   # end in the auto-arm FAILED notice.
+  # The replacement announces only real queued work, so queue one first.
+  append_wake "$state" check startup-network 'check: queued before stalled-holder replacement' \
+    || fail "could not queue a durable wake for the replacement"
   PATH="$fakebin:$PATH" FM_HOME="$dir" FM_STATE_OVERRIDE="$state" \
     FM_POLL=1 FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
     FM_ARM_CONFIRM_TIMEOUT=10 FM_GUARD_GRACE=5 FM_WATCHER_STALL_BOUND=12 "$WATCH_ARM" > "$rearmout" 2>&1 &
@@ -559,6 +562,9 @@ test_marker_publish_failure_retains_recovery_evidence() {
 
   rmdir "$state/.watcher-down"
   armout="$dir/recovery-arm.out"
+  # Recovery announces only real queued work.
+  append_wake "$state" check startup-network 'check: queued before stale-lock recovery' \
+    || fail "could not queue a durable wake for the recovery"
   start_rearm_arm "$home" "$state" "$fakebin" "$armout"
   wait_for_exit "$ARM_PID" "$REARM_EXIT_POLLS" || fail "stale-lock recovery did not surface downtime"
   grep -F 'check: rearm-resurface' "$armout" >/dev/null \

@@ -242,6 +242,7 @@ The away return brief treats a still-open handling episode as a wake in progress
 
 An unacknowledged downtime generation is announced at most once.
 A pending downtime generation that reaches a non-successor arm with an empty durable queue is resolved to acknowledged without any announcement, so recovery never invents a wake for work that was never queued; `bin/fm-wake-lib.sh`'s `_fm_recovery_marker_arm_check` owns that transition.
+A watcher start that recovers a dead predecessor's singleton lock takes the same empty-queue check and announces only real queued work, unless the marker itself called for recovery; `resurface_after_downtime` in `bin/fm-watch.sh` owns that decision.
 The first recovery marks that generation announced, and later empty-queue arms leave it announced until durable work or interrupted handling makes recovery pending again.
 A non-successor watcher start checks the durable queue and recovery marker under their locks.
 If an announced-but-unacknowledged episode has an empty queue, the arm leaves that generation announced, making repeated empty-queue arms idempotent while a long-poll source is merely alive.
