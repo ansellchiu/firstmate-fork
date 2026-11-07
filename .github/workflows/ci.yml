@@ -145,7 +145,19 @@ jobs:
       - name: Install the Pi package for the Pi extension tests
         run: |
           set -eu
-          npm install -g @earendil-works/pi-coding-agent
+          # Pinned so a fresh Pi release whose tarballs have not propagated cannot
+          # fail the run; bump this version deliberately, together with the other
+          # Pi install step in this file.
+          pi_version=1.5.0
+          attempt=1
+          until npm install -g "@earendil-works/pi-coding-agent@$pi_version"; do
+            if [ "$attempt" -ge 3 ]; then
+              echo "Pi package install failed after $attempt attempts" >&2
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 10
+          done
           npm ls -g --depth 0 @earendil-works/pi-coding-agent
       - name: Run portable parallel shard 1
         run: |
@@ -251,7 +263,19 @@ jobs:
       - name: Install the Pi package for the Pi extension tests
         run: |
           set -eu
-          npm install -g @earendil-works/pi-coding-agent
+          # Pinned so a fresh Pi release whose tarballs have not propagated cannot
+          # fail the run; bump this version deliberately, together with the other
+          # Pi install step in this file.
+          pi_version=1.5.0
+          attempt=1
+          until npm install -g "@earendil-works/pi-coding-agent@$pi_version"; do
+            if [ "$attempt" -ge 3 ]; then
+              echo "Pi package install failed after $attempt attempts" >&2
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 10
+          done
           npm ls -g --depth 0 @earendil-works/pi-coding-agent
       - name: Run portable serial shard ${{ matrix.shard }}
         env:
