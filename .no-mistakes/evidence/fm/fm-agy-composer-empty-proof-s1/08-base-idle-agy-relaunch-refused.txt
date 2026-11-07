@@ -1,0 +1,42 @@
+### pane before (real agy, idle)
+────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                 
+### BASE d7e879b2: fm-control.sh t1 relaunch --harness claude
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.xEzBJR
+bin: ~/.nvm/versions/node/v26.3.0/bin/quota-axi
+description: Report local agent-provider quota windows for routing-aware agents
+generatedAt: "2026-11-07T11:52:25.570Z"
+quota[2]{provider,scope,effectivePercentRemaining,spendPriority,runway,confidence,limitedBy,resetsAt}:
+  claude,all_models,58,-0.2333,projected_exhaustion,established,seven_day,"2026-11-12T00:00:00.536909+00:00"
+  claude,"model:fable",58,0.6471,projected_exhaustion,established,seven_day,"2026-11-12T00:00:00.536909+00:00"
+exhaustion[2]{provider,scope,usableRunwaySeconds,projectedExhaustedAt,limitingWindowId}:
+  claude,all_models,297657,"2026-11-10T22:33:22.997Z",seven_day
+  claude,"model:fable",297657,"2026-11-10T22:33:22.997Z",seven_day
+attention[0]:
+providers[1]{provider,plan,source,status,authStatus,relationships,refreshedAt}:
+  claude,max,oauth,fresh,unknown,known,"2026-11-07T11:52:25.256Z"
+windows[3]{provider,id,label,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:
+  claude,five_hour,session,73,"2026-11-07T14:00:00.536886+00:00",behind,30.4724,0.4698,42.5276,57.4724,18000,"2026-11-07T19:38:35.476Z",established
+  claude,seven_day,week,58,"2026-11-12T00:00:00.536909+00:00",ahead,-6.3609,1.1785,64.3609,35.6391,604800,"2026-11-10T22:33:22.997Z",established
+  claude,"model:fable",Fable week,100,"2026-11-12T00:00:00+00:00",behind,35.6391,0,64.3609,35.6391,604800,unknown,unknown
+scopeAudit[2]{provider,scope,boundedBy,relationships,pace,aheadWindowIds,behindWindowIds,onPaceWindowIds,unknownWindowIds,worstReserve,worstReserveWindowId}:
+  claude,all_models,five_hour + seven_day,known,mixed,seven_day,five_hour,none,none,-6.3609,seven_day
+  claude,"model:fable","five_hour + seven_day + model:fable",known,mixed,seven_day,"five_hour + model:fable",none,none,-6.3609,seven_day
+accounts[1]{provider,email,organization,accountId,identityStatus}:
+  claude,ansellchiu@gmail.com,ansellchiu@gmail.com's Organization,b8b9247b-590d-44a3-af36-c5cceb683265,verified
+attempts[2]{provider,source,status,error}:
+  claude,keychain,success,none
+  claude,oauth-profile,success,none
+help[1]:
+  Run `quota-axi --full` for windows, pace, reserve, and account evidence
+error: task t1's composer state is 'unknown', not proven empty; refusing to type the /quit exit command because it could concatenate onto existing text. Clear the composer, then retry 'relaunch'
+error: relaunch of t1 failed while stopping the old agent, which is still running; its original instructions were restored
+rc=1
+### pane after base attempt
+────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                 
+pane_current_command=agy

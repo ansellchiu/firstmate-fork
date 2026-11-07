@@ -1,0 +1,15 @@
+### live pane (real agy idle)
+────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                 
+no opt-in, FM_COMPOSER_HARNESS=agy (fm-send/fm-watch/fm-procevent path): unknown
+opt-in=1,  FM_COMPOSER_HARNESS=agy (fm-control exit/relaunch path):     empty
+opt-in=1,  FM_COMPOSER_HARNESS=claude (other harness):                   unknown
+### live pane after typing draft
+────────────────────────────────────────────────────────────────────────────────
+> draft
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
+opt-in=1,  FM_COMPOSER_HARNESS=agy, draft typed:                         unknown
+opt-in=1,  FM_COMPOSER_HARNESS=agy, draft cleared:                       empty
