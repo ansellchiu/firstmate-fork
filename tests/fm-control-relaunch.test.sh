@@ -3395,6 +3395,22 @@ test_relaunch_unmapped_harness_prints_no_quota_provider_and_skips_quota_axi() {
   pass "fm-control relaunch: unmapped harness prints no quota provider and skips quota-axi"
 }
 
+test_relaunch_quota_provider_resolves_for_muse_devin_and_commandcode() {
+  local dir out rc h n=0
+  for h in muse devin commandcode; do
+    n=$((n + 1))
+    dir=$(new_case "prov$h" "rl9$n")
+    add_ship_task "$dir" "rl9$n" claude
+    printf '%s' "$h" > "$dir/fake/becomes"
+    out=$(run_control "$dir" "rl9$n" relaunch --harness "$h" --note "switch" 2>&1); rc=$?
+    assert_not_contains "$out" "no quota provider for $h" \
+      "$h lane should resolve a quota provider"
+    assert_contains "$(cat "$dir/fake/quota-axi-calls" 2>/dev/null)" "--provider $h --full" \
+      "quota-axi should be invoked with --provider $h"
+  done
+  pass "fm-control relaunch: muse, devin and commandcode lanes read their own quota provider"
+}
+
 test_relaunch_reports_quota_read_failure_without_quota_axi_stderr() {
   local dir out rc
   dir=$(new_case quotafail rl98)
@@ -3526,5 +3542,6 @@ test_relaunch_concentration_allows_two_live_workers_on_one_lane
 test_relaunch_concentration_ignores_secondmate_tasks
 test_relaunch_secondmate_is_not_refused_by_worker_concentration
 test_relaunch_unmapped_harness_prints_no_quota_provider_and_skips_quota_axi
+test_relaunch_quota_provider_resolves_for_muse_devin_and_commandcode
 test_relaunch_reports_quota_read_failure_without_quota_axi_stderr
 test_relaunch_reports_quota_read_timeout

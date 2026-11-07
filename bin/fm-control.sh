@@ -100,7 +100,8 @@
 #              (including unresolved raw windows) and refuses the relaunch if
 #              it would put more than two live workers of this home on one lane,
 #              unless --accept-concentration is passed to accept the
-#              concentration.
+#              concentration. The check counts published task records, so
+#              relaunches must run one at a time to be caught.
 #              Refused on t3code before anything is stopped: a T3 thread
 #              keeps its conversation, so a new turn or a provider change on
 #              it continues the same agent rather than a fresh one
@@ -1129,12 +1130,8 @@ relaunch_target_provider() {  # <harness> [<model>]
         p=
       fi
       ;;
-    omp)
-      case "$m" in
-        openai-codex/*) p=codex ;;
-        claude-bridge/*) p=claude ;;
-        *) p= ;;
-      esac
+    muse|devin|commandcode)
+      p=$h
       ;;
     *)
       p=$(fm_quota_single_provider_for_harness "$h" 2>/dev/null) || p=
