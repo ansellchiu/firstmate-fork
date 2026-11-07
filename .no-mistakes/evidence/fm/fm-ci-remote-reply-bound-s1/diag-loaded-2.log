@@ -1,0 +1,71 @@
+ok - default delta reader waits 0.5 seconds then delivers a non-destructive complete-line delta
+ok - override delta reader waits 0.07 seconds then delivers a non-destructive complete-line delta
+ok - remote reply adapter leaves no temporary path or lifecycle lock behind on any exit
+ok - transport failures and non-schema diagnostics stay out of captured results
+ok - a blocking non-destructive remote delta reaches durable process-event capture
+DIAG gen1 wait elapsed=23s
+ok - a captured delta is applied, acknowledged, and re-armed without a handler
+ok - ingest appends one validated line, fetches its document, and advances the cursor
+ok - replayed capture has one deduplicated append and one durable handling identity
+DIAG await remote-reply-ios.2.result elapsed=21s
+DIAG await remote-reply-ios.3.result elapsed=19s
+ok - later generations cannot invalidate an unacknowledged ingested result
+DIAG await remote-reply-ios.4.result elapsed=13s
+ok - the remote status and decision model mirrors and the cursor advances
+ok - a remote mate's new decision folds open exactly as a local mate's does
+ok - a replayed mirrored delta is idempotent in both the stream and the cursor
+DIAG await remote-reply-ios.5.result elapsed=10s
+ok - transported control bytes are normalized in place and never stop the stream
+DIAG await remote-reply-ios.6.result elapsed=13s
+ok - payload protocol-field names cannot collide with transport metadata
+DIAG await remote-reply-ios.7.result elapsed=17s
+ok - NUL bytes are normalized in place before shell line processing
+ok - local document storage failures remain retryable until delivery succeeds
+DIAG await remote-reply-ios.9.result elapsed=20s
+ok - a structured pointer must end at its token boundary
+DIAG await remote-reply-ios.10.result elapsed=30s
+ok - adjacent pointers are fetched while malformed tokens remain unchanged
+DIAG await remote-reply-ios.11.result elapsed=15s
+ok - a rejected candidate never gives the following text a false leading boundary
+DIAG await remote-reply-ios.12.result elapsed=37s
+ok - nested remote reports relay while an undeliverable foreign pointer fails open
+DIAG await remote-reply-ios.13.result elapsed=24s
+DIAG await remote-reply-ios.14.result elapsed=19s
+DIAG await remote-reply-ios.15.result elapsed=31s
+ok - the reported incident raises no standing decision and still delivers the report
+DIAG await remote-reply-ios.16.result elapsed=23s
+DIAG await remote-reply-ios.17.result elapsed=24s
+ok - an undeliverable structured offer fails open with one note and never a decision
+DIAG await remote-reply-ios.18.result elapsed=25s
+ok - a remote refusal surfaces its own reason without opening a decision
+ok - a failed pointer extraction never commits a partial delta
+ok - a failed mirror write never drops status content or advances the cursor
+DIAG await remote-reply-ios.22.result elapsed=111s
+ok - source-line identity survives commit failure and cursor-loss recapture
+DIAG await remote-reply-ios.23.result elapsed=13s
+ok - a mirrored reserved-key line cannot squat or clear the parent's own decision
+DIAG await remote-reply-ios.24.result elapsed=27s
+ok - a reply that arrives after escalation resolves it and clears the open decision
+ok - a remote reply listener stays owned across empty waits and a delta
+ok - a failed remote read exits instead of relistening
+ok - persistent ingestion failure leaves exactly one durable capture
+ok - a preempted reply poll reports a closed window without publishing channel freshness
+ok - a preempted reply poll keeps its listener and reconcile launches nothing
+ok - a quiet reply window publishes the caught-up watermark the reply guard reads
+DIAG await remote-reply-ios.27.result elapsed=108s
+ok - a cursor-loss whole-log recapture is acknowledged quietly with no duplicate wake
+ok - truncation is detected, escalated once, and not silently rebased
+ok - a repeated continuity break after an operator resolve appends nothing
+ok - remote reply retirement quiesces and refuses unhandled captured results
+DIAG await remote-reply-ios.29.result elapsed=13s
+ok - a later continuity break after repair and re-advance opens the decision again
+ok - an old-format continuity line does not swallow the next break
+DIAG await remote-reply-ios.31.result elapsed=16s
+ok - a later continuity break after the cursor moves without retirement opens the decision again
+DIAG await remote-reply-ios.33.result elapsed=17s
+ok - a continuity break after retirement and an identical restore opens the decision once
+ok - a failed cursor removal does not increase the retirement count
+ok - a retirement that stops after removing the cursor leaves the old count
+ALL TESTS PASSED
+bash tests/.diag-remote-reply.sh  104.80s user 186.70s system 26% cpu 18:40.24 total
+rc=0

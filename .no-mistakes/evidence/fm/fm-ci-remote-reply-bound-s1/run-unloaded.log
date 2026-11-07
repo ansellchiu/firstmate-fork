@@ -1,0 +1,7 @@
+ok - default delta reader waits 0.5 seconds then delivers a non-destructive complete-line delta
+ok - override delta reader waits 0.07 seconds then delivers a non-destructive complete-line delta
+ok - remote reply adapter leaves no temporary path or lifecycle lock behind on any exit
+ok - transport failures and non-schema diagnostics stay out of captured results
+ok - a blocking non-destructive remote delta reaches durable process-event capture
+not ok - the applied capture was left unacknowledged
+bash tests/fm-remote-reply.test.sh  7.16s user 13.36s system 9% cpu 3:36.57 total

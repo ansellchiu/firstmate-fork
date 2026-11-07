@@ -1,0 +1,7 @@
+new sleep=fastsleep mode=never rc=1 elapsed=120s relaunches=262
+old sleep=fastsleep mode=never rc=1 elapsed=6s relaunches=14
+new sleep=real mode=late:60 rc=0 elapsed=60s relaunches=15
+old sleep=real mode=late:60 rc=0 elapsed=60s relaunches=15
+new sleep=slowsleep mode=never rc=1 elapsed=120s relaunches=10
+new sleep=real mode=late:5 rc=0 elapsed=5s relaunches=2
+o6: empty (timed out at 300s)

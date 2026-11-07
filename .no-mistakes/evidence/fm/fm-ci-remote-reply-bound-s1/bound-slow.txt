@@ -1,0 +1,1 @@
+fn=6caa2bc1 per-iteration=0.5s rc=1 waited=120s

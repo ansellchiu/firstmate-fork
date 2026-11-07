@@ -1,0 +1,8 @@
+ok - default delta reader waits 0.5 seconds then delivers a non-destructive complete-line delta
+ok - override delta reader waits 0.07 seconds then delivers a non-destructive complete-line delta
+ok - remote reply adapter leaves no temporary path or lifecycle lock behind on any exit
+ok - transport failures and non-schema diagnostics stay out of captured results
+INJECTED: gen-1 runner killed before capture; owner=none
+ok - a blocking non-destructive remote delta reaches durable process-event capture
+bash $F  5.95s user 9.49s system 30% cpu 51.488 total
+rc=0

@@ -1,0 +1,4 @@
+Per-wait wall-clock durations, 3 concurrent runs + 30 busy loops (load ~50-56 on 12 cores):
+run 1: ALL TESTS PASSED | max direct await: 37s | recapture awaits (3-attempt wrapper): 112s 106s 
+run 2: ALL TESTS PASSED | max direct await: 37s | recapture awaits (3-attempt wrapper): 111s 108s 
+run 3: ALL TESTS PASSED | max direct await: 35s | recapture awaits (3-attempt wrapper): 111s 108s 

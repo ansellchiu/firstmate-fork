@@ -1,0 +1,46 @@
+15:49:13 ok - default delta reader waits 0.5 seconds then delivers a non-destructive complete-line delta
+15:49:16 ok - override delta reader waits 0.07 seconds then delivers a non-destructive complete-line delta
+15:49:20 ok - remote reply adapter leaves no temporary path or lifecycle lock behind on any exit
+15:49:21 ok - transport failures and non-schema diagnostics stay out of captured results
+15:49:29 ok - a blocking non-destructive remote delta reaches durable process-event capture
+15:49:29 ok - a captured delta is applied, acknowledged, and re-armed without a handler
+15:49:30 ok - ingest appends one validated line, fetches its document, and advances the cursor
+15:49:31 ok - replayed capture has one deduplicated append and one durable handling identity
+15:49:44 ok - later generations cannot invalidate an unacknowledged ingested result
+15:49:48 ok - the remote status and decision model mirrors and the cursor advances
+15:49:48 ok - a remote mate's new decision folds open exactly as a local mate's does
+15:49:49 ok - a replayed mirrored delta is idempotent in both the stream and the cursor
+15:49:53 ok - transported control bytes are normalized in place and never stop the stream
+15:49:59 ok - payload protocol-field names cannot collide with transport metadata
+15:50:05 ok - NUL bytes are normalized in place before shell line processing
+15:50:16 ok - local document storage failures remain retryable until delivery succeeds
+15:50:21 ok - a structured pointer must end at its token boundary
+15:50:40 ok - adjacent pointers are fetched while malformed tokens remain unchanged
+15:50:53 ok - a rejected candidate never gives the following text a false leading boundary
+15:51:03 ok - nested remote reports relay while an undeliverable foreign pointer fails open
+15:51:27 ok - the reported incident raises no standing decision and still delivers the report
+15:51:45 ok - an undeliverable structured offer fails open with one note and never a decision
+15:51:51 ok - a remote refusal surfaces its own reason without opening a decision
+15:52:01 ok - a failed pointer extraction never commits a partial delta
+15:52:10 ok - a failed mirror write never drops status content or advances the cursor
+15:52:54 ok - source-line identity survives commit failure and cursor-loss recapture
+15:52:58 ok - a mirrored reserved-key line cannot squat or clear the parent's own decision
+15:53:06 ok - a reply that arrives after escalation resolves it and clears the open decision
+15:53:20 ok - a remote reply listener stays owned across empty waits and a delta
+15:53:24 ok - a failed remote read exits instead of relistening
+15:53:34 ok - persistent ingestion failure leaves exactly one durable capture
+15:53:40 ok - a preempted reply poll reports a closed window without publishing channel freshness
+15:53:49 ok - a preempted reply poll keeps its listener and reconcile launches nothing
+15:53:53 ok - a quiet reply window publishes the caught-up watermark the reply guard reads
+15:54:47 ok - a cursor-loss whole-log recapture is acknowledged quietly with no duplicate wake
+15:54:56 ok - truncation is detected, escalated once, and not silently rebased
+15:54:57 ok - a repeated continuity break after an operator resolve appends nothing
+15:54:59 ok - remote reply retirement quiesces and refuses unhandled captured results
+15:55:17 ok - a later continuity break after repair and re-advance opens the decision again
+15:55:19 ok - an old-format continuity line does not swallow the next break
+15:55:36 ok - a later continuity break after the cursor moves without retirement opens the decision again
+15:55:54 ok - a continuity break after retirement and an identical restore opens the decision once
+15:55:55 ok - a failed cursor removal does not increase the retirement count
+15:55:56 ok - a retirement that stops after removing the cursor leaves the old count
+15:55:56 ALL TESTS PASSED
+15:55:56 bash tests/fm-remote-reply.test.sh  70.34s user 121.16s system 37% cpu 8:37.41 total
