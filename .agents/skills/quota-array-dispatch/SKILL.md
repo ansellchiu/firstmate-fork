@@ -141,6 +141,7 @@ Expected hours default to 2 per ship and 1 per scout until measured.
 Admit the batch to a lane only when its projected points are at most half of that lane's limiting-window percent remaining; spread the rest to the next eligible lane.
 No lane takes more than two workers or half the batch, whichever is larger, unless its limiting window is `through_reset` with at least 60% remaining.
 State the resulting split in one line.
+In a home that declares `"shared_quota": true`, the quota-derived parts of these batch rules (lane percent-remaining reads, raw-window probes, and the unmeasured-window trigger) are off by home declaration, exactly as in the [Shared-quota opt-out](#shared-quota-opt-out); the lane concentration cap and the stop-and-ask trigger still apply.
 
 Stop and give the captain the one-line estimate and split before dispatching when any of these holds:
 
