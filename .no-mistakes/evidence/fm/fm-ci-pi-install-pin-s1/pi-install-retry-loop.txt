@@ -1,0 +1,21 @@
+== FAILS=0
+fake npm call 1: install -g @earendil-works/pi-coding-agent@1.5.0
+fake npm call 2: ls -g --depth 0 @earendil-works/pi-coding-agent
+exit=0
+== FAILS=2
+fake npm call 1: install -g @earendil-works/pi-coding-agent@1.5.0
+npm error 404
+fake npm call 2: install -g @earendil-works/pi-coding-agent@1.5.0
+npm error 404
+fake npm call 3: install -g @earendil-works/pi-coding-agent@1.5.0
+fake npm call 4: ls -g --depth 0 @earendil-works/pi-coding-agent
+exit=0
+== FAILS=3
+fake npm call 1: install -g @earendil-works/pi-coding-agent@1.5.0
+npm error 404
+fake npm call 2: install -g @earendil-works/pi-coding-agent@1.5.0
+npm error 404
+fake npm call 3: install -g @earendil-works/pi-coding-agent@1.5.0
+npm error 404
+Pi package install failed after 3 attempts
+exit=1
