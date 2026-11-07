@@ -787,7 +787,7 @@ do_exit() {
   fi
   : > "$FM_COMPOSER_DIALOG_SINK" \
     || die "task $ID's dialog check could not be recorded"
-  composer_state=$(fm_backend_composer_state "$BACKEND" "$T" "$LABEL" 2>/dev/null) \
+  composer_state=$(FM_COMPOSER_AGY_IDLE_PROOF=1 fm_backend_composer_state "$BACKEND" "$T" "$LABEL" 2>/dev/null) \
     || composer_state=unknown
   # The classify that filled the sink ran in a subshell, so read the file
   # rather than a function that subshell sourced.

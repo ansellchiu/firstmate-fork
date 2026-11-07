@@ -130,19 +130,21 @@
 # glyph deliberately outside the agent set, so no opencode shape recorded here
 # can prove a left-bar envelope and open a zone under it.
 #
-# agy (Gemini CLI, ~/.local/bin/agy; dispatchable through fm-spawn but with no
-# verified composer identity probe) draws a separated-FAMILY composer - full-width
-# top and bottom `─` rules, no side border, no idle placeholder or ghost text
-# observed - but its content row carries a bare `>` (a SHELL glyph, already in
-# FM_COMPOSER_SHELL_PROMPT_GLYPHS below), unlike pi's glyph-free separated
-# rows. No agy identity probe exists (no hook or plugin surface was found on
-# live verification), so this shape reaches
-# `_fm_composer_classify_bare_pi_overlap` with has_identity=0 and falls
-# through to `_fm_composer_classify_bare_row`, which correctly applies THE
-# SAFETY RULE below and reports `unknown` for agy's bare shell glyph rather
-# than a false `empty`. This is deliberately NOT changed here: promoting it
-# would need the same live-identity proof mechanism Pi's separated shape
-# required, which agy does not have yet.
+# agy (Antigravity CLI, ~/.local/bin/agy) draws a separated-FAMILY composer -
+# full-width top and bottom `─` rules, no side border, no idle placeholder or
+# ghost text observed - but its content row carries a bare `>` (a SHELL glyph,
+# already in FM_COMPOSER_SHELL_PROMPT_GLYPHS below), unlike pi's glyph-free
+# separated rows. No agy identity probe exists (no hook or plugin surface was
+# found on live verification), so identity comes from facts the caller and the
+# screen supply together (_fm_composer_agy_verdict): the caller opts in with
+# FM_COMPOSER_AGY_IDLE_PROOF=1 (only fm-control's exit/relaunch composer check
+# does), the recorded harness is agy (FM_COMPOSER_HARNESS), AND the same screen
+# shows agy's idle status row `? for shortcuts` directly below the closing rule.
+# Then a bare `>` reads `empty` and text after it reads `pending`. Without that
+# conjunction the shape stays `unknown` under THE SAFETY RULE below: fm-send,
+# the fm-watch steering doorbell and fm-procevent never opt in, a dead login
+# shell shows no agy status row, a busy agy shows `esc to cancel` instead, and
+# every other harness never reaches the proof.
 #
 # THE SAFETY RULE for glyphs: a bare shell prompt glyph (`>` `$` `%` `#`) -
 # what a pane shows once its agent has exited to a plain login shell - is a
@@ -2719,6 +2721,40 @@ _fm_composer_classify_bare_pi_overlap() {  # <screen> <styled> <has-identity> <i
   fi
 }
 
+# _fm_composer_agy_verdict: the agy identity proof for the separated composer.
+# agy draws full-width `─` rules around one `>` content row (a SHELL glyph, so
+# THE SAFETY RULE keeps it unknown on its own) with its idle status row
+# `? for shortcuts` directly below the closing rule. Only when the caller opts
+# in (FM_COMPOSER_AGY_IDLE_PROOF=1, set solely by fm-control exit/relaunch),
+# names the recorded harness agy (FM_COMPOSER_HARNESS) AND that status row is
+# on the same screen is the pair agy's composer: a bare `>` is then empty and
+# text after it is pending. Callers that do not opt in, a dead shell with no
+# such status row, a busy agy showing `esc to cancel`, and any other harness
+# all stay unknown. Prints nothing when the proof does not hold.
+_fm_composer_agy_verdict() {  # <screen> <styled>
+  local screen=$1 styled=$2 plain status raw content
+  [ "${FM_COMPOSER_AGY_IDLE_PROOF:-}" = 1 ] || return 1
+  [ "${FM_COMPOSER_HARNESS:-}" = agy ] || return 1
+  [ "$FM_COMPOSER_SCAN_PI_PAIR_VALID" = 1 ] || return 1
+  [ "$FM_COMPOSER_SCAN_PI_OPEN_TITLED" != 1 ] || return 1
+  [ "$((FM_COMPOSER_SCAN_PI_CLOSE - FM_COMPOSER_SCAN_PI_OPEN))" -eq 2 ] || return 1
+  plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
+  status=$(_fm_composer_screen_row "$((FM_COMPOSER_SCAN_PI_CLOSE + 1))" "$plain")
+  fm_composer_normalize_trim_var status
+  case "$status" in
+    '? for shortcuts'*) ;;
+    *) return 1 ;;
+  esac
+  raw=$(_fm_composer_screen_row "$((FM_COMPOSER_SCAN_PI_OPEN + 1))" "$screen")
+  content=$(_fm_composer_row_content "$raw" "$styled")
+  fm_composer_normalize_trim_var content
+  case "$content" in
+    '>') printf 'empty' ;;
+    '>'*) printf 'pending' ;;
+    *) return 1 ;;
+  esac
+}
+
 # The pi separated-shape verdict: identity + structure conjunction (herdr's
 # rule, now fleet-wide). A missing identity capability keeps the shape
 # unknown; an unfetched identity on an identity-capable backend asks the
@@ -2730,6 +2766,9 @@ _fm_composer_classify_bare_pi_overlap() {  # <screen> <styled> <has-identity> <i
 # cannot disprove that, so a blocked pi defers rather than claiming empty.
 _fm_composer_pi_verdict() {  # <screen> <styled> <has_identity> <identity>
   local screen=$1 styled=$2 has_identity=$3 identity=$4 agent agent_status state
+  if _fm_composer_agy_verdict "$screen" "$styled"; then
+    return 0
+  fi
   if [ "$has_identity" != 1 ]; then
     printf 'unknown'
     return 0
