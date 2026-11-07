@@ -6,8 +6,8 @@
 # fan-out, and four jobs carried no timeout at all. These tests hold both
 # safeguards: PR runs supersede within one PR while close main pushes keep only
 # the newest run, and every CI job carries a finite hang tripwire drawn from the
-# three-tier timeout policy that docs/fm-test-portable-shards.md "Timeouts"
-# owns (fast, normal, heavy), so no job drifts back to a one-off number.
+# four-tier timeout policy that docs/fm-test-portable-shards.md "Timeouts"
+# owns (fast, normal, extended, heavy), so no job drifts back to a one-off number.
 #
 # They also hold the outside pull request gate the maintainer approved in
 # DOP-167 (keep public CI within GitHub's 40-job limit): a PR from an author
@@ -579,7 +579,7 @@ test_fast_tier_shares_one_short_tripwire() {
   pass "fast tier jobs share one $fast minute tripwire"
 }
 
-# Normal tier: every test or lint lane shares ONE fixed 30-minute budget,
+# Normal tier: the ordinary test lanes share ONE fixed 30-minute budget,
 # above the fast tier. That budget is a hang tripwire, not a packing estimate.
 test_normal_tier_shares_one_budget() {
   local fast normal
