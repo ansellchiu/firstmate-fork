@@ -123,14 +123,16 @@ resolve_project_arg() {
 }
 
 default_branch() {
-  local ref branch
+  local ref branch head_ref
   ref=$(git -C "$PROJ" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
   if [ -n "$ref" ]; then
     echo "${ref#origin/}"
     return 0
   fi
+  head_ref=$(git -C "$PROJ" symbolic-ref --quiet HEAD 2>/dev/null || true)
   for branch in main master; do
-    if git -C "$PROJ" show-ref --verify --quiet "refs/heads/$branch"; then
+    if git -C "$PROJ" show-ref --verify --quiet "refs/heads/$branch" \
+        || [ "$head_ref" = "refs/heads/$branch" ]; then
       echo "$branch"
       return 0
     fi

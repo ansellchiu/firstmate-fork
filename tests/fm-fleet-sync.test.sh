@@ -863,6 +863,25 @@ test_unborn_default_with_origin_commits_advances() {
   pass "unborn default advances to origin's default branch"
 }
 
+test_unborn_default_without_origin_head_advances() {
+  local home clone out
+  home=$(new_home)
+  clone=$(build_unborn "$home" unborn-noohead)
+  push_unborn_origin "$home" unborn-noohead
+  git -C "$clone" symbolic-ref --delete refs/remotes/origin/HEAD 2>/dev/null || true
+
+  out=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.followRemoteHEAD GIT_CONFIG_VALUE_0=never \
+    run_sync "$home" "$clone")
+
+  if git -C "$clone" symbolic-ref --quiet refs/remotes/origin/HEAD >/dev/null; then
+    fail "fixture unexpectedly gained origin/HEAD"
+  fi
+  assert_contains "$out" "unborn-noohead: recovered:" "unborn default without origin/HEAD is advanced"
+  [ "$(git -C "$clone" symbolic-ref --short HEAD)" = main ] || fail "clone is not on main"
+  [ "$(head_sha "$clone")" = "$(git -C "$clone" rev-parse origin/main)" ] || fail "clone was not advanced to origin/main"
+  pass "unborn default advances when fetch does not create origin/HEAD (git < 2.48)"
+}
+
 test_unborn_default_with_conflicting_untracked_file_is_untouched() {
   local home clone out
   home=$(new_home)
@@ -963,6 +982,7 @@ test_symlinked_clone_still_syncs
 test_clone_root_named_by_another_spelling_still_syncs
 test_unborn_default_with_empty_origin_is_skipped
 test_unborn_default_with_origin_commits_advances
+test_unborn_default_without_origin_head_advances
 test_unborn_default_with_conflicting_untracked_file_is_untouched
 test_unborn_default_with_conflicting_ignored_file_is_untouched
 test_unborn_default_with_ignored_file_at_leading_dir_is_untouched
