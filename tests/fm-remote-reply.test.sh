@@ -113,7 +113,7 @@ stop_reply_listener() {
 # superseded runner is replaced while the same total bound still applies. The
 # bound is wall-clock (120 s), so runner load cannot shrink the wait.
 await_reply_result() { # <result-path>
-  local result=$1 handled=${1%.result}.handled i=0 owner starter= deadline=$((SECONDS + 120))
+  local result=$1 handled=${1%.result}.handled i=0 owner starter='' deadline=$((SECONDS + 120))
   while [ "$SECONDS" -lt "$deadline" ]; do
     i=$((i + 1))
     [ -s "$result" ] && [ -f "$handled" ] && return 0
