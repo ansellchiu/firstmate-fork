@@ -1,0 +1,67 @@
+### S1: unborn clone (secondbrain-build), origin now has commits -> fleet-wide sync
+--- secondbrain-build: git status -sb
+## No commits yet on main...origin/main [gone]
+$ fm-fleet-sync.sh   (whole fleet)
+secondbrain-build: recovered: created main from origin/main (was unborn), synced to 3cdad1f
+--- secondbrain-build: git status -sb
+## main...origin/main
+3cdad1f seed README.md src/app.txt
+README.md
+src
+upstream: origin/main
+
+### S2: rerun after more upstream commits -> ordinary fast-forward
+$ fm-fleet-sync.sh secondbrain-build
+secondbrain-build: synced 3cdad1f..7bd864d
+--- secondbrain-build: git status -sb
+## main...origin/main
+
+### S3: older-git behavior (followRemoteHEAD=never, no origin/HEAD) single-project by name
+$ GIT_CONFIG_COUNT=1 remote.origin.followRemoteHEAD=never fm-fleet-sync.sh oldgit
+oldgit: recovered: created main from origin/main (was unborn), synced to 12dae27
+origin/HEAD present? no
+--- oldgit: git status -sb
+## main...origin/main
+
+### S4: empty origin -> quiet skip, clone untouched
+$ fm-fleet-sync.sh emptyrem
+emptyrem: skipped: origin/main does not exist
+--- emptyrem: git status -sb
+## No commits yet on main...origin/main [gone]
+
+### S5: ignored file collides with origin path -> skipped, file preserved
+$ fm-fleet-sync.sh ignclash
+ignclash: skipped: cannot fast-forward unborn main: secret.env already exists in the work tree
+secret.env now: local precious
+--- ignclash: git status -sb
+## No commits yet on main...origin/main [gone]
+
+### S6: ignored FILE 'a' is a leading dir of origin path 'a/b' -> skipped, preserved
+$ fm-fleet-sync.sh prefix
+prefix: skipped: cannot fast-forward unborn main: a already exists in the work tree
+a is file? yes: local precious a
+--- prefix: git status -sb
+## No commits yet on main...origin/main [gone]
+
+### S7: ignored symlink 'a' -> dir, origin path a/b -> skipped, symlink preserved
+$ fm-fleet-sync.sh prefsym
+prefsym: skipped: cannot fast-forward unborn main: a already exists in the work tree
+a is symlink? yes
+--- prefsym: git status -sb
+## No commits yet on main...origin/main [gone]
+
+### S8: untracked (non-ignored) work in unborn clone -> not touched
+$ fm-fleet-sync.sh dirty
+dirty: STUCK: on branch main with uncommitted changes, ? commits behind origin/main - needs attention
+notes.txt: wip
+--- dirty: git status -sb
+## No commits yet on main...origin/main [gone]
+?? notes.txt
+
+### S9: unborn on a non-default branch name (HEAD=refs/heads/feature) -> not advanced
+$ fm-fleet-sync.sh otherb
+otherb: STUCK: on branch feature, ? commits behind origin/main - needs attention
+--- otherb: git status -sb
+## No commits yet on feature
+
+lab removed: yes
