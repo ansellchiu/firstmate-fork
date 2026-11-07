@@ -104,8 +104,12 @@ NF > 1 {
     }
   } else if (ws_col > 0 && $ws_col != "" && $ws_col != "Total" && index($0, "─") == 0) {
     ws = $(ws_col)
-    # tokscale 4.x labels worktree rows "repo ⑃ repo (<mangled-path>)"; key on the path.
-    if (match(ws, /\([^()]*\)$/)) ws = substr(ws, RSTART + 1, RLENGTH - 2)
+    # tokscale 4.x labels worktree rows "repo ⑃ repo (<path>)", with the path either
+    # mangled or plain; key on the mangled path.
+    if (match(ws, /\([^()]*\)$/)) {
+      ws = substr(ws, RSTART + 1, RLENGTH - 2)
+      gsub(/[\/.]/, "-", ws)
+    }
     t_str = $(total_col)
     gsub(/,/, "", t_str)
     c_str = $(cost_col)

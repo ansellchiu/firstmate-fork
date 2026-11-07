@@ -180,6 +180,7 @@ if [ "${COLUMNS:-80}" -ge 200 ]; then
 cat <<'TABLE'
 │ Workspace                                                                       │ Providers │ Sources     │ Model             │ Input │ Output │ Cache Write │ Cache Read │ Total  │ ms/1K │ Cost  │
 │ firstmate ⑃ firstmate (-Users-testuser--treehouse-firstmate-abc123-7-firstmate) │ Anthropic │ Claude Code │ claude-sonnet-5-5 │   100 │  1,000 │           0 │     10,000 │ 11,100 │  50ms │ $0.10 │
+│ firstmate ⑃ firstmate (/Users/testuser/.treehouse/firstmate-abc123/7/firstmate) │ Anthropic │ Claude Code │ claude-opus-5-5   │    50 │    850 │           0 │          0 │    900 │  50ms │ $0.05 │
 TABLE
 else
 cat <<'TABLE'
@@ -193,7 +194,8 @@ EOF
   out=$(PATH="$FAKE_BIN:$PATH" FM_HOME="$home" "$ROOT/bin/fm-spend.sh"); rc=$?
   expect_code 0 "$rc" "fm-spend.sh must exit 0 on a 4.17.0-shaped table"
   assert_contains "$out" "task-gamma" "must map the parenthesised path key to its task"
-  assert_contains "$out" "11,100 tokens" "must report real tokens by requesting a wide table"
+  assert_contains "$out" "12,000 tokens" "must report real tokens by requesting a wide table and sum mangled and plain-path rows"
+  assert_not_contains "$out" "/Users/testuser" "a plain-path workspace key must map to its task, not print raw"
   pass "fm-spend.sh: reads tokscale 4.17.0 width-adaptive table and labels"
 }
 
