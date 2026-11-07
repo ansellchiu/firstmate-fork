@@ -305,13 +305,11 @@ remote_env "$ROOT/bin/fm-procevent.sh" start "$SID" > "$TMP_ROOT/start-one.out" 
 wait_for "$CLAIMS/$SID.claim" || fail "process-event runner never claimed the remote reply source"
 printf 'done [corr=0123456789abcdef] [at=1700000000]: build verified report=data/reply/report.md\n' \
   >> "$REMOTE/state/parent-replies.status"
-RESULT=
-RESULT_DEADLINE=$((SECONDS + 120))
-while [ "$SECONDS" -lt "$RESULT_DEADLINE" ]; do
-  RESULT=$(find "$PARENT/state/procevent-inbox" -name "$SID.1.result" -print -quit 2>/dev/null || true)
-  [ -n "$RESULT" ] && [ -f "${RESULT%.result}.handled" ] && break
-  sleep 0.05
-done
+# Use the shared wait so a gen-1 runner that dies before acknowledging is
+# relaunched instead of leaving the capture unhandled for the whole bound.
+if ! await_reply_result "$PARENT/state/procevent-inbox/$SID.1.result"; then
+  printf 'runner output:\n%s\n' "$(cat "$TMP_ROOT/start-one.out")" >&2
+fi
 RESULT=$(find "$PARENT/state/procevent-inbox" -name "$SID.1.result" -print -quit 2>/dev/null || true)
 if [ -z "$RESULT" ]; then
   printf 'runner output:\n%s\n' "$(cat "$TMP_ROOT/start-one.out")" >&2
