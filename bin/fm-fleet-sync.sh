@@ -6,6 +6,9 @@
 # Self-heals the one unambiguously safe drift: a clean, detached HEAD that holds
 # no unique commits (it is an ancestor of origin/<default>) and whose <default>
 # branch is free to check out is re-attached and then fast-forwarded ("recovered:").
+# A clone whose default branch is unborn (made while the remote was empty) and
+# clean is likewise advanced to origin/<default> once origin has commits
+# ("recovered:"); an empty origin stays a quiet skip.
 # Every other off-default state - a non-default named branch, a detached HEAD with
 # unique commits, a dirty tree, or a diverged default - may hold real work, so it
 # is left untouched and reported as a quantified, loud "STUCK: ... N commits behind
@@ -120,14 +123,16 @@ resolve_project_arg() {
 }
 
 default_branch() {
-  local ref branch
+  local ref branch head_ref
   ref=$(git -C "$PROJ" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
   if [ -n "$ref" ]; then
     echo "${ref#origin/}"
     return 0
   fi
+  head_ref=$(git -C "$PROJ" symbolic-ref --quiet HEAD 2>/dev/null || true)
   for branch in main master; do
-    if git -C "$PROJ" show-ref --verify --quiet "refs/heads/$branch"; then
+    if git -C "$PROJ" show-ref --verify --quiet "refs/heads/$branch" \
+        || [ "$head_ref" = "refs/heads/$branch" ]; then
       echo "$branch"
       return 0
     fi
@@ -417,6 +422,41 @@ sync_project() {
   fi
 
   if ! git -C "$PROJ" rev-parse --verify --quiet "$DEFAULT^{commit}" >/dev/null; then
+    # A clone made while the remote was empty sits on an unborn $DEFAULT: HEAD
+    # names it but no commit exists. Once origin has commits this is a
+    # fast-forward from nothing - create the branch at origin's tip and check it
+    # out. Only the clean case qualifies (HEAD unborn on $DEFAULT, no tracked or
+    # untracked changes, both verified above), and no path of origin's tree may
+    # already exist, ignored files included, so nothing is ever overwritten.
+    if [ "$cur" = "$DEFAULT" ] && ! git -C "$PROJ" rev-parse --verify --quiet HEAD >/dev/null; then
+      # Git silently overwrites an IGNORED file in the way, which status does not
+      # show; refuse when any path the checkout would write already exists.
+      while IFS= read -r -d '' unborn_entry; do
+        unborn_path=${unborn_entry#*$'\t'}
+        unborn_type=${unborn_entry#* }
+        unborn_type=${unborn_type%% *}
+        if [ "$unborn_type" = tree ]; then
+          if [ -L "$PROJ/$unborn_path" ] || { [ -e "$PROJ/$unborn_path" ] && [ ! -d "$PROJ/$unborn_path" ]; }; then
+            echo "$label: skipped: cannot fast-forward unborn $DEFAULT: $unborn_path already exists in the work tree"
+            return 0
+          fi
+        elif [ -e "$PROJ/$unborn_path" ] || [ -L "$PROJ/$unborn_path" ]; then
+          echo "$label: skipped: cannot fast-forward unborn $DEFAULT: $unborn_path already exists in the work tree"
+          return 0
+        fi
+      done < <(git -C "$PROJ" ls-tree -r -t -z "$BASE" 2>/dev/null)
+      if ! unborn_output=$(git -C "$PROJ" checkout --quiet --track -b "$DEFAULT" "$BASE" 2>&1); then
+        reason="cannot fast-forward unborn $DEFAULT"
+        if [ -n "$unborn_output" ]; then
+          reason="$reason: $(first_line "$unborn_output")"
+        fi
+        echo "$label: skipped: $reason"
+        return 0
+      fi
+      after=$(git -C "$PROJ" rev-parse --short "$DEFAULT") || after="?"
+      echo "$label: recovered: created $DEFAULT from $BASE (was unborn), synced to $after"
+      return 0
+    fi
     echo "$label: skipped: local $DEFAULT does not exist"
     return 0
   fi
