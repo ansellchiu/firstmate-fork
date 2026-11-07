@@ -138,7 +138,7 @@ agy is included in the session-lock name vocabulary in `bin/fm-session-lock-lib.
 ## Composer: unknown by design
 
 Byte-level capture of the idle pane shows a bare unstyled `>` between two full-width `─` rules, with an unstyled `? for shortcuts` cell and a dim (`SGR 2`) model cell in the status row below.
-The shared classifier reads that bare `>` as `unknown` under the dead-shell rule, never `empty`.
+The shared classifier reads that bare `>` as `unknown` under the dead-shell rule, never `empty`, except for the idle proof that only `fm-control` exit and relaunch opt in to; [the agy harness reference](../../.agents/skills/harness-adapters/references/harness/agy.md) owns that exception and `tests/fm-composer-lib.test.sh` pins it.
 Steering still confirms delivery: the Herdr submit core leads with the native `idle`-to-`working` transition, which agy performs, and the delivery footer regex covers the tmux path.
 agy renders the busy footer late for that confirm loop - about 1.5 s after Enter for a short steer and 4-5 s for a realistic longer brief, measured live on `agy 1.2.1` (2026-09-12) against the shared budget's 3 x 0.4 s - so `bin/fm-send.sh` gives agy typed targets a longer default submit-confirm budget (20 retries, about 8 s at the default cadence); an explicit `FM_SEND_RETRIES` still wins and every other harness keeps the shared 3-retry default.
 `tests/fm-send-agy-confirm.test.sh` pins the raised default and `tests/fm-agy-harness.test.sh` pins the Herdr transition path.
