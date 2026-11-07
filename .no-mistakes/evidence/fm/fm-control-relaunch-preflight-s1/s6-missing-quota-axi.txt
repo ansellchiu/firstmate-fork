@@ -1,0 +1,7 @@
+$ PATH=<PATH without quota-axi dir> fm-control.sh rl3 relaunch --harness agy --model gemini-4-argon-medium --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2
+quota windows unavailable for agy gemini-4-argon-medium: quota-axi not installed
+error: relaunch of rl3 would put 3 live workers of this home on lane 'agy gemini-4-argon-medium' (limit: 2); pass --accept-concentration to override
+exit=1
+harness=claude
+model=sonnet

@@ -1,0 +1,10 @@
+$ fm-control.sh rl3 relaunch --harness pi --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2
+no quota provider for pi
+error: relaunch of rl3 would put 3 live workers of this home on lane 'pi' (limit: 2); pass --accept-concentration to override
+exit=1
+--- rl3 meta:
+harness=claude
+model=sonnet
+--- rl3 pane:
+fm-rl3 2.1.319

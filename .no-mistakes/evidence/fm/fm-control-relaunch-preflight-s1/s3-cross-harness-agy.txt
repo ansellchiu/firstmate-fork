@@ -1,0 +1,36 @@
+$ fm-control.sh rl3 relaunch --harness agy --model gemini-4-argon-medium --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2
+bin: ~/.nvm/versions/node/v26.3.0/bin/quota-axi
+description: Report local agent-provider quota windows for routing-aware agents
+generatedAt: "2026-11-07T09:42:09.636Z"
+quota[2]{provider,scope,effectivePercentRemaining,spendPriority,runway,confidence,limitedBy,resetsAt}:
+  agy,gemini,65,-2.7197,projected_exhaustion,early,gemini_5h,"2026-11-07T10:03:25.000Z"
+  agy,claude_gpt,100,1,through_reset,early,claude_gpt_5h + claude_gpt_weekly,"2026-11-07T14:42:09.000Z"
+exhaustion[1]{provider,scope,usableRunwaySeconds,projectedExhaustedAt,limitingWindowId}:
+  agy,gemini,135318,"2026-11-08T23:17:27.145Z",gemini_weekly
+attention[1]{provider,scope,kind,detail,remedy}:
+  agy,all,unresolved_windows,gemini_argon_weekly,none
+providers[1]{provider,plan,source,status,authStatus,relationships,refreshedAt}:
+  agy,unknown,cli,fresh,unknown,partial,"2026-11-07T09:42:09.636Z"
+windows[5]{provider,id,label,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:
+  agy,gemini_5h,Gemini 5-hour,65,"2026-11-07T10:03:25.000Z",behind,57.9146,0.3767,7.0854,92.9146,18000,"2026-11-07T18:19:49.674Z",established
+  agy,gemini_weekly,Gemini weekly,89,"2026-11-14T05:03:25.000Z",ahead,-8.2347,3.9778,97.2347,2.7653,604800,"2026-11-08T23:17:27.145Z",early
+  agy,gemini_argon_weekly,Gemini Argon weekly,92,"2026-11-14T04:51:59.000Z",ahead,-5.1213,2.779,97.1213,2.8787,604800,"2026-11-09T17:19:11.950Z",early
+  agy,claude_gpt_5h,Claude/GPT 5-hour,100,"2026-11-07T14:42:09.000Z",on_pace,0.0035,0,99.9965,0.0035,18000,unknown,unknown
+  agy,claude_gpt_weekly,Claude/GPT weekly,100,"2026-11-14T09:42:09.000Z",on_pace,0.0001,0,99.9999,0.0001,604800,unknown,unknown
+scopeAudit[2]{provider,scope,boundedBy,relationships,pace,aheadWindowIds,behindWindowIds,onPaceWindowIds,unknownWindowIds,worstReserve,worstReserveWindowId}:
+  agy,gemini,gemini_5h + gemini_weekly,partial,mixed,gemini_weekly,gemini_5h,none,none,-8.2347,gemini_weekly
+  agy,claude_gpt,claude_gpt_5h + claude_gpt_weekly,partial,on_pace,none,none,claude_gpt_5h + claude_gpt_weekly,none,0.0001,claude_gpt_weekly
+accounts[1]{provider,email,organization,accountId,identityStatus}:
+  agy,hidden,none,none,unknown
+attempts[1]{provider,source,status,error}:
+  agy,cli,success,none
+help[1]:
+  Run `quota-axi --full` for windows, pace, reserve, and account evidence
+error: relaunch of rl3 would put 3 live workers of this home on lane 'agy gemini-4-argon-medium' (limit: 2); pass --accept-concentration to override
+exit=1
+--- rl3 meta:
+harness=claude
+model=sonnet
+--- rl3 pane:
+fm-rl3 2.1.319

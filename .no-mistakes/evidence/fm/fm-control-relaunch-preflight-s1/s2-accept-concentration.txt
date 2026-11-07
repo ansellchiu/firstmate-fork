@@ -1,0 +1,44 @@
+$ fm-control.sh rl1 relaunch --model sonnet --accept-concentration --note "accepted concentration"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2
+bin: ~/.nvm/versions/node/v26.3.0/bin/quota-axi
+description: Report local agent-provider quota windows for routing-aware agents
+generatedAt: "2026-11-07T09:41:33.495Z"
+quota[2]{provider,scope,effectivePercentRemaining,spendPriority,runway,confidence,limitedBy,resetsAt}:
+  claude,all_models,60,-0.2271,projected_exhaustion,established,seven_day,"2026-11-12T00:00:00.388552+00:00"
+  claude,"model:fable",60,0.6351,projected_exhaustion,established,seven_day,"2026-11-12T00:00:00.388552+00:00"
+exhaustion[2]{provider,scope,usableRunwaySeconds,projectedExhaustedAt,limitingWindowId}:
+  claude,all_models,311540,"2026-11-11T00:13:53.155Z",seven_day
+  claude,"model:fable",311540,"2026-11-11T00:13:53.155Z",seven_day
+attention[0]:
+providers[1]{provider,plan,source,status,authStatus,relationships,refreshedAt}:
+  claude,max,oauth,fresh,unknown,known,"2026-11-07T09:41:33.120Z"
+windows[3]{provider,id,label,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:
+  claude,five_hour,session,93,"2026-11-07T14:00:00.388533+00:00",behind,6.8506,0.5054,86.1494,13.8506,18000,"2026-11-07T18:53:36.202Z",established
+  claude,seven_day,week,60,"2026-11-12T00:00:00.388552+00:00",ahead,-5.6592,1.1648,65.6592,34.3408,604800,"2026-11-11T00:13:53.155Z",established
+  claude,"model:fable",Fable week,100,"2026-11-12T00:00:00+00:00",behind,34.3409,0,65.6591,34.3409,604800,unknown,unknown
+scopeAudit[2]{provider,scope,boundedBy,relationships,pace,aheadWindowIds,behindWindowIds,onPaceWindowIds,unknownWindowIds,worstReserve,worstReserveWindowId}:
+  claude,all_models,five_hour + seven_day,known,mixed,seven_day,five_hour,none,none,-5.6592,seven_day
+  claude,"model:fable","five_hour + seven_day + model:fable",known,mixed,seven_day,"five_hour + model:fable",none,none,-5.6592,seven_day
+accounts[1]{provider,email,organization,accountId,identityStatus}:
+  claude,<redacted-email>,<redacted-email>'s Organization,<redacted-id>,verified
+attempts[2]{provider,source,status,error}:
+  claude,keychain,success,none
+  claude,oauth-profile,success,none
+help[1]:
+  Run `quota-axi --full` for windows, pace, reserve, and account evidence
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2/data/rl1/brief.md records no Packet line in its header field block above the first '#' heading (scaffolded before briefs recorded the dispatch packet class); dispatching as ordinary - if this packet is conflict-level or prohibited, classify it at intake by adding the Packet line to the top of the brief above the first '#' heading, which is the only region read at dispatch
+warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2/data/rl1/launch-brief.md records no ship branch; defaulting to legacy branch fm/rl1
+warning: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2/data/rl1/launch-brief.md records no delivery contract line (scaffolded before ship briefs recorded one); launching on the explicit --mode no-mistakes - confirm its definition of done matches
+relaunched rl1 harness=claude from=claude model=sonnet effort=default backend=tmux endpoint=fmses:fm-rl1 worktree=/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2/wt-rl1
+exit=0
+
+--- rl1 meta after relaunch:
+harness=claude
+model=sonnet
+--- lab panes:
+init zsh
+fm-rl1 2.1.319
+fm-rl2 2.1.319
+fm-rl3 2.1.319

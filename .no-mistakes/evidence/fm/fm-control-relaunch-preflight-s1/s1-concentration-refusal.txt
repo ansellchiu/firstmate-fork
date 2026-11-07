@@ -1,0 +1,43 @@
+$ fm-control.sh rl1 relaunch --model sonnet --note "move to sonnet"   # rl2, rl3 already live on lane "claude sonnet"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.WbEmC2
+bin: ~/.nvm/versions/node/v26.3.0/bin/quota-axi
+description: Report local agent-provider quota windows for routing-aware agents
+generatedAt: "2026-11-07T09:41:16.198Z"
+quota[2]{provider,scope,effectivePercentRemaining,spendPriority,runway,confidence,limitedBy,resetsAt}:
+  claude,all_models,60,-0.2274,projected_exhaustion,established,seven_day,"2026-11-12T00:00:00.021607+00:00"
+  claude,"model:fable",60,0.6349,projected_exhaustion,established,seven_day,"2026-11-12T00:00:00.021607+00:00"
+exhaustion[2]{provider,scope,usableRunwaySeconds,projectedExhaustedAt,limitingWindowId}:
+  claude,all_models,311514,"2026-11-11T00:13:10.463Z",seven_day
+  claude,"model:fable",311514,"2026-11-11T00:13:10.463Z",seven_day
+attention[0]:
+providers[1]{provider,plan,source,status,authStatus,relationships,refreshedAt}:
+  claude,max,oauth,fresh,unknown,known,"2026-11-07T09:41:15.774Z"
+windows[3]{provider,id,label,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:
+  claude,five_hour,session,93,"2026-11-07T14:00:00.021588+00:00",behind,6.7565,0.5088,86.2435,13.7565,18000,"2026-11-07T18:49:33.978Z",established
+  claude,seven_day,week,60,"2026-11-12T00:00:00.021607+00:00",ahead,-5.662,1.1649,65.662,34.338,604800,"2026-11-11T00:13:10.463Z",established
+  claude,"model:fable",Fable week,100,"2026-11-12T00:00:00+00:00",behind,34.338,0,65.662,34.338,604800,unknown,unknown
+scopeAudit[2]{provider,scope,boundedBy,relationships,pace,aheadWindowIds,behindWindowIds,onPaceWindowIds,unknownWindowIds,worstReserve,worstReserveWindowId}:
+  claude,all_models,five_hour + seven_day,known,mixed,seven_day,five_hour,none,none,-5.662,seven_day
+  claude,"model:fable","five_hour + seven_day + model:fable",known,mixed,seven_day,"five_hour + model:fable",none,none,-5.662,seven_day
+accounts[1]{provider,email,organization,accountId,identityStatus}:
+  claude,<redacted-email>,<redacted-email>'s Organization,<redacted-id>,verified
+attempts[2]{provider,source,status,error}:
+  claude,keychain,success,none
+  claude,oauth-profile,success,none
+help[1]:
+  Run `quota-axi --full` for windows, pace, reserve, and account evidence
+error: relaunch of rl1 would put 3 live workers of this home on lane 'claude sonnet' (limit: 2); pass --accept-concentration to override
+exit=1
+
+--- rl1 meta after refusal:
+harness=claude
+model=default
+--- state dir (no journal):
+rl1.meta
+rl2.meta
+rl3.meta
+--- lab panes (rl1 claude still running):
+init zsh
+fm-rl1 2.1.319
+fm-rl2 2.1.319
+fm-rl3 2.1.319
