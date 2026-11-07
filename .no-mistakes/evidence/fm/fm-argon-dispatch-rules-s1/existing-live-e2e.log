@@ -1,0 +1,17 @@
+FACT=claude|headroom=80|spendPriority=-1.1111|runway_seconds=241920
+FACT=codex|headroom=20|spendPriority=-0.8333|runway_seconds=90720
+SELECTED=codex
+ok - higher spendPriority beats more headroom after the three gates
+FACT=claude|eligible=yes|headroom=55|runway=unknown|spendPriority=unknown|unmeasurable=weekly
+FACT=codex|eligible=yes|headroom=45|spendPriority=-0.404|runway_seconds=222676|supports_horizon=yes
+DECISION=CODEX
+ok - unmeasurable runway stays eligible and is accounted for explicitly
+FACT=claude|reasoning=required|headroom=5|spendPriority=-1.8|runway_seconds=15916
+FACT=codex|reasoning=weaker|headroom=80|spendPriority=-0.3921|runway_seconds=362880
+SELECTED=claude
+ok - required strongest reasoning class is not downgraded for quota
+FACT=claude|spendPriority=-0.8333|runway_seconds=2700|supports_horizon=no
+FACT=codex|spendPriority=-1.8|runway_seconds=15916|supports_horizon=yes
+SELECTED=codex
+ok - runway versus completion horizon remains a hard gate over spendPriority
+# all quota-array-dispatch live behavior tests passed

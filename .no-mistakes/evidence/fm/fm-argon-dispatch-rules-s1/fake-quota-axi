@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$*" >> "${QUOTA_AXI_CALLS:?}"
+case "$*" in
+  ""|quota) cat "${QUOTA_AXI_TOON:?}" ;;
+  *--json*) cat "${QUOTA_AXI_JSON:?}" ;;
+  *--full*) cat "${QUOTA_AXI_JSON:?}" ;;
+  *) echo "unexpected: $*" >&2; exit 64 ;;
+esac
