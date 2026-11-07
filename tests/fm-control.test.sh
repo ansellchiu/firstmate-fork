@@ -217,6 +217,17 @@ fi
 exit 0
 SH
   chmod +x "$fb/sleep"
+  cat > "$fb/quota-axi" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = --version ]; then
+  echo "0.1.51"
+  exit 0
+fi
+echo "windows[1]{provider,id,label,percentRemaining}:"
+echo "  stub,weekly,Stub weekly,100"
+exit 0
+SH
+  chmod +x "$fb/quota-axi"
   printf '%s\n' "$fb"
 }
 
@@ -929,7 +940,10 @@ test_relaunch_only_flags_are_rejected_on_other_verbs() {
   out=$(run_control "$dir" t1 exit --harness codex); rc=$?
   expect_code 1 "$rc" "--harness should not apply to exit"
   assert_contains "$out" "apply to 'relaunch' only" "the refusal should scope the flags"
-  pass "fm-control: profile and note flags belong to relaunch only"
+  out=$(run_control "$dir" t1 exit --accept-concentration); rc=$?
+  expect_code 1 "$rc" "--accept-concentration should not apply to exit"
+  assert_contains "$out" "apply to 'relaunch' only" "the refusal should scope --accept-concentration"
+  pass "fm-control: profile, concentration, and note flags belong to relaunch only"
 }
 
 # --- 5. lifecycle states ----------------------------------------------------

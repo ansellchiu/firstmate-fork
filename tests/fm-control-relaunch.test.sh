@@ -121,8 +121,12 @@ case "${1:-}" in
     printf 'fakepane\n'; exit 0 ;;
   capture-pane)
     [ -z "${FM_FAKE_COMPOSER_READ_FAIL:-}" ] || exit 1
-    if [ -s "$D/composer" ]; then
+    if [ -f "$D/pane" ]; then
+      cat "$D/pane"
+    elif [ -s "$D/composer" ]; then
       printf '╭────╮\n│ %s  │\n╰────╯\n' "$(cat "$D/composer")"
+    elif [ -f "$D/command" ] && [ "$(cat "$D/command")" = agy ]; then
+      printf 'Generating...\nesc to cancel\n'
     else
       printf '╭────╮\n│    │\n╰────╯\n'
     fi
@@ -184,6 +188,36 @@ SH
 exit 0
 SH
   chmod +x "$fb/sleep"
+  cat > "$fb/quota-axi" <<'SH'
+#!/usr/bin/env bash
+D=$FM_FAKE_DIR
+if [ "${1:-}" = --version ]; then
+  echo "0.1.51"
+  exit 0
+fi
+printf '%s\n' "$*" >> "$D/quota-axi-calls"
+if [ -f "$D/quota-axi-output" ]; then
+  cat "$D/quota-axi-output"
+  exit 0
+fi
+echo "windows[1]{provider,id,label,percentRemaining}:"
+echo "  stub,weekly,Stub weekly,100"
+exit 0
+SH
+  chmod +x "$fb/quota-axi"
+  cat > "$fb/agy" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = models ]; then
+  cat <<'EOF'
+gemini-4-argon-medium	Gemini 4 Argon Medium
+gemini-3.8-flash-high	Gemini 3.8 Flash High
+gemini-3.8-flash-medium	Gemini 3.8 Flash Medium
+EOF
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$fb/agy"
 }
 
 # new_case <name> [id] -> echoes a case dir with a live claude ship task.
@@ -200,11 +234,15 @@ new_case() {
   printf '%s\n' "$dir"
 }
 
-# add_ship_task <case-dir> <id> [harness] [session]
+# add_ship_task <case-dir> <id> [harness] [session] [wt] [model]
 add_ship_task() {
-  local dir=$1 id=$2 harness=${3:-claude} ses=${4:-fmses}
-  local home="$dir/home" proj="$dir/proj" wt="$dir/wt"
-  fm_git_worktree "$proj" "$wt" "task-$id"
+  local dir=$1 id=$2 harness=${3:-claude} ses=${4:-fmses} wt_override=${5:-} model=${6:-default}
+  local home="$dir/home" proj="$dir/proj" wt="${wt_override:-$dir/wt}"
+  if [ -d "$proj/.git" ]; then
+    git -C "$proj" worktree add --quiet -b "task-$id" "$wt"
+  else
+    fm_git_worktree "$proj" "$wt" "task-$id"
+  fi
   mkdir -p "$home/data/$id"
   cat > "$home/data/$id/brief.md" <<EOF
 # Task
@@ -224,12 +262,12 @@ EOF
     echo "mode=no-mistakes"
     echo "yolo=off"
     echo "tasktmp=/tmp/fm-$id"
-    echo "model=default"
+    echo "model=$model"
     echo "effort=default"
   } > "$home/state/$id.meta"
-  printf '%s\n' "fm-$id" > "$dir/fake/windows"
+  printf '%s\n' "fm-$id" >> "$dir/fake/windows"
   printf '%s' "$ses" > "$dir/fake/session-name"
-  printf '%s' "$wt" > "$dir/fake/cwd"
+  [ -s "$dir/fake/cwd" ] || printf '%s' "$wt" > "$dir/fake/cwd"
   TASK_TMPS+=("/tmp/fm-$id")
 }
 
@@ -3181,6 +3219,129 @@ SH
   pass "fm-control exit removes the dialog file before it releases the control lock"
 }
 
+test_relaunch_prints_quota_windows_including_unresolved_on_harness_or_model_switch() {
+  local dir out rc
+  dir=$(new_case quota rl80)
+  add_ship_task "$dir" rl80 claude
+  printf 'agy' > "$dir/fake/becomes"
+  cat > "$dir/fake/quota-axi-output" <<'EOF'
+windows[2]{provider,id,label,percentRemaining}:
+  agy,gemini_argon_weekly,Gemini Argon weekly,92
+  agy,gemini_weekly,Gemini weekly,98
+EOF
+  out=$(run_control "$dir" rl80 relaunch --harness agy --model gemini-4-argon-medium --note "switching to argon"); rc=$?
+  expect_code 0 "$rc" "relaunch with harness and model switch should succeed"$'\n'"$out"
+  assert_contains "$out" "gemini_argon_weekly" "output must include unresolved raw quota windows"
+  assert_contains "$out" "Gemini Argon weekly,92" "output must include window detail"
+  assert_contains "$(cat "$dir/fake/quota-axi-calls" 2>/dev/null)" "--provider agy --full" \
+    "quota-axi should be invoked with --provider agy --full"
+  pass "fm-control relaunch: switching harness or model prints target lane quota windows from quota-axi"
+}
+
+test_relaunch_same_harness_and_model_does_not_call_quota_axi() {
+  local dir out rc
+  dir=$(new_case same rl81)
+  add_ship_task "$dir" rl81 claude
+  out=$(run_control "$dir" rl81 relaunch --note "same harness"); rc=$?
+  expect_code 0 "$rc" "same-harness relaunch should succeed"$'\n'"$out"
+  [ ! -f "$dir/fake/quota-axi-calls" ] \
+    || fail "quota-axi must not be called when relaunch keeps the harness and model"
+  pass "fm-control relaunch: same harness and model relaunch does not call quota-axi"
+}
+
+test_relaunch_refuses_when_concentration_exceeds_two_workers_without_flag() {
+  local dir out rc
+  dir=$(new_case conc_refuse rl82)
+  add_ship_task "$dir" rl82 claude
+  add_ship_task "$dir" rl83 agy fmses "$dir/wt-rl83" gemini-4-argon-medium
+  add_ship_task "$dir" rl84 agy fmses "$dir/wt-rl84" gemini-4-argon-medium
+  cat > "$dir/fake/quota-axi-output" <<'EOF'
+windows[1]{provider,id,label,percentRemaining}:
+  agy,gemini_argon_weekly,Gemini Argon weekly,92
+EOF
+  out=$(run_control "$dir" rl82 relaunch --harness agy --model gemini-4-argon-medium --note "relaunch to argon"); rc=$?
+  expect_code 1 "$rc" "relaunch exceeding concentration limit of 2 must refuse"
+  assert_contains "$out" "relaunch of rl82 would put 3 live workers of this home on lane 'agy gemini-4-argon-medium' (limit: 2)" \
+    "refusal must name the task, count, target lane, and limit"
+  assert_contains "$out" "--accept-concentration" \
+    "refusal must suggest --accept-concentration"
+  assert_contains "$out" "gemini_argon_weekly" \
+    "target lane quota windows must be printed even when concentration refuses"
+  [ "$(meta_field "$dir" rl82 harness)" = claude ] \
+    || fail "refused relaunch must leave the original task record untouched"
+  [ ! -e "$dir/home/state/rl82.control-relaunch" ] \
+    || fail "refused relaunch must not leave an active journal"
+  pass "fm-control relaunch: concentration exceeding two live workers on one lane refuses before stop"
+}
+
+test_relaunch_concentration_override_with_accept_concentration() {
+  local dir out rc
+  dir=$(new_case conc_override rl85)
+  add_ship_task "$dir" rl85 claude
+  add_ship_task "$dir" rl86 agy fmses "$dir/wt-rl86" gemini-4-argon-medium
+  add_ship_task "$dir" rl87 agy fmses "$dir/wt-rl87" gemini-4-argon-medium
+  printf 'agy' > "$dir/fake/becomes"
+  cat > "$dir/fake/quota-axi-output" <<'EOF'
+windows[1]{provider,id,label,percentRemaining}:
+  agy,gemini_argon_weekly,Gemini Argon weekly,92
+EOF
+  out=$(run_control "$dir" rl85 relaunch --harness agy --model gemini-4-argon-medium --accept-concentration --note "override"); rc=$?
+  expect_code 0 "$rc" "relaunch with --accept-concentration should succeed"$'\n'"$out"
+  assert_contains "$out" "relaunched rl85 harness=agy" "outcome should report successful relaunch"
+  assert_contains "$out" "gemini_argon_weekly" "quota windows should be printed"
+  [ "$(meta_field "$dir" rl85 harness)" = agy ] \
+    || fail "relaunch should update harness to agy"
+  [ "$(meta_field "$dir" rl85 model)" = gemini-4-argon-medium ] \
+    || fail "relaunch should update model to gemini-4-argon-medium"
+  pass "fm-control relaunch: --accept-concentration allows more than two live workers on one lane"
+}
+
+test_relaunch_concentration_allows_two_live_workers_on_one_lane() {
+  local dir out rc
+  dir=$(new_case conc_allow2 rl88)
+  add_ship_task "$dir" rl88 claude
+  add_ship_task "$dir" rl89 agy fmses "$dir/wt-rl89" gemini-4-argon-medium
+  printf 'agy' > "$dir/fake/becomes"
+  cat > "$dir/fake/quota-axi-output" <<'EOF'
+windows[1]{provider,id,label,percentRemaining}:
+  agy,gemini_argon_weekly,Gemini Argon weekly,92
+EOF
+  out=$(run_control "$dir" rl88 relaunch --harness agy --model gemini-4-argon-medium --note "second worker"); rc=$?
+  expect_code 0 "$rc" "relaunch putting two workers on one lane should succeed without flag"$'\n'"$out"
+  assert_contains "$out" "relaunched rl88 harness=agy" "outcome should report successful relaunch"
+  pass "fm-control relaunch: up to two live workers on one lane is permitted without flag"
+}
+
+test_relaunch_concentration_ignores_secondmate_tasks() {
+  local dir out rc
+  dir=$(new_case conc_sm rl90)
+  add_ship_task "$dir" rl90 claude
+  add_ship_task "$dir" rl91 codex fmses "$dir/wt-rl91"
+  mkdir -p "$dir/wt-sm/state"
+  printf 'rl92\n' > "$dir/wt-sm/.fm-secondmate-home"
+  {
+    echo "window=fmses:fm-rl92"
+    echo "endpoint_task_id=rl92"
+    echo "worktree=$dir/wt-sm"
+    echo "project=$dir/proj"
+    echo "harness=codex"
+    echo "kind=secondmate"
+    echo "mode=secondmate"
+    echo "yolo=off"
+    echo "tasktmp=/tmp/fm-rl92"
+    echo "model=default"
+    echo "effort=default"
+  } > "$dir/home/state/rl92.meta"
+  printf '%s\n' "fm-rl92" >> "$dir/fake/windows"
+  TASK_TMPS+=("/tmp/fm-rl92")
+  printf 'codex' > "$dir/fake/becomes"
+
+  out=$(run_control "$dir" rl90 relaunch --harness codex --note "second ship on codex"); rc=$?
+  expect_code 0 "$rc" "secondmate tasks must not count toward worker concentration"$'\n'"$out"
+  assert_contains "$out" "relaunched rl90 harness=codex" "outcome should report successful relaunch"
+  pass "fm-control relaunch: concentration check ignores secondmate tasks"
+}
+
 test_relaunch_off_opencode_removes_tracked_wiring
 test_exit_and_relaunch_remove_the_dialog_file
 test_exit_removes_the_dialog_file_before_releasing_the_lock
@@ -3278,3 +3439,9 @@ test_herdr_rebind_failure_from_a_plain_shell_names_the_real_cause
 test_relaunch_reverifies_an_already_in_flight_item_instead_of_rewriting_it
 test_relaunch_moves_a_drifted_item_back_in_flight
 test_away_branch_relaunch_accepts_existing_dispatchable_items
+test_relaunch_prints_quota_windows_including_unresolved_on_harness_or_model_switch
+test_relaunch_same_harness_and_model_does_not_call_quota_axi
+test_relaunch_refuses_when_concentration_exceeds_two_workers_without_flag
+test_relaunch_concentration_override_with_accept_concentration
+test_relaunch_concentration_allows_two_live_workers_on_one_lane
+test_relaunch_concentration_ignores_secondmate_tasks

@@ -84,6 +84,7 @@ A relaunch does take one session reference when the endpoint's own runtime recor
    Under a declared [Claude account list](configuration.md#several-claude-accounts-configclaude-accounts), a Claude ship or scout keeps its recorded account, and `--account <entry>` moves it to another declared one after the same check.
    An omp secondmate replacement likewise passes its [per-secondmate omp profile](configuration.md#per-secondmate-omp-profile) file check before the old agent stops.
    Ship and scout replacements also pass the [worker tool exclusion checks](configuration.md#worker-tool-exclusions-configcrew-exclude-tools) at this step.
+   When a relaunch moves a task to a different harness or model, preflight prints the target lane's quota windows from `quota-axi` (including unresolved raw windows) and refuses the relaunch if it would put more than two live workers of this home on one lane, unless `--accept-concentration` is passed.
 2. **Safe checkpoint.**
    The recorded worktree must exist and be a worktree root; its head and dirty state are recorded.
    For a `kind=secondmate` task, the home's identity marker must match and its child records must be readable, so a relaunch can never strand child work behind an unreadable home.

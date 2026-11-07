@@ -6,6 +6,7 @@
 #        fm-control.sh <task-id> exit
 #        fm-control.sh <task-id> relaunch [--harness <name>] [--model <name>]
 #                                         [--effort <level>] [--account <entry>]
+#                                         [--accept-concentration]
 #                                         (--note <text> | --note-file <path>)
 #
 # Why this exists, and how it differs from fm-send.sh. bin/fm-send.sh is the
@@ -94,6 +95,12 @@
 #              The same pre-stop refusal applies to this home's worker tool
 #              exclusions (bin/fm-exclude-tools-lib.sh): a malformed list, or a
 #              replacement runtime that cannot hide the listed tools.
+#              When a relaunch moves a task to a different harness or model,
+#              preflight prints the target lane's quota windows from quota-axi
+#              (including unresolved raw windows) and refuses the relaunch if
+#              it would put more than two live workers of this home on one lane,
+#              unless --accept-concentration is passed to accept the
+#              concentration.
 #              Refused on t3code before anything is stopped: a T3 thread
 #              keeps its conversation, so a new turn or a provider change on
 #              it continues the same agent rather than a fresh one
@@ -206,6 +213,8 @@ DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 . "$SCRIPT_DIR/fm-omp-profile-lib.sh"
 # shellcheck source=bin/fm-exclude-tools-lib.sh
 . "$SCRIPT_DIR/fm-exclude-tools-lib.sh"
+# shellcheck source=bin/fm-quota-axi-lib.sh
+. "$SCRIPT_DIR/fm-quota-axi-lib.sh"
 
 POLL=${FM_CONTROL_POLL:-0.5}
 SETTLE_WAIT=${FM_CONTROL_SETTLE_WAIT:-5}
@@ -269,6 +278,7 @@ NEW_HARNESS=
 NEW_MODEL=
 NEW_EFFORT=
 NEW_ACCOUNT=
+ACCEPT_CONCENTRATION=0
 HARNESS_SET=0
 MODEL_SET=0
 EFFORT_SET=0
@@ -313,6 +323,7 @@ for control_arg in "$@"; do
       NOTE=$(cat "${control_arg#--note-file=}")
       NOTE_SET=1
       ;;
+    --accept-concentration) ACCEPT_CONCENTRATION=1 ;;
     *) die "unexpected argument '$control_arg'" ;;
   esac
 done
@@ -322,8 +333,8 @@ if [ -n "$control_want_value" ]; then
 fi
 
 if [ "$VERB" != relaunch ]; then
-  [ "$HARNESS_SET" = 0 ] && [ "$MODEL_SET" = 0 ] && [ "$EFFORT_SET" = 0 ] && [ "$ACCOUNT_SET" = 0 ] && [ "$NOTE_SET" = 0 ] \
-    || die "--harness, --model, --effort, --account, and --note apply to 'relaunch' only"
+  [ "$HARNESS_SET" = 0 ] && [ "$MODEL_SET" = 0 ] && [ "$EFFORT_SET" = 0 ] && [ "$ACCOUNT_SET" = 0 ] && [ "$NOTE_SET" = 0 ] && [ "$ACCEPT_CONCENTRATION" = 0 ] \
+    || die "--harness, --model, --effort, --account, --accept-concentration, and --note apply to 'relaunch' only"
 fi
 [ "$ACCOUNT_SET" = 0 ] || [ -n "$NEW_ACCOUNT" ] || die "--account requires a non-empty value"
 [ "$HARNESS_SET" = 0 ] || [ -n "$NEW_HARNESS" ] || die "--harness requires a non-empty value"
@@ -1104,6 +1115,70 @@ resolve_relaunch_profile() {
   fi
 }
 
+relaunch_target_provider() {  # <harness> [<model>]
+  local h=$1 m=${2:-}
+  local p
+  p=$(fm_quota_single_provider_for_harness "$h" 2>/dev/null) && [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
+  p=$(fm_quota_provider_for_harness "$h" "$m" 2>/dev/null) && [ -n "$p" ] && { printf '%s\n' "$p"; return 0; }
+  printf '%s\n' "$h"
+}
+
+relaunch_preflight_quota_and_concentration() {
+  local lane_changed=0
+  if [ "$TARGET_HARNESS" != "$PRIOR_HARNESS" ] \
+     || [ "$TARGET_HARNESS" != "$PRIOR_RECORDED_HARNESS" ] \
+     || [ "$TARGET_MODEL" != "$PRIOR_MODEL" ]; then
+    lane_changed=1
+  fi
+  [ "$lane_changed" = 1 ] || return 0
+
+  local target_lane
+  if [ -n "$TARGET_MODEL" ] && [ "$TARGET_MODEL" != default ]; then
+    target_lane="$TARGET_HARNESS $TARGET_MODEL"
+  else
+    target_lane="$TARGET_HARNESS"
+  fi
+
+  # Print target lane quota windows from quota-axi (including unresolved raw windows)
+  if command -v quota-axi >/dev/null 2>&1; then
+    local target_prov
+    target_prov=$(relaunch_target_provider "$TARGET_HARNESS" "$TARGET_MODEL")
+    if [ -n "$target_prov" ]; then
+      quota-axi --provider "$target_prov" --full || true
+    else
+      quota-axi --full || true
+    fi
+  fi
+
+  # Count live workers of this home on target lane
+  local lane_workers=1
+  local other_meta other_id other_kind other_harness other_model other_lane
+  for other_meta in "$STATE"/*.meta; do
+    [ -f "$other_meta" ] && [ ! -L "$other_meta" ] || continue
+    other_id=$(basename "$other_meta" .meta)
+    [ "$other_id" != "$ID" ] || continue
+    fm_task_id_creation_valid "$other_id" || continue
+    other_kind=$(fm_meta_get "$other_meta" kind)
+    [ "$other_kind" != secondmate ] || continue
+    other_harness=$(fm_meta_get "$other_meta" harness)
+    other_harness=$(fm_control_harness_family "$other_harness" 2>/dev/null || echo "$other_harness")
+    other_model=$(fm_meta_get "$other_meta" model)
+    [ -n "$other_model" ] || other_model=default
+    if [ -n "$other_model" ] && [ "$other_model" != default ]; then
+      other_lane="$other_harness $other_model"
+    else
+      other_lane="$other_harness"
+    fi
+    if [ "$other_lane" = "$target_lane" ]; then
+      lane_workers=$((lane_workers + 1))
+    fi
+  done
+
+  if [ "$lane_workers" -gt 2 ] && [ "$ACCEPT_CONCENTRATION" = 0 ]; then
+    die "relaunch of $ID would put $lane_workers live workers of this home on lane '$target_lane' (limit: 2); pass --accept-concentration to override"
+  fi
+}
+
 # safe_checkpoint: prove, before anything is stopped, that the work a relaunch
 # must preserve is actually there and recoverable afterwards. Fills
 # CHECKPOINT_LINES with the journal lines describing what it proved, and
@@ -1213,6 +1288,7 @@ do_relaunch() {
   fm_control_backend_relaunch_supported "$BACKEND" \
     || die "task $ID runs on the $BACKEND backend, where a thread keeps its conversation and a new turn or provider change continues the same agent, so no fresh replacement can be launched into its endpoint; 'interrupt' ends its turn, and a fresh task needs a teardown and a new dispatch"
   resolve_relaunch_profile
+  relaunch_preflight_quota_and_concentration
 
   case "$KIND" in
     ship|scout)
