@@ -1,0 +1,22 @@
+### FIX f8948148
+ok - disposable watcher refuses inherited state outside its marked lab
+ok - tombstone cleanup respects a live reaper and recovers a recycled reaper pid
+ok - killed watcher stale lock is reclaimed
+ok - dead-lock recovery with an empty queue emits no synthetic wake
+ok - dead-lock recovery with queued work still announces
+ok - arm starts cleanly and resurfaces recovery after a dead-pid lock
+rc=0
+ok - watch-arm: handling successor delivers fresh new inbox work after-ack (intact counter) without consuming or looping
+ok - watch-arm: handling successor delivers fresh new inbox work before-ack (intact counter) without consuming or looping
+ok - watch-arm: handling successor delivers fresh new inbox work after-ack (missing counter) without consuming or looping
+ok - watch-arm: handling successor delivers fresh new inbox work before-ack (missing counter) without consuming or looping
+ok - watch-arm: handling successor delivers fresh new inbox work after-ack (malformed counter) without consuming or looping
+ok - watch-arm: handling successor delivers fresh new inbox work before-ack (malformed counter) without consuming or looping
+ok - watch-arm: handling successor delivers identical new inbox work after-ack (missing counter) without consuming or looping
+ok - watch-arm: handling successor delivers identical new inbox work after-ack (malformed counter) without consuming or looping
+ok - watch-arm: an attached arm hands a holder stalled past the bound to its owner's replacement
+watcher: recovery state could not be persisted; retaining stale lock evidence
+ok - watch-arm: marker publication failure retains stale-lock recovery evidence
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 0 --recovery-generation 77117.1794055994.FIOhDh
+ok - watch-arm: malformed recovery state is quarantined without a successor loop
+rc=0

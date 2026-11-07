@@ -1,0 +1,26 @@
+
+######## scenario: queued work = 0
+== [BASE cd8f0ebb] lab FM_HOME, dead predecessor pid 999999 holds state/.watch.lock
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-base.0RXCQc/drive.sh: line 13: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.IgrFPr/state/.wake-queue: No such file or directory
+-- durable queue before start:  row(s)
+-- watcher exited rc=0 emitting a wake
+-- watcher output:
+   | check: rearm-resurface
+== [FIX f8948148] lab FM_HOME, dead predecessor pid 999999 holds state/.watch.lock
+/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-base.0RXCQc/drive.sh: line 13: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.MSKXhN/state/.wake-queue: No such file or directory
+-- durable queue before start:  row(s)
+-- watcher 69034 still live after 4s, owns lock (pid file=69034); no wake emitted
+-- watcher output:
+   | (empty)
+
+######## scenario: queued work = 1
+== [BASE cd8f0ebb] lab FM_HOME, dead predecessor pid 999999 holds state/.watch.lock
+-- durable queue before start: 1 row(s)
+-- watcher exited rc=0 emitting a wake
+-- watcher output:
+   | check: rearm-resurface
+== [FIX f8948148] lab FM_HOME, dead predecessor pid 999999 holds state/.watch.lock
+-- durable queue before start: 1 row(s)
+-- watcher exited rc=0 emitting a wake
+-- watcher output:
+   | check: rearm-resurface
