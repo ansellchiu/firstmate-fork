@@ -163,9 +163,63 @@ EOF
   pass "fm-spend.sh: passes through arguments correctly"
 }
 
+test_narrow_table_requests_wide_columns() {
+  local home state out rc
+  home="$TMP_ROOT/home-wide"
+  state="$home/state"
+  mkdir -p "$state"
+  fm_write_meta "$state/task-gamma.meta" \
+    "worktree=/Users/testuser/.treehouse/firstmate-abc123/7/firstmate" \
+    "endpoint_task_id=task-gamma"
+
+  # tokscale 4.17.0 shape: the table adapts to terminal width and drops the token
+  # columns below ~200 columns; worktree rows are labelled "repo ⑃ repo (<mangled-path>)".
+  cat > "$FAKE_BIN/tokscale" <<'EOF'
+#!/usr/bin/env bash
+if [ "${COLUMNS:-80}" -ge 200 ]; then
+cat <<'TABLE'
+│ Workspace                                                                       │ Providers │ Sources     │ Model             │ Input │ Output │ Cache Write │ Cache Read │ Total  │ ms/1K │ Cost  │
+│ firstmate ⑃ firstmate (-Users-testuser--treehouse-firstmate-abc123-7-firstmate) │ Anthropic │ Claude Code │ claude-sonnet-5-5 │   100 │  1,000 │           0 │     10,000 │ 11,100 │  50ms │ $0.10 │
+TABLE
+else
+cat <<'TABLE'
+│ Workspace                                                                       │ Model             │ ms/1K │ Cost   │
+│ firstmate ⑃ firstmate (-Users-testuser--treehouse-firstmate-abc123-7-firstmate) │ claude-sonnet-5-5 │  50ms │  $0.10 │
+TABLE
+fi
+EOF
+  chmod +x "$FAKE_BIN/tokscale"
+
+  out=$(PATH="$FAKE_BIN:$PATH" FM_HOME="$home" "$ROOT/bin/fm-spend.sh"); rc=$?
+  expect_code 0 "$rc" "fm-spend.sh must exit 0 on a 4.17.0-shaped table"
+  assert_contains "$out" "task-gamma" "must map the parenthesised path key to its task"
+  assert_contains "$out" "11,100 tokens" "must report real tokens by requesting a wide table"
+  pass "fm-spend.sh: reads tokscale 4.17.0 width-adaptive table and labels"
+}
+
+test_missing_total_column_errors() {
+  local home out rc
+  home="$TMP_ROOT/home-nototal"
+  mkdir -p "$home/state"
+  cat > "$FAKE_BIN/tokscale" <<'EOF'
+#!/usr/bin/env bash
+cat <<'TABLE'
+│ Workspace │ Model │ ms/1K │ Cost   │
+│ firstmate │ m     │  50ms │  $0.10 │
+TABLE
+EOF
+  chmod +x "$FAKE_BIN/tokscale"
+  out=$(PATH="$FAKE_BIN:$PATH" FM_HOME="$home" "$ROOT/bin/fm-spend.sh" 2>&1); rc=$?
+  expect_code 1 "$rc" "fm-spend.sh must exit 1 when the Total column is missing"
+  assert_contains "$out" "no Total column" "must name the missing column instead of reporting zeros"
+  pass "fm-spend.sh: missing Total column is a loud error"
+}
+
 test_script_parses
 test_help
 test_missing_tokscale
 test_workspace_mapping_and_aggregation
 test_works_from_any_cwd
 test_passthrough_args
+test_narrow_table_requests_wide_columns
+test_missing_total_column_errors

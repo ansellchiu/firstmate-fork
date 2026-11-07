@@ -51,7 +51,9 @@ else
   tokscale_args=("$@")
 fi
 
-RAW_OUTPUT=$(tokscale --light --group-by workspace,model "${tokscale_args[@]}") || exit $?
+# tokscale sizes its table to the terminal width and, when piped without a width,
+# drops the token columns (Input/Output/Cache/Total) entirely, so request a wide table.
+RAW_OUTPUT=$(COLUMNS="${FM_SPEND_COLUMNS:-400}" tokscale --light --group-by workspace,model "${tokscale_args[@]}") || exit $?
 
 printf '%s\n' "$RAW_OUTPUT" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g' | awk -F'│' '
 function format_num(n,   res, len, i) {
@@ -95,8 +97,15 @@ NF > 1 {
       if ($i == "Total") total_col = i
       if ($i == "Cost") cost_col = i
     }
+    if (total_col == 0) {
+      print "fm-spend: tokscale table has no Total column; output format unsupported" > "/dev/stderr"
+      bad = 1
+      exit 1
+    }
   } else if (ws_col > 0 && $ws_col != "" && $ws_col != "Total" && index($0, "─") == 0) {
     ws = $(ws_col)
+    # tokscale 4.x labels worktree rows "repo ⑃ repo (<mangled-path>)"; key on the path.
+    if (match(ws, /\([^()]*\)$/)) ws = substr(ws, RSTART + 1, RLENGTH - 2)
     t_str = $(total_col)
     gsub(/,/, "", t_str)
     c_str = $(cost_col)
@@ -111,6 +120,7 @@ NF > 1 {
   }
 }
 END {
+  if (bad) exit 1
   if (count == 0) {
     exit 0
   }
