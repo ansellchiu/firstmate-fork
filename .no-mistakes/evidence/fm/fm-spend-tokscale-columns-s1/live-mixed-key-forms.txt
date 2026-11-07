@@ -1,0 +1,20 @@
+# real tokscale 4.17.0 table (disposable HOME: Claude Code in slots 7+8, Codex in slot 7 -> plain-path key):
+│ Workspace                                                                           │ Providers │ Sources     │ Model             │ Input │ Output │ Cache Write │ Cache Read │ Total  │ ms/1K │ Cost  │
+│ firstmate ⑃ firstmate (-private-tmp-fmspend-caBp-tree-firstmate-abc123-8-firstmate) │ Anthropic │ Claude Code │ claude-opus-4-1   │    50 │    850 │           0 │          0 │    900 │     — │ $0.06 │
+│ firstmate ⑃ firstmate (-private-tmp-fmspend-caBp-tree-firstmate-abc123-7-firstmate) │ Anthropic │ Claude Code │ claude-sonnet-4-5 │   100 │  1,000 │           0 │     10,000 │ 11,100 │     — │ $0.02 │
+│ firstmate ⑃ firstmate (/private/tmp/fmspend.caBp/tree/firstmate-abc123/7/firstmate) │ OpenAI    │ Codex CLI   │ gpt-5-codex       │   400 │    600 │           0 │          0 │  1,000 │     — │ $0.01 │
+│ Total                                                                               │           │             │                   │   550 │  2,450 │           0 │     10,000 │ 13,000 │     — │ $0.09 │
+
+== BASE fm-spend.sh (b3598ddd)
+firstmate ⑃ firstmate (-private-tmp-fmspend-caBp-tree-firstmate-abc123-8-firstmate)          900 tokens   $  0.06
+firstmate ⑃ firstmate (-private-tmp-fmspend-caBp-tree-firstmate-abc123-7-firstmate)       11,100 tokens   $  0.02
+firstmate ⑃ firstmate (/private/tmp/fmspend.caBp/tree/firstmate-abc123/7/firstmate)        1,000 tokens   $  0.01
+rc=0
+== HEAD fm-spend.sh (3d872148)
+task-delta                                      900 tokens   $  0.06
+task-gamma                                   12,100 tokens   $  0.03
+rc=0
+== HEAD fm-spend.sh, COLUMNS=80
+task-delta                                      900 tokens   $  0.06
+task-gamma                                   12,100 tokens   $  0.03
+rc=0

@@ -1,0 +1,18 @@
+== HEAD, COLUMNS unset, piped
+task-gamma                                   11,100 tokens   $  0.02
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+rc=0
+== HEAD, COLUMNS=80, piped
+task-gamma                                   11,100 tokens   $  0.02
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+rc=0
+== BASE, COLUMNS unset, piped
+task-gamma                                   11,100 tokens   $  0.02
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+rc=0
+== BASE, COLUMNS=80, piped
+task-gamma                                   11,100 tokens   $  0.02
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+rc=0
+== real tokscale at COLUMNS=80 (header only)
+│ Workspace                                                   │ Providers │ Sources     │ Model             │ Input │ Output │ Cache Write │ Cache Read │ Total  │ ms/1K │ Cost  │
