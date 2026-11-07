@@ -26,7 +26,7 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ (github.event_name == 'push' && 'main') || (github.event.action == 'labeled' && github.event.label.name != 'full-ci' && github.run_id) || github.event.pull_request.number }}
   cancel-in-progress: ${{ !(github.event.action == 'labeled' && github.event.label.name != 'full-ci') }}
 
-# Timeout policy: docs/fm-test-portable-shards.md "Timeouts" owns the three
+# Timeout policy: docs/fm-test-portable-shards.md "Timeouts" owns the four
 # tiers and their rationale; tests/fm-ci-workflow.test.sh guards this workflow.
 # Each job comment identifies the tier implemented by its executable value.
 
@@ -58,8 +58,8 @@ jobs:
     name: ${{ (github.event.action == 'labeled' && github.event.label.name != 'full-ci') && 'Not run for label - ' || '' }}Lint ${{ matrix.partition }}
     runs-on: ubuntu-24.04
     if: ${{ !(github.event_name == 'push' && vars.FM_CI_SKIP_PUSH == '1') && !(github.event.action == 'labeled' && github.event.label.name != 'full-ci') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository || github.event.pull_request.author_association == 'OWNER' || github.event.pull_request.author_association == 'MEMBER' || github.event.pull_request.author_association == 'COLLABORATOR' || contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
-    # Normal tier (see the timeout policy above).
-    timeout-minutes: 30
+    # Extended tier (see the timeout policy above).
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +145,19 @@ jobs:
       - name: Install the Pi package for the Pi extension tests
         run: |
           set -eu
-          npm install -g @earendil-works/pi-coding-agent
+          # Pinned so a fresh Pi release whose tarballs have not propagated cannot
+          # fail the run; bump this version deliberately, together with the other
+          # Pi install step in this file.
+          pi_version=1.5.0
+          attempt=1
+          until npm install -g "@earendil-works/pi-coding-agent@$pi_version"; do
+            if [ "$attempt" -ge 3 ]; then
+              echo "Pi package install failed after $attempt attempts" >&2
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 10
+          done
           npm ls -g --depth 0 @earendil-works/pi-coding-agent
       - name: Run portable parallel shard 1
         run: |
@@ -211,8 +223,8 @@ jobs:
     name: ${{ (github.event.action == 'labeled' && github.event.label.name != 'full-ci') && 'Not run for label - ' || '' }}Behavior portable serial ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     if: ${{ !(github.event_name == 'push' && vars.FM_CI_SKIP_PUSH == '1') && !(github.event.action == 'labeled' && github.event.label.name != 'full-ci') && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository || github.event.pull_request.author_association == 'OWNER' || github.event.pull_request.author_association == 'MEMBER' || github.event.pull_request.author_association == 'COLLABORATOR' || contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
-    # Normal tier (see the timeout policy above).
-    timeout-minutes: 30
+    # Extended tier (see the timeout policy above).
+    timeout-minutes: 45
     strategy:
       # Every shard reports so one failure never hides another shard's result.
       fail-fast: false
@@ -251,7 +263,19 @@ jobs:
       - name: Install the Pi package for the Pi extension tests
         run: |
           set -eu
-          npm install -g @earendil-works/pi-coding-agent
+          # Pinned so a fresh Pi release whose tarballs have not propagated cannot
+          # fail the run; bump this version deliberately, together with the other
+          # Pi install step in this file.
+          pi_version=1.5.0
+          attempt=1
+          until npm install -g "@earendil-works/pi-coding-agent@$pi_version"; do
+            if [ "$attempt" -ge 3 ]; then
+              echo "Pi package install failed after $attempt attempts" >&2
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 10
+          done
           npm ls -g --depth 0 @earendil-works/pi-coding-agent
       - name: Run portable serial shard ${{ matrix.shard }}
         env:
