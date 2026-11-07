@@ -104,7 +104,7 @@ Uncertainty and ineligibility are different findings:
   Keep the candidate eligible, state the unknown, and prefer known viable evidence when otherwise comparable.
 - An `unresolved_windows` entry in `attention[]` for the candidate's provider is not a healthy scope row, so never read the row as healthy.
   Read the raw windows with `quota-axi --provider <p> --full --json` and gate on the unresolved window's own percent remaining.
-  When it cannot be read, dispatch one probe worker, read the window again after about 15 minutes, compute points per worker-hour, and only then admit more workers under the batch rules below.
+  When it cannot be read, dispatch one probe worker, read the window again after about 15 minutes, compute points per worker-hour, record that rate for the lane with the date in `data/lane-burn-rates.md`, and only then admit more workers under the batch rules below.
 - An expired credential is a short-lived session token the owning vendor renews on next use, not a sign-out.
 - Only concrete contradictory evidence blocks: an authoritative catalog proving the model unsupported, or proof that the credential the candidate actually selects is unusable.
 - Reserve login wording for that proven-unusable case, and name the harness, model, surface, and evidence.
