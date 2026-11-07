@@ -196,6 +196,10 @@ if [ "${1:-}" = --version ]; then
   exit 0
 fi
 printf '%s\n' "$*" >> "$D/quota-axi-calls"
+if [ -f "$D/quota-axi-fail" ]; then
+  echo "error: quota-axi stub failure" >&2
+  exit "$(cat "$D/quota-axi-fail")"
+fi
 if [ -f "$D/quota-axi-output" ]; then
   cat "$D/quota-axi-output"
   exit 0
@@ -3378,21 +3382,43 @@ test_relaunch_secondmate_is_not_refused_by_worker_concentration() {
   pass "fm-control relaunch: secondmate task being relaunched is not refused by worker concentration"
 }
 
-test_relaunch_unmapped_harness_calls_quota_axi_full_without_provider() {
+test_relaunch_unmapped_harness_prints_no_quota_provider_and_skips_quota_axi() {
   local dir out rc
   dir=$(new_case unmapped rl97)
   add_ship_task "$dir" rl97 claude
-  cat > "$dir/fake/quota-axi-output" <<'EOF'
-windows[1]{provider,id,label,percentRemaining}:
-  stub,weekly,Stub weekly,100
-EOF
   printf 'pi' > "$dir/fake/becomes"
   out=$(run_control "$dir" rl97 relaunch --harness pi --note "switch to pi"); rc=$?
-  assert_contains "$(cat "$dir/fake/quota-axi-calls" 2>/dev/null)" "--full" \
-    "quota-axi should be invoked with --full"
-  assert_not_contains "$(cat "$dir/fake/quota-axi-calls" 2>/dev/null)" "--provider pi" \
-    "unsupported provider name should not be passed to quota-axi"
-  pass "fm-control relaunch: unmapped harness runs quota-axi without unsupported --provider"
+  assert_contains "$out" "no quota provider for pi" \
+    "unmapped lane should report that no quota provider resolves"
+  [ ! -f "$dir/fake/quota-axi-calls" ] \
+    || fail "quota-axi must not be called when no quota provider resolves: $(cat "$dir/fake/quota-axi-calls")"
+  pass "fm-control relaunch: unmapped harness prints no quota provider and skips quota-axi"
+}
+
+test_relaunch_reports_quota_read_failure_without_quota_axi_stderr() {
+  local dir out rc
+  dir=$(new_case quotafail rl98)
+  add_ship_task "$dir" rl98 claude
+  printf 'agy' > "$dir/fake/becomes"
+  printf '3\n' > "$dir/fake/quota-axi-fail"
+  out=$(run_control "$dir" rl98 relaunch --harness agy --model gemini-4-argon-medium --note "switch" 2>&1); rc=$?
+  assert_contains "$out" "quota windows unavailable for agy: read failed (exit 3)" \
+    "failed quota read should print an unavailable notice"
+  assert_not_contains "$out" "error: quota-axi stub failure" \
+    "quota-axi stderr must not reach the relaunch output"
+  pass "fm-control relaunch: failed quota read prints an unavailable notice and hides quota-axi stderr"
+}
+
+test_relaunch_reports_quota_read_timeout() {
+  local dir out rc
+  dir=$(new_case quotatimeout rl99)
+  add_ship_task "$dir" rl99 claude
+  printf 'agy' > "$dir/fake/becomes"
+  printf '124\n' > "$dir/fake/quota-axi-fail"
+  out=$(run_control "$dir" rl99 relaunch --harness agy --model gemini-4-argon-medium --note "switch" 2>&1); rc=$?
+  assert_contains "$out" "quota windows unavailable for agy: timed out" \
+    "timed-out quota read should print a timed out notice"
+  pass "fm-control relaunch: timed-out quota read prints a timed out notice"
 }
 
 test_relaunch_off_opencode_removes_tracked_wiring
@@ -3499,4 +3525,6 @@ test_relaunch_concentration_override_with_accept_concentration
 test_relaunch_concentration_allows_two_live_workers_on_one_lane
 test_relaunch_concentration_ignores_secondmate_tasks
 test_relaunch_secondmate_is_not_refused_by_worker_concentration
-test_relaunch_unmapped_harness_calls_quota_axi_full_without_provider
+test_relaunch_unmapped_harness_prints_no_quota_provider_and_skips_quota_axi
+test_relaunch_reports_quota_read_failure_without_quota_axi_stderr
+test_relaunch_reports_quota_read_timeout
