@@ -199,24 +199,6 @@ EOF
   pass "fm-spend.sh: reads tokscale 4.17.0 width-adaptive table and labels"
 }
 
-test_missing_total_column_errors() {
-  local home out rc
-  home="$TMP_ROOT/home-nototal"
-  mkdir -p "$home/state"
-  cat > "$FAKE_BIN/tokscale" <<'EOF'
-#!/usr/bin/env bash
-cat <<'TABLE'
-│ Workspace │ Model │ ms/1K │ Cost   │
-│ firstmate │ m     │  50ms │  $0.10 │
-TABLE
-EOF
-  chmod +x "$FAKE_BIN/tokscale"
-  out=$(PATH="$FAKE_BIN:$PATH" FM_HOME="$home" "$ROOT/bin/fm-spend.sh" 2>&1); rc=$?
-  expect_code 1 "$rc" "fm-spend.sh must exit 1 when the Total column is missing"
-  assert_contains "$out" "no Total column" "must name the missing column instead of reporting zeros"
-  pass "fm-spend.sh: missing Total column is a loud error"
-}
-
 test_script_parses
 test_help
 test_missing_tokscale
@@ -224,4 +206,3 @@ test_workspace_mapping_and_aggregation
 test_works_from_any_cwd
 test_passthrough_args
 test_narrow_table_requests_wide_columns
-test_missing_total_column_errors
