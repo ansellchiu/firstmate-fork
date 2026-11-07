@@ -1,0 +1,11 @@
+$ bash tests/fm-spend.test.sh   # new test vs base b5e3b3c1 script
+ok - fm-spend.sh: bash -n succeeds
+ok - fm-spend.sh: --help prints usage and exits 0
+ok - fm-spend.sh: missing tokscale emits clear error and exits 1
+ok - fm-spend.sh: maps task IDs, aggregates per workspace, and falls back to short path
+ok - fm-spend.sh: works from any cwd
+ok - fm-spend.sh: passes through arguments correctly
+not ok - must map the parenthesised path key to its task (missing: 'task-gamma')
+--- output ---
+firstmate ⑃ firstmate (-Users-testuser--treehouse-firstmate-abc123-7-firstmate)            0 tokens   $  0.10
+exit=1

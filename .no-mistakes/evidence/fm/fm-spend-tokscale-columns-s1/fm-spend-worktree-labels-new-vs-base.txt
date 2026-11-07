@@ -1,0 +1,16 @@
+# real tokscale 4.17.0 over disposable --home fixture
+# task-alpha = Claude 12,000 (mangled key); task-zeta = worktree 3: Claude 7,000 (mangled) + Codex 3,000 ('firstmate ⑃ firstmate (/plain/path)'); task-eta = worktree 4: Codex 750 (plain path)
+$ bin/fm-spend.sh (target 44a1e9c7)
+task-alpha                                   12,000 tokens   $  0.08
+task-zeta                                    10,000 tokens   $  0.07
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+task-eta                                        750 tokens   $  0.00
+exit=0
+
+$ base b5e3b3c1
+task-alpha                                   12,000 tokens   $  0.08
+task-zeta                                     7,000 tokens   $  0.06
+firstmate ⑃ firstmate (/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-spend-lab.og7zAv/treehouse/firstmate-zz/3/firstmate)        3,000 tokens   $  0.01
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+firstmate ⑃ firstmate (/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-spend-lab.og7zAv/treehouse/firstmate-zz/4/firstmate)          750 tokens   $  0.00
+exit=0

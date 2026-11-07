@@ -1,0 +1,11 @@
+$ FM_HOME=<lab> bin/fm-spend.sh --today --no-spinner --home <fixture-home>   # target 44a1e9c7
+task-alpha                                   12,000 tokens   $  0.08
+task-zeta                                     7,000 tokens   $  0.06
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+exit=0
+
+$ same, base b5e3b3c1 script
+task-alpha                                   12,000 tokens   $  0.08
+task-zeta                                     7,000 tokens   $  0.06
+~/.treehouse/rapid-recon-3025c9-2-rapid-recon          500 tokens   $  0.01
+exit=0
