@@ -1,0 +1,6 @@
+### unmapped lane: lab2+lab3 on pi (default model); relaunch lab1 onto pi
+$ fm-control.sh lab1 relaunch --harness pi --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK
+no quota provider for pi
+error: relaunch of lab1 would put 3 live workers of this home on lane 'pi' (limit: 2); pass --accept-concentration to override
+[exit 1]

@@ -1,0 +1,2 @@
+### first_reported_line (bin/fm-secondmate-restart.sh) over the real 01 relaunch output (quota windows printed before the refusal)
+-> relaunch of lab1 would put 3 live workers of this home on lane 'agy gemini-4-argon-medium' (limit: 2); pass --accept-concentration to override

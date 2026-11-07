@@ -1,0 +1,6 @@
+### same lane: relaunch lab2 (pi, default) with no harness/model change
+$ fm-control.sh lab2 relaunch --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK
+error: task lab2's endpoint reads 'ambiguous' rather than a positively classified state; refusing to send a lifecycle command into an unattributed endpoint
+error: relaunch of lab2 failed while stopping the old agent and its state is 'ambiguous', so it was not proven stopped; its original instructions were restored and the durable record was retained for recovery
+[exit 1]

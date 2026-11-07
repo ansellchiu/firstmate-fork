@@ -1,0 +1,11 @@
+### lab2=ship on pi, lab3=secondmate on pi; relaunch lab1 onto pi without --accept-concentration
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK/state/lab3.meta:harness=pi
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK/state/lab3.meta:kind=secondmate
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK/state/lab2.meta:harness=pi
+/private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK/state/lab2.meta:kind=ship
+$ fm-control.sh lab1 relaunch --harness pi --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK
+no quota provider for pi
+error: task lab1's endpoint reads 'ambiguous' rather than a positively classified state; refusing to send a lifecycle command into an unattributed endpoint
+error: relaunch of lab1 failed while stopping the old agent and its state is 'ambiguous', so it was not proven stopped; its original instructions were restored and the durable record was retained for recovery
+[exit 1]

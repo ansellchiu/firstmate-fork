@@ -1,0 +1,13 @@
+### missing quota-axi: PATH without the quota-axi dir
+command -v quota-axi under that PATH: none
+$ fm-control.sh lab1 relaunch --harness agy --model gemini-4-argon-medium --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK
+quota windows unavailable for agy gemini-4-argon-medium: quota-axi not installed
+error: relaunch of lab1 would put 3 live workers of this home on lane 'agy gemini-4-argon-medium' (limit: 2); pass --accept-concentration to override
+[exit 1]
+
+### --accept-concentration on a non-relaunch verb
+$ fm-control.sh lab1 exit --accept-concentration
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK
+error: --harness, --model, --effort, --account, --accept-concentration, and --note apply to 'relaunch' only
+[exit 1]

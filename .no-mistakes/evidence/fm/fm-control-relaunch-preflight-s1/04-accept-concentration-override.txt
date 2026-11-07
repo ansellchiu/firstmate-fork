@@ -1,0 +1,17 @@
+### --accept-concentration with lab2+lab3 already on pi
+$ fm-control.sh lab1 relaunch --harness pi --accept-concentration --note x
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-lab.L0t0DK
+no quota provider for pi
+error: task lab1's endpoint reads 'ambiguous' rather than a positively classified state; refusing to send a lifecycle command into an unattributed endpoint
+error: relaunch of lab1 failed while stopping the old agent and its state is 'ambiguous', so it was not proven stopped; its original instructions were restored and the durable record was retained for recovery
+[exit 1]
+lab1 harness now: harness=claude
+.
+..
+lab1.control-relaunch
+lab1.control-relaunch.brief-prior
+lab1.control-relaunch.meta-prior
+lab1.control-relaunch.note
+lab1.meta
+lab2.meta
+lab3.meta
