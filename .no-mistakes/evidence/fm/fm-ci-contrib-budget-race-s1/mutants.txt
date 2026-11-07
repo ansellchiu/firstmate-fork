@@ -1,0 +1,80 @@
+## M1: budget not enforced (arm/check get budget 20 instead of 3) -> hang completes
+not ok - generated check failed to preserve the configured three-second budget
+rc=0
+not ok - budget exhaustion (hang) rewrote the prior record: {
+  "schema": "fm-contributions.v1",
+  "task": "delivery",
+  "records": [
+    {
+      "url": "https://github.com/o/r/pull/8",
+      "kind": "pr",
+      "checked_at": "2026-09-16T08:00:00Z",
+      "error": null,
+      "pending": [],
+      "seen": [],
+      "verdict": null,
+      "observation": {
+        "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "draft": false,
+        "mergeable": "mergeable",
+        "can_merge": false,
+        "review_decision": "APPROVED",
+        "reviews": [],
+        "checks": [
+          {
+            "name": "test",
+            "id": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-09-16T08:00:00Z"
+          }
+        ],
+        "events": [],
+        "absent_checks": []
+      }
+    }
+  ]
+}
+rc=0
+## M2: configured budget not plumbed into shim (arm run without budget in configured mode)
+not ok - generated check failed to preserve the configured three-second budget
+rc=1
+## M3: exhaust mode without the clock jump (budget never exhausted between calls)
+1
+not ok - budget exhaustion (exhaust) rewrote the prior record: {
+  "schema": "fm-contributions.v1",
+  "task": "delivery",
+  "records": [
+    {
+      "url": "https://github.com/o/r/pull/8",
+      "kind": "pr",
+      "checked_at": "2026-09-16T08:00:00Z",
+      "error": null,
+      "pending": [],
+      "seen": [],
+      "verdict": null,
+      "observation": {
+        "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "open",
+        "draft": false,
+        "mergeable": "mergeable",
+        "can_merge": false,
+        "review_decision": "APPROVED",
+        "reviews": [],
+        "checks": [
+          {
+            "name": "test",
+            "id": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-09-16T08:00:00Z"
+          }
+        ],
+        "events": [],
+        "absent_checks": []
+      }
+    }
+  ]
+}
+rc=0

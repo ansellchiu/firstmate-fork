@@ -1,0 +1,9 @@
+== variant=old copies=20 load=36
+test_arm_plumbs_a_configured_budget_into_the_check_shim: 16/20 failed
+test_budget_refusal_between_calls: 12/20 failed
+test_budget_bounded_call_timeout: 10/20 failed
+-- distinct failure messages:
+  38 grep: /private No such file or directory
+  12 not ok - budget exhaustion (exhaust) never started the observation
+  10 not ok - budget exhaustion (hang) never started the observation
+  16 not ok - generated check did not attempt a read

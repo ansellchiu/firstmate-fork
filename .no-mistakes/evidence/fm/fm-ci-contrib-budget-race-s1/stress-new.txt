@@ -1,0 +1,5 @@
+== variant=new copies=20 load=36
+test_arm_plumbs_a_configured_budget_into_the_check_shim: 0/20 failed
+test_budget_refusal_between_calls: 0/20 failed
+test_budget_bounded_call_timeout: 0/20 failed
+-- distinct failure messages:
