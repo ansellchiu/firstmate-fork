@@ -248,8 +248,9 @@
 #             same-session Claude id as its own, so the re-emit proceeds, while
 #             a lock another live session took meanwhile still produces the
 #             ordinary read-only path. A re-emit prints a short RE-EMIT CUE
-#             first, so a harness that spills a large output and shows only its
-#             head still tells the model to read the saved full output.
+#             right after the FIRST CONTEXT block, which already carries the
+#             instruction to read the saved full output when a harness spills
+#             a large output and shows only its head.
 #
 #   --source  The native session-open source, supplied only by
 #             fm-sessionstart-run.sh. A genuine `startup` that owns the active
@@ -1088,9 +1089,9 @@ stage first-context
 print_first_context
 
 if [ "$REEMIT" -eq 1 ]; then
-  # First in the output on purpose: a harness that spills a large hook output
-  # delivers only a short head inline (Claude: about 2,000 characters), and
-  # CONTEXT prints last, so this cue is the part that must survive the spill.
+  # Follows FIRST CONTEXT, which already carries the read-the-saved-file
+  # instruction that must survive a harness head preview (Claude: about 2,000
+  # characters); this cue may fall outside that preview when identity is large.
   printf 'RE-EMIT CUE: if this output ends with "Output too large ... Full output saved to <path>",\n'
   printf 'read that whole file now, before acting. Otherwise read data/captain.md, data/captain-shared.md,\n'
   printf 'and data/learnings.md under %s now if any of them is missing below.\n' "$DATA"
