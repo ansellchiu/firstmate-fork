@@ -1,0 +1,44 @@
+
+================================================================================
+FIRST CONTEXT
+================================================================================
+
+If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.
+data/captain.md # Identity
+--------------------------------------------------------------------------------
+# Identity
+- Name: Lab Captain Zephyr (test fixture).
+- The captain calls kunchenguid "the Admiral". When the captain says "the Admiral", they mean kunchenguid.
+data/captain.md # Communication preferences
+--------------------------------------------------------------------------------
+# Communication preferences
+- Answer first, terse.
+- Use plain English.
+
+================================================================================
+SESSION START - /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.7PHaiV
+================================================================================
+
+LOCK
+--------------------------------------------------------------------------------
+lock acquired: harness pid 82452
+
+HOME ROLE
+--------------------------------------------------------------------------------
+fm-role: user (default)
+
+BOOTSTRAP
+--------------------------------------------------------------------------------
+VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app)
+
+WAKE QUEUE
+--------------------------------------------------------------------------------
+(no queued wakes)
+================================================================================
+SUPERVISION OPERATING INSTRUCTIONS - primary harness: claude
+================================================================================
+Current state:
+- Lock: held by this session; this session owns normal supervision unless away mode says otherwise.
+- Away/quiet mode: inactive.
+- X mode: inactive; use the default watcher cadence.
+- Sup

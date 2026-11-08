@@ -1,0 +1,32 @@
+
+================================================================================
+FIRST CONTEXT
+================================================================================
+
+If this output was shown only as a preview with a saved full-output file, read that whole file before acting. Do not proceed on the preview alone.
+data/captain.md # Identity
+--------------------------------------------------------------------------------
+# Identity
+- identity detail line 1: the captain values careful verification.
+- identity detail line 2: the captain values careful verification.
+- identity detail line 3: the captain values careful verification.
+- identity detail line 4: the captain values careful verification.
+- identity detail line 5: the captain values careful verification.
+- identity detail line 6: the captain values careful verification.
+- identity detail line 7: the captain values careful verification.
+- identity detail line 8: the captain values careful verification.
+- identity detail line 9: the captain values careful verification.
+- identity detail line 10: the captain values careful verification.
+- identity detail line 11: the captain values careful verification.
+- identity detail line 12: the captain values careful verification.
+- identity detail line 13: the captain values careful verification.
+- identity detail line 14: the captain values careful verification.
+- identity detail line 15: the captain values careful verification.
+- identity detail line 16: the captain values careful verification.
+- identity detail line 17: the captain values careful verification.
+- identity detail line 18: the captain values careful verification.
+- identity detail line 19: the captain values careful verification.
+- identity detail line 20: the captain values careful verification.
+- identity detail line 21: the captain values careful verification.
+- KEYFACT: the captain calls kunchenguid "the Admiral".
+RE-EMIT CUE: if this output ends with "Output too large ... Full output saved to 
