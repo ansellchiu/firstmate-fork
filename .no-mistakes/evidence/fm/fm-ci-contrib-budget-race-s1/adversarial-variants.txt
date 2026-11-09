@@ -1,0 +1,18 @@
+=== variant slow_prefix
+grep: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-contributions.kf7mMb/arm-budget-configured/forge/calls: No such file or directory
+not ok - generated check did not attempt a read
+grep: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-contributions.kf7mMb/budget-exhaust/forge/calls: No such file or directory
+not ok - budget exhaustion (exhaust) never started the observation
+grep: /private/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T/fm-contributions.kf7mMb/budget-hang/forge/calls: No such file or directory
+not ok - budget exhaustion (hang) never started the observation
+exit=1
+=== variant slow_fixed
+ok - generated checks enforce configured and inherited budgets at runtime
+ok - budget exhausted mid-observation (exhaust) keeps the prior record and stays silent
+ok - budget exhausted mid-observation (hang) keeps the prior record and stays silent
+exit=0
+=== variant noprop
+not ok - generated check failed to preserve the configured three-second budget
+ok - budget exhausted mid-observation (exhaust) keeps the prior record and stays silent
+ok - budget exhausted mid-observation (hang) keeps the prior record and stays silent
+exit=1

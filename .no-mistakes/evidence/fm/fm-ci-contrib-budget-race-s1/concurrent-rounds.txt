@@ -1,0 +1,15 @@
+=== round 1 (3 parallel)
+ok - generated checks enforce configured and inherited budgets at runtime
+ok - budget exhausted mid-observation (hang) keeps the prior record and stays silent
+ok - budget exhausted mid-observation (exhaust) keeps the prior record and stays silent
+exits=0 0 0
+=== round 2 (3 parallel)
+ok - generated checks enforce configured and inherited budgets at runtime
+ok - budget exhausted mid-observation (hang) keeps the prior record and stays silent
+ok - budget exhausted mid-observation (exhaust) keeps the prior record and stays silent
+exits=0 0 0
+=== round 3 (3 parallel)
+ok - generated checks enforce configured and inherited budgets at runtime
+ok - budget exhausted mid-observation (hang) keeps the prior record and stays silent
+ok - budget exhausted mid-observation (exhaust) keeps the prior record and stays silent
+exits=0 0 0
