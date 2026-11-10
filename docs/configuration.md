@@ -95,7 +95,7 @@ Each effective `FM_HOME` contains private operational directories.
 
 - Project and secondmate registries.
 - Captain preferences and optional shared captain preferences.
-- Learnings, lane burn rates, backlog, briefs, scout reports, optional task status archives, and the optional per-task no-mistakes pipeline-spend ledger.
+- Learnings, backlog, briefs, scout reports, optional task status archives, and the optional per-task no-mistakes pipeline-spend ledger.
 - Explicitly installed content-addressed extension packages under `data/extensions/packages/`.
 
 `state/` holds runtime records:
@@ -815,7 +815,7 @@ The file holds exactly one directive line, with blank lines and `#` comment line
 | `maintainer <host>/<owner>/<repo>` | This home may dispatch publishing work that targets the one named firstmate upstream. |
 
 A scope names the publication target repository (where a pull request lands), normalized to lowercase for comparison, not a push destination.
-A fork home may hold a standing maintainer scope naming its fork; contributing to the parent repository uses per-task consent rather than a second standing scope.
+A fork maintainer contributing to the parent repository uses per-task consent rather than a second standing scope.
 Write the primary home's file by hand; firstmate never grants itself a role, and the file never travels through git.
 Supported secondmate propagation writes or removes the inherited copy as described below.
 A malformed, unreadable, or symlinked file - including one with a second directive anywhere - resolves to user/operator; the role fails closed rather than guessing.
@@ -1173,11 +1173,6 @@ The file is created lazily on first learning and follows the internal [`stow` sk
 
 There is no shared learnings file by captain decision.
 
-## Lane burn rates (data/lane-burn-rates.md)
-
-Per-lane measured burn rates, in percentage points of the lane's limiting quota window per worker-hour, live locally in `data/lane-burn-rates.md`; it is gitignored and created lazily.
-The [`quota-array-dispatch` skill](../.agents/skills/quota-array-dispatch/SKILL.md) owns how dispatch records and reads it, including the default for a lane with no entry.
-
 ## External memory tiers (Memory layering section)
 
 A home may declare memory stores outside firstmate, such as MCP-served knowledge stores, as authoritative for named classes of knowledge.
@@ -1244,19 +1239,6 @@ Budget overrun, unsafe or unreadable inputs, missing required tracked owner file
 That one line goes out through the shared per-line digest cut, so an over-long finding set carries the repo's `[truncated]` marker instead of ending mid-finding, while deduplication keeps comparing the full uncapped set.
 Older bulk learning files remain reference-only; this monitor neither loads nor merges them.
 A reported review need is only a recommendation, not cleanup authority.
-
-## Portfolio attention limit (config/attention-limit)
-
-`config/attention-limit` sets how many projects may consume captain attention at once, the bound `AGENTS.md` section 7 enforces at intake.
-The file is local and gitignored, and it is the only way to change the limit: an ambient environment variable deliberately cannot, because a value nobody can see is the silent, forgotten relaxation the limit exists to prevent.
-Absent, the built-in default of three applies, which is the normal state for a home that has never configured it.
-One positive base-10 integer followed by exactly one newline sets the limit to that many projects.
-The single word `off`, followed by exactly one newline, disables enforcement: the intake check then admits without a limit check, and `bin/fm-attention.sh status`, the fleet view's Portfolio table, and the bearings projection each say the limit is disabled rather than showing a number.
-Any other content is rejected: an empty file, zero, a negative or leading-zero value, several values, extra lines, a missing trailing newline, a symlink, a hardlink, a non-regular file, or a file that cannot be read.
-A rejected file is never treated as the default and never as a silent disable.
-It takes the same unavailable path as an unreadable project registry: the presentation surfaces say the classification is unavailable and name `config/attention-limit` as the cause, and `bin/fm-spawn.sh` warns loudly and dispatches anyway, because this bound protects a human's working memory rather than acting as a safety boundary.
-Disabling the limit is a configuration choice and not an override: `--attention-override` still carries exactly one admission on a current explicit captain instruction, and a parked project stays parked under every setting.
-`bin/fm-attention-lib.sh`'s header owns the parsing and classification contract.
 
 ## Extensions (config/ext-required)
 
@@ -2532,49 +2514,6 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 - So a budget larger than that timeout allows is cut down to what fits instead of being refused, and the cut is reported in the report line.
 - A budget that is not a whole number from 1 to 120 is still refused outright.
 
-## Plan payback ledger (data/value-ledger)
-
-[`bin/fm-value-ledger.sh`](../bin/fm-value-ledger.sh) records what each subscription plan carried, priced at API-equivalent cost, per percentage point of quota and against its monthly fee.
-Its header owns the measurement rules, the row formats, and every action; this section owns the layout only.
-`data/value-ledger/lanes.json` is the pool registry, written by `fm-value-ledger.sh init` and then edited by hand.
-Each pool carries its quota window, plan tier and fee, billing-cycle start, attribution rules, excluded clients, and unseen surfaces, and each fact names its source.
-A rule with a `provider` charges a model only when the sample's client,provider,model capture shows that client reached it through that provider alone, so pi `gpt-*` usage counts toward Codex Plus only through `openai-codex`.
-`excluded` names clients that must put nothing into the pool, such as antigravity-cli for Claude Max, and the rollup's conservation block asserts each one.
-`premise` names the claim a pool's figures test, such as the primary-lane call's premise that Claude Max is idle, with the points-a-day threshold the rollup and panel judge it by.
-A cycle start left `null` keeps the payback multiple `missing` rather than guessed; a registered one is any past billing date, rolled forward in whole months to the current cycle.
-`ledger.jsonl` is append-only, `captures/<sample id>/` holds the raw instrument output each sample was derived from, and `dashboard.json` with `plan-payback.html` are generated and disposable.
-Optional `prices/*.json` files hold first-party per-model prices, shaped as `{"models": {"<model>": {"input", "output", "cache_read", "cache_write", "tolerance_pct"}}}` in USD per million tokens, and feed only the price check.
-Manual samples are taken within twenty minutes of the top of an SGT hour, because a later read cannot be aligned to tokscale's hourly buckets.
-`fm-value-ledger.sh arm` writes and binds `state/value-ledger.check.sh`, which samples and rolls up once a day at the first sweep after 00:15 SGT and prints one line only when an instrument failed, a quota read was not fresh, the row could not be written, or whole days are missing.
-`disarm` removes the shim, its trust binding, and the alert markers.
-
-## Lane burn watch (config/burn-watch.json, state/burn-watch.check.sh)
-
-[`bin/fm-burn-watch.sh`](../bin/fm-burn-watch.sh) is an opt-in watcher check for fast, steering-oriented quota burndown tracking.
-Quota-axi percentages are the accepted steering signal because every approved threshold is a quota percentage; plan payback (`bin/fm-value-ledger.sh`) already samples token draw from tokscale and codeburn hourly.
-While plan payback samples hourly for retrospective accounting, burn watch samples on the watcher's `FM_CHECK_INTERVAL` cadence to detect lanes draining fast or running low at intake time.
-`fm-burn-watch.sh arm` writes and binds `state/burn-watch.check.sh` through `bin/fm-check-register.sh`.
-`fm-burn-watch.sh disarm` removes the shim, its trust binding, and active watch state.
-`fm-burn-watch.sh init` writes the starting configuration to `config/burn-watch.json` when absent.
-
-**Steering thresholds and alerts**
-
-The check accepts only the configured window ID from a fresh provider and stores readings in `state/.burn-watch-prev` to compute per-lane deltas.
-The same file keeps each lane's rate anchor value and timestamp, resetting when its provider, window, or reset period changes (reset times within one hour count as the same period) or remaining quota rises; rates are evaluated only after six hours and discount one point for whole-percent quantization.
-It prints exactly one line when a steering threshold is crossed, and stays silent otherwise.
-Alerts fire once per threshold crossing and re-arm only after recovery, preventing repetitive notifications.
-Starting thresholds include:
-
-- A lane falling 10+ points between samples.
-- Provider floor thresholds: claude below 20%, codex below 15%, and agy below 20%.
-- The Alibaba monthly bucket burning faster than 1.5%/day.
-
-If an instrument fails or a lane is unmeasured, the check prints one diagnostic line once, staying silent on subsequent failed polls until measurement recovers and re-arms.
-Thresholds and monitored windows are configurable in `config/burn-watch.json`.
-Defaults apply only when that file is absent; an existing unreadable or invalid file prints `burn watch: invalid config - <path>` once and skips evaluation until it is fixed.
-A file is invalid when `lanes` is not an object, a lane entry is not an object, `provider` or `window` is not a string, or `drop_threshold_pp`, `floor_pct`, or `rate_pct_day` is present but not a number.
-If writing watch state fails, the check prints `burn watch: state write failed - <state dir>` and exits non-zero instead of reporting threshold alerts.
-
 ## Local Claude usage warner (config/usage-warner)
 
 `config/usage-warner` is an optional local, gitignored set of Claude usage-window thresholds.
@@ -3631,8 +3570,6 @@ FM_SECONDMATE_LIVENESS_TIMEOUT=120   # seconds allowed separately for a watcher-
 FM_SECONDMATE_LIVENESS_MAX_ATTEMPTS=3   # automatic relaunch attempts allowed per mate inside the window before the watcher parks auto-relaunch behind state/.secondmate-relaunch-bound-<id> and escalates once; a later live probe clears the marker and restores the full attempt budget (the ledger keeps its history behind a `rearmed` row); zero or invalid values use 3
 FM_SECONDMATE_LIVENESS_WINDOW_SECS=3600   # window the relaunch bound counts state/.secondmate-relaunch-<id> attempt lines over; the file is also the durable per-mate relaunch record; zero or invalid values use 3600
 FM_WEDGE_DEMAND_INSPECT_COUNT=3    # consecutive provably-working stale escalations on the same unchanged pane before demand-deep-inspection is added
-FM_BRANCH_OUTCOME_DEDUPE_WINDOW=21600   # seconds an unchanged routine supervision-branch outcome about one task is stored but not presented again after being presented once; expiry re-delivers it once, annotated with how many identical updates it stands for; a captain outcome and a changed fact are never suppressed; 0 disables suppression and a malformed value uses the default (docs/pi-supervision-branch.md "Repeat suppression")
-FM_WAKE_REPEAT_SUPPRESS_SECS=900   # seconds an UNDECLARED stale notification already handled and acknowledged suppresses a byte-identical repeat for the same window; a changed reason, and every other wake kind, always surfaces; a declared external wait is bounded by FM_PAUSE_RESURFACE_SECS and its own declaration instead; 0 disables suppression
 FM_WEDGE_GUARD_TIMEOUT_SECS=5      # seconds one guard from config/wedge-evidence-guards may run before it counts as no answer; zero or invalid values use 5
 FM_WEDGE_GUARD_DEFER_MAX=3         # consecutive windows a CRITICAL guard answer may defer one pane's wedge escalation before it fires anyway; invalid values use 3
 FM_WEDGE_MAX_ESCALATIONS=0    # optional ceiling on consecutive wedge escalations for one worker window; 0 (the default) leaves the cap off and every escalation produces a wake, and any value from 1 up to 999999999999999999 publishes one terminal PERMANENTLY-WEDGED wake at that count - carrying the same evidence the escalation it replaces carried: the guard verdict, and the `demand-deep-inspection` marker once the count has reached `FM_WEDGE_DEMAND_INSPECT_COUNT` - and then writes the window-scoped state/.wedge-permanent-<key> to silence further wedge escalations for that window whatever hash its pane renders; the wedge path publishes no second terminal wake while the row that episode queued is still unacknowledged, which scopes the suppression to the episode rather than the window so an earlier episode's unconsumed wake cannot silence a later episode's (the away-posture first sight, which releases the markers without ending the episode, can re-open the row within one episode - an over-notify in the safe direction: the queue check bounds duplicate terminal wakes only while the episode marker stands, and the release removed exactly the marker that would have gated the re-fire, so after it a second wake can stand behind an unacknowledged first), the cap marker and the escalation count the cap was counting drop through the one episode-ending reset whose release routes are owned by the cap discussion below, and a fresh wedge escalates normally again; a cap fire also resets the consecutive-deferral budget of a config/wedge-evidence-guards guard, because the guard is not consulted at all while the cap is silencing that window, so its budget must not carry across as if it had been spent, and preserving it would leave a CRITICAL guard that reached its deferral ceiling before the cap fired already at that ceiling on the first escalation after the cap lifts, unable to defer at all; an invalid or out-of-range value uses 0

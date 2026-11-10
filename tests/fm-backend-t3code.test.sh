@@ -1883,68 +1883,6 @@ test_spawn_refuses_raw_launch_command() {
   pass "fm-spawn.sh --backend t3code: refuses a raw launch command before any mutation"
 }
 
-test_spawn_refuses_held_slot_before_refresh_or_thread() {
-  local id out rc held
-  id=$(t3_uid t3heldz)
-  t3_task_id "$id"
-  t3_case spawn-refuse-held-slot
-  WORKER_PROJ="$CASE_DIR/spawn-project"; WORKER_WT="$CASE_DIR/pool/1/spawn-project"
-  mkdir -p "$CASE_DIR/pool/1"
-  fm_git_worktree "$WORKER_PROJ" "$WORKER_WT" "fm/$id"
-  printf '{}\n' > "$CASE_DIR/pool/treehouse-state.json"
-  git -C "$WORKER_WT" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' \
-    commit -q --allow-empty -m "unlanded work of another task"
-  held=$(git -C "$WORKER_WT" rev-parse HEAD)
-  mkdir -p "$CASE_DIR/data/$id" "$CASE_DIR/state" "$CASE_DIR/home/state"
-  write_spawn_brief "$CASE_DIR/data" "$id"
-  touch "$CASE_DIR/state/.last-watcher-beat"
-  fm_write_meta "$CASE_DIR/state/t3holder.meta" "worktree=$WORKER_WT"
-  FM_T3_PROJ="$WORKER_PROJ" t3_world_set 'w.projects[0].workspaceRoot = process.env.FM_T3_PROJ'
-  out=$(t3_worker_spawn "$id" claude --model claude-sonnet-5); rc=$?
-  expect_code 1 "$rc" "a t3code spawn must refuse a pool slot another task record holds"$'\n'"$out"
-  assert_contains "$out" "is still recorded by $CASE_DIR/state/t3holder.meta" "the refusal must name the record holding the slot"
-  [ "$(git -C "$WORKER_WT" rev-parse HEAD)" = "$held" ] || fail "a held slot must not be reset before the refusal"
-  [ -z "$(t3_dispatch_types)" ] || fail "the refusal must come before any T3 thread exists, got '$(t3_dispatch_types)'"
-  [ "$(t3_log_line_of 'r.tool === "treehouse" && r.args.startsWith("return")')" -eq 0 ] \
-    || fail "a refused spawn must not force-return a slot another task record holds"
-  assert_absent "$CASE_DIR/state/$id.meta" "a refused spawn records nothing"
-  pass "fm-spawn.sh --backend t3code: refuses a held pool slot before refreshing it, launching a thread, or returning it"
-}
-
-test_spawn_refuses_extension_launch_wrap() {
-  local id out rc pkg
-  id=$(t3_uid t3wrapz)
-  t3_case spawn-refuse-launch-wrap
-  t3_worker_setup "$id"
-  pkg="$CASE_DIR/exts/wrap-ext"
-  mkdir -p "$pkg/hooks"
-  cat > "$pkg/ext.json" <<'JSON'
-{
-  "schema": "firstmate.ext.v1",
-  "name": "wrap-ext",
-  "version": "1.0.0",
-  "trigger": "load when a worker launch is wrapped",
-  "hooks": {"launch-wrap": "hooks/launch-wrap"}
-}
-JSON
-  printf -- '---\nname: wrap-ext\ndescription: Fixture launch wrapper.\n---\n\n# wrap-ext\n' > "$pkg/SKILL.md"
-  cat > "$pkg/hooks/launch-wrap" <<'SH'
-#!/usr/bin/env bash
-[ "${1:-}" = prefix ] && printf "'/bin/env' "
-exit 0
-SH
-  chmod +x "$pkg/hooks/launch-wrap"
-  "$ROOT/bin/fm-ext.sh" install "$pkg" --home "$CASE_DIR/home" >/dev/null 2>&1 \
-    || fail "installing the launch-wrap fixture extension failed"
-  out=$(t3_worker_spawn "$id" claude --model claude-sonnet-5); rc=$?
-  expect_code 1 "$rc" "a t3code spawn must refuse a configured launch-wrap prefix"$'\n'"$out"
-  assert_contains "$out" "backend=t3code cannot run the extension launch-wrap prefix" "the refusal must name the launch wrapper"
-  [ -z "$(t3_dispatch_types)" ] || fail "the refusal must come before any T3 mutation, got '$(t3_dispatch_types)'"
-  [ "$(t3_log_line_of 'r.tool === "treehouse"')" -eq 0 ] || fail "the refusal must come before the slot is leased"
-  assert_absent "$CASE_DIR/state/$id.meta" "a refused spawn records nothing"
-  pass "fm-spawn.sh --backend t3code: refuses a configured extension launch-wrap before any mutation"
-}
-
 test_spawn_abort_returns_lease_only_after_archive() {  # <ok|fail>
   local archive=$1 id out rc return_line
   id=$(t3_uid "t3abortz$archive")
@@ -2857,8 +2795,6 @@ test_spawn_refuses_launch_settings_t3_cannot_honor codex-permission-mode restric
 test_spawn_codex_accepts_bypass_approval_mode
 test_spawn_refuses_launch_settings_t3_cannot_honor launch-env-allowlist HOME "config/launch-env-allowlist"
 test_spawn_refuses_raw_launch_command
-test_spawn_refuses_held_slot_before_refresh_or_thread
-test_spawn_refuses_extension_launch_wrap
 test_spawn_abort_returns_lease_only_after_archive ok
 test_spawn_abort_returns_lease_only_after_archive fail
 test_uncertain_thread_launch_keeps_lease

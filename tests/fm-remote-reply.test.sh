@@ -110,12 +110,10 @@ stop_reply_listener() {
 # runner's launch floor: that runner exits without a result, and a check that
 # sampled its claim just before release would otherwise wait out the full bound
 # with no owner listening. Re-check the owner on a one-second cadence so a
-# superseded runner is replaced while the same total bound still applies. The
-# bound is wall-clock (120 s), so runner load cannot shrink the wait.
+# superseded runner is replaced while the same total bound still applies.
 await_reply_result() { # <result-path>
-  local result=$1 handled=${1%.result}.handled i=0 owner starter='' deadline=$((SECONDS + 120))
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    i=$((i + 1))
+  local result=$1 handled=${1%.result}.handled i owner starter=
+  for i in $(seq 1 800); do
     [ -s "$result" ] && [ -f "$handled" ] && return 0
     if [ "$((i % 20))" -eq 1 ]; then
       if [ -z "$starter" ] || ! kill -0 "$starter" 2>/dev/null; then
@@ -306,8 +304,7 @@ wait_for "$CLAIMS/$SID.claim" || fail "process-event runner never claimed the re
 printf 'done [corr=0123456789abcdef] [at=1700000000]: build verified report=data/reply/report.md\n' \
   >> "$REMOTE/state/parent-replies.status"
 RESULT=
-deadline=$((SECONDS + 120))
-while [ "$SECONDS" -lt "$deadline" ]; do
+for _ in $(seq 1 800); do
   RESULT=$(find "$PARENT/state/procevent-inbox" -name "$SID.1.result" -print -quit 2>/dev/null || true)
   [ -n "$RESULT" ] && [ -f "${RESULT%.result}.handled" ] && break
   sleep 0.05

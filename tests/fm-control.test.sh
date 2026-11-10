@@ -35,7 +35,7 @@ mkdir -p "$TMP_ROOT"
 TMP_ROOT=$(cd "$TMP_ROOT" && pwd)
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp agy devin commandcode cortex"
+VERIFIED_HARNESSES="claude codex opencode pi pi-signed grok kimi cursor muse omp devin commandcode cortex"
 
 # The expectation table, written out independently of the implementation so a
 # silent change to either side shows up here. The fourth field is the composer
@@ -55,7 +55,6 @@ verified_adapter_contract() {  # <harness> -> exit command, interrupt key, repea
     kimi) printf '/exit\tEscape\t1\t\n' ;;
     cursor) printf '/exit\tEscape\t1\t\n' ;;
     muse) printf '/exit\tEscape\t1\tC-u\n' ;;
-    agy) printf '/quit\tEscape\t1\t\n' ;;
     *) return 1 ;;
   esac
 }
@@ -217,17 +216,6 @@ fi
 exit 0
 SH
   chmod +x "$fb/sleep"
-  cat > "$fb/quota-axi" <<'SH'
-#!/usr/bin/env bash
-if [ "${1:-}" = --version ]; then
-  echo "0.1.51"
-  exit 0
-fi
-echo "windows[1]{provider,id,label,percentRemaining}:"
-echo "  stub,weekly,Stub weekly,100"
-exit 0
-SH
-  chmod +x "$fb/quota-axi"
   printf '%s\n' "$fb"
 }
 
@@ -289,18 +277,6 @@ alive_as() {  # <case-dir> <command-name>
   printf '%s' "$2" > "$1/fake/command"
 }
 
-# The portable control test isolates adapter mechanics from backend liveness.
-# agy's tmux process identity is not verified, so use an already-recognized
-# stand-in there; the real agy control guard exercises the Herdr registry path.
-alive_as_harness() {  # <case-dir> <harness>
-  case "$2" in
-    cursor) alive_as "$1" cursor-agent ;;
-    agy) alive_as "$1" claude ;;
-    commandcode) alive_as "$1" command-code ;;
-    *) alive_as "$1" "$2" ;;
-  esac
-}
-
 literals() {  # <case-dir>
   cat "$1/fake/literal"
 }
@@ -318,7 +294,11 @@ test_exit_types_each_harness_verified_command() {
   for harness in $VERIFIED_HARNESSES; do
     dir=$(new_case "exit-$harness")
     add_task "$dir" t1 "$harness"
-    alive_as_harness "$dir" "$harness"
+    case "$harness" in
+      cursor) alive_as "$dir" cursor-agent ;;
+      commandcode) alive_as "$dir" command-code ;;
+      *) alive_as "$dir" "$harness" ;;
+    esac
     out=$(run_control "$dir" t1 exit); rc=$?
     expect_code 0 "$rc" "exit on $harness should succeed"$'\n'"$out"
     IFS=$'\t' read -r expected key repeat clear <<< "$(verified_adapter_contract "$harness")"
@@ -399,7 +379,11 @@ test_interrupt_sends_each_harness_verified_key() {
     add_task "$dir" t1 "$harness"
     # Devin sends its second press only onto a running turn.
     [ "$harness" != devin ] || printf running > "$dir/fake/devin"
-    alive_as_harness "$dir" "$harness"
+    case "$harness" in
+      cursor) alive_as "$dir" cursor-agent ;;
+      commandcode) alive_as "$dir" command-code ;;
+      *) alive_as "$dir" "$harness" ;;
+    esac
     out=$(run_control "$dir" t1 interrupt); rc=$?
     expect_code 0 "$rc" "interrupt on $harness should succeed"$'\n'"$out"
     IFS=$'\t' read -r expected key repeat clear <<< "$(verified_adapter_contract "$harness")"
@@ -511,7 +495,7 @@ test_harness_family_resolution() {
   local pair recorded want got
   for pair in claude:claude claude-latest:claude codex:codex codex-cli:codex \
       opencode:opencode grok:grok grok-2:grok kimi:kimi cursor:cursor \
-      cursor-agent:cursor muse:muse muse-bin-0.1.0:muse agy:agy pi:pi \
+      cursor-agent:cursor muse:muse muse-bin-0.1.0:muse pi:pi \
       pi-signed:pi-signed omp:omp devin:devin; do
     recorded=${pair%%:*}
     want=${pair#*:}
@@ -623,10 +607,10 @@ test_harness_kind_capability() {
     fm_control_harness_supports_kind "$harness" scout \
       || fail "$harness should be able to run a scout task"
   done
-  for harness in muse commandcode; do
-    fm_control_harness_supports_kind "$harness" secondmate \
-      && fail "$harness has no primary supervision protocol and must not claim a secondmate"
-  done
+  fm_control_harness_supports_kind muse secondmate \
+    && fail "muse has no primary supervision protocol and must not claim a secondmate"
+  fm_control_harness_supports_kind commandcode secondmate \
+    && fail "commandcode has no primary supervision protocol and must not claim a secondmate"
   for harness in claude codex opencode pi pi-signed grok kimi omp; do
     fm_control_harness_supports_kind "$harness" secondmate \
       || fail "$harness should be able to run a secondmate"
@@ -940,10 +924,7 @@ test_relaunch_only_flags_are_rejected_on_other_verbs() {
   out=$(run_control "$dir" t1 exit --harness codex); rc=$?
   expect_code 1 "$rc" "--harness should not apply to exit"
   assert_contains "$out" "apply to 'relaunch' only" "the refusal should scope the flags"
-  out=$(run_control "$dir" t1 exit --accept-concentration); rc=$?
-  expect_code 1 "$rc" "--accept-concentration should not apply to exit"
-  assert_contains "$out" "apply to 'relaunch' only" "the refusal should scope --accept-concentration"
-  pass "fm-control: profile, concentration, and note flags belong to relaunch only"
+  pass "fm-control: profile and note flags belong to relaunch only"
 }
 
 # --- 5. lifecycle states ----------------------------------------------------
@@ -1029,53 +1010,6 @@ exit_picker_screen() {
     '  2. Move to background and exit' \
     '  3. Stay' \
     'Enter to confirm · Esc to cancel'
-}
-
-# agy's separated composer carries a bare `>` shell glyph, so the composer
-# classifier proves it only from the recorded harness plus agy's idle status row
-# on the same screen (_fm_composer_agy_verdict in bin/fm-composer-lib.sh). The
-# fake cursor parks on row 1, which these screens use for the `>` row.
-agy_screen() {  # <content-row> <status-row>
-  local rule
-  rule=$(printf '─%.0s' $(seq 1 60))
-  printf '%s\n%s\n%s\n%s\n' "$rule" "$1" "$rule" "$2"
-}
-
-test_agy_exit_accepts_an_idle_composer_and_refuses_the_rest() {
-  local dir out rc
-  dir=$(new_case agy-idle)
-  add_task "$dir" t1 agy
-  alive_as_harness "$dir" agy
-  agy_screen '>' '? for shortcuts' > "$dir/fake/pane"
-  out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 0 "$rc" "an idle agy composer should accept the exit command"$'\n'"$out"
-  [ "$(literals "$dir")" = "/quit" ] || fail "idle agy should be sent /quit, got: $(literals "$dir")"
-
-  dir=$(new_case agy-typed)
-  add_task "$dir" t1 agy
-  alive_as_harness "$dir" agy
-  agy_screen '> half typed' '? for shortcuts' > "$dir/fake/pane"
-  out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "typed agy text should refuse"$'\n'"$out"
-  [ ! -s "$dir/fake/literal" ] || fail "pending agy text must not be typed over"
-
-  dir=$(new_case agy-shell)
-  add_task "$dir" t1 agy
-  alive_as_harness "$dir" agy
-  agy_screen '>' '' > "$dir/fake/pane"
-  out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "a bare > without agy's status row should refuse"$'\n'"$out"
-  assert_contains "$out" "not proven empty" "the refusal should say the composer is unproven"
-  [ ! -s "$dir/fake/literal" ] || fail "an unproven agy composer must not be typed into"
-
-  dir=$(new_case agy-other-harness)
-  add_task "$dir" t1 claude
-  alive_as "$dir" claude
-  agy_screen '>' '? for shortcuts' > "$dir/fake/pane"
-  out=$(run_control "$dir" t1 exit); rc=$?
-  expect_code 1 "$rc" "an agy-looking screen on a non-agy task should refuse"$'\n'"$out"
-  [ ! -s "$dir/fake/literal" ] || fail "a non-agy task must not be typed into on agy's proof"
-  pass "fm-control exit: idle agy is accepted; typed, shell-like, and non-agy panes are refused"
 }
 
 test_exit_refuses_an_open_background_picker() {
@@ -1390,7 +1324,6 @@ EOF
 }
 
 test_exit_types_each_harness_verified_command
-test_agy_exit_accepts_an_idle_composer_and_refuses_the_rest
 test_opencode_exit_matches_recorded_major
 test_opencode2_exit_retries_ctrl_c_once
 test_interrupt_sends_each_harness_verified_key

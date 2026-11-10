@@ -44,10 +44,6 @@
 #     replacing a dead owner, re-checks the captured owner under that lease, and
 #     holds it through the bounded mutating run. A takeover stays read-only until
 #     that run settles, so old and new owners can never sweep concurrently.
-#     It does not outlive the session that requested the work. When the recorded
-#     lock pid dies, the worker kills the sweep and exits, so a detached run
-#     cannot keep burning CPU after that session is gone. The checks are
-#     idempotent; the next session start runs them.
 #
 # Usage: fm-startup-network.sh start --locked <0|1> --harvest-pid <pid>
 #          Launch the detached worker and return immediately. Single-flight: a
@@ -330,20 +326,17 @@ EOF
 # session held the lock a moment ago" is not enough for a worker that outlives
 # the command which launched it.
 #
-# Two facts, checked separately. lock_unchanged asks whether the lock file still
-# names the session that requested the work. The hazard that closes is a second
-# session sweeping concurrently. bin/fm-lock.sh rewrites that pid with its own
-# anchor whenever the recorded holder is no longer a live harness, or when the
-# same session re-anchors a live recorded pid outside its ancestry. An unchanged
-# value therefore proves no one else owns the sweeps; a re-anchor also fails
-# closed, which only defers idempotent work. A missing, unreadable, or replaced
-# lock all fail closed to the read-only probe.
-# Liveness is the other fact. A dead pid left in the lock file means the
-# requesting session is gone, not that this worker should finish the sweep
-# alone. The worker is detached, so continuing is what leaves a hot orphan
-# after a test or a crashed session. The sweep stops as soon as that pid dies,
-# even while the lock file still names it. The work is idempotent and the next
-# session start runs it.
+# The question is deliberately "does the lock still name the session that asked
+# for this work?", not "is that session still alive". The hazard being closed is
+# a SECOND session sweeping concurrently. bin/fm-lock.sh rewrites that pid with
+# its own anchor whenever the recorded holder is no longer a live harness, or
+# when the same session re-anchors a live recorded pid outside its ancestry.
+# An unchanged value therefore proves no one else owns the sweeps, which is the
+# whole guarantee; a re-anchor also fails closed, which only defers idempotent
+# work. Requiring liveness instead would refuse to finish work
+# nobody else has claimed, and the sweeps are idempotent, so finishing it is
+# strictly better than abandoning it. A missing, unreadable, or replaced lock all
+# fail closed to the read-only probe.
 lock_unchanged() {  # <expected-pid>
   local expected=$1 current
   fm_session_pid_valid "$expected" || return 1
@@ -581,61 +574,14 @@ EOF
   # The sweeps get whatever the lock waits above left of the stage budget.
   budget=$(seconds_until "$stage_deadline")
   if [ "$sweep_locked" -eq 1 ]; then
-    # The sweep runs in its own process group so a dead lock holder, or this
-    # stage's own deadline, can kill it without leaving the group behind. Exit
-    # 76 is the holder dying. A deadline signal exits 124, the same code
-    # fm_run_timed already uses for the bound, so the report stays a timeout.
     # shellcheck disable=SC2016  # Child-shell variables expand inside the bound.
     fm_run_timed "$budget" env FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
       FM_BOOTSTRAP_NETWORK=only FM_BOOTSTRAP_NETWORK_LOCK_PID="$lock_pid" \
       bash -c '
         script_dir=$1
-        lock_pid=$2
-        holder_alive() {
-          case "$1" in
-            ""|*[!0-9]*) return 1 ;;
-          esac
-          kill -0 "$1" 2>/dev/null
-        }
-        stop_sweep() {
-          [ -n "${sweep:-}" ] || return 0
-          kill -TERM -- -"$sweep" 2>/dev/null || true
-          sleep 0.2
-          kill -KILL -- -"$sweep" 2>/dev/null || true
-          wait "$sweep" 2>/dev/null || true
-        }
-        if ! holder_alive "$lock_pid"; then
-          exit 76
-        fi
-        set -m
-        bash -c "
-          script_dir=\$1
-          \"\$script_dir/fm-inactive-reconcile.sh\" scan --startup >/dev/null 2>&1 || true
-          exec \"\$script_dir/fm-bootstrap.sh\"
-        " _ "$script_dir" &
-        sweep=$!
-        trap "stop_sweep; exit 124" TERM INT HUP
-        rc=0
-        # set -m makes bash print "[1]+ Done ..." job notices to its own stderr,
-        # which is the report file, so the monitor runs with stderr discarded.
-        # A finished child is a zombie until wait, and kill -0 is true for a
-        # zombie, so the loop watches process state and reaps with wait after.
-        {
-        while :; do
-          stat=$(ps -o stat= -p "$sweep" 2>/dev/null | tr -d "[:space:]" || true)
-          case "$stat" in
-            ""|Z*) break ;;
-          esac
-          if ! holder_alive "$lock_pid"; then
-            stop_sweep
-            exit 76
-          fi
-          sleep 0.2
-        done
-        wait "$sweep" || rc=$?
-        } 2>/dev/null
-        exit "$rc"
-      ' _ "$SCRIPT_DIR" "$lock_pid" >"$out" 2>&1 || rc=$?
+        "$script_dir/fm-inactive-reconcile.sh" scan --startup >/dev/null 2>&1 || true
+        exec "$script_dir/fm-bootstrap.sh"
+      ' _ "$SCRIPT_DIR" >"$out" 2>&1 || rc=$?
   else
     fm_run_timed "$budget" env FM_BOOTSTRAP_NETWORK=only FM_BOOTSTRAP_DETECT_ONLY=1 \
       "$SCRIPT_DIR/fm-bootstrap.sh" >"$out" 2>&1 || rc=$?
@@ -650,11 +596,6 @@ EOF
   fi
   case "$rc" in
     0) publish "$generation" 'done' "$phases" "$sweep_locked" "$started" "$rc" "$out" "$timings" ;;
-    76)
-      printf 'NETWORK_CHECKS: the deferred check worker stopped because the session that requested these checks (pid %s) is gone, so %s did not finish; the next session start will run them\n' \
-        "$lock_pid" "$(phase_label "$phases")" >> "$out"
-      publish "$generation" failed "$phases" "$sweep_locked" "$started" 76 "$out" "$timings"
-      ;;
     124)
       printf 'NETWORK_CHECKS: hit the %ss bound before finishing, so %s may be incomplete; rerun %s/bin/fm-startup-network.sh run --locked %s\n' \
         "$(stage_budget)" "$(phase_label "$phases")" "$FM_ROOT" "$sweep_locked" >> "$out"

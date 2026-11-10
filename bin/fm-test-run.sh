@@ -926,6 +926,7 @@ tests/fm-rovo-harness.test.sh 15691
 tests/fm-rovo-signals-live-e2e.test.sh 52
 tests/fm-secondmate-busy-contract-live-e2e.test.sh 90000
 tests/fm-secondmate-harness.test.sh 188187
+tests/fm-secondmate-busy-contract-live-e2e.test.sh 90000
 tests/fm-secondmate-lifecycle-e2e.test.sh 11268
 tests/fm-secondmate-liveness.test.sh 24564
 tests/fm-secondmate-reconcile.test.sh 100853
@@ -1751,6 +1752,11 @@ families_for_changed_path() {
       printf '%s\n' "__script__:fm-calm-pi-extension.test.sh"
       printf '%s\n' "__script__:fm-watch-recovery-loop.test.sh"
       printf '%s\n' live-harness-optin
+      ;;
+    .pi/extensions/fm-primary-read-repetition.ts|.pi/extensions/lib/fm-primary-read-repetition-policy.ts|tests/fixtures/fm-read-repetition-sdk.mjs|tests/fixtures/fm-read-repetition-live.mjs)
+      printf '%s\n' __script__:fm-read-repetition.test.sh
+      printf '%s\n' __script__:fm-read-repetition-live.test.sh
+      printf '%s\n' __script__:fm-pi-primary-types.test.sh
       ;;
     .pi/extensions/fm-primary-read-repetition.ts|.pi/extensions/lib/fm-primary-read-repetition-policy.ts|tests/fixtures/fm-read-repetition-sdk.mjs|tests/fixtures/fm-read-repetition-live.mjs)
       printf '%s\n' __script__:fm-read-repetition.test.sh

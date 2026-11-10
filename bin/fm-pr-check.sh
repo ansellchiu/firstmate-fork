@@ -164,8 +164,6 @@ PROVIDER=$FM_PR_PROVIDER
 HOST=$FM_PR_HOST
 PROJECT_PATH=$FM_PR_PATH
 NUMBER=$FM_PR_NUMBER
-OWNER=$FM_PR_OWNER
-REPO=$FM_PR_REPO
 # gh and gh-axi address github.com unless told otherwise, so a GitHub Enterprise
 # host is exported once here and every forge read this run makes, including the
 # bin/fm-dod-lib.sh children, addresses the host the recorded identity names.
@@ -356,32 +354,6 @@ fm_pr_metadata_identity_parse "$META" || exit 1
 fm_lock_release "$META_LOCK"
 META_LOCK_HELD=0
 
-# Structural receipt (fm-receipt.v1, bin/fm-receipt.sh owns the format): the
-# registration itself writes the task's typed landing receipt - pr_url, and
-# pr_head when the forge supplied it - so the outcome never depends on the
-# model composing it later. Failure here is loud but not fatal: the meta and
-# poll stay authoritative, and bin/fm-teardown.sh refuses to clean up a ship
-# task whose receipt is missing, so the gap always surfaces; re-running this
-# command with the same URL repairs it.
-PR_RECEIPT_ARGS=(write-landing --task "$ID" --pr-url "$URL"
-  --pr-url-source "grep '^pr=' $META")
-# The head is the PR branch head BEFORE any merge, so it takes the pr_head
-# anchor kind; commit_sha stays reserved for the commit that lands.
-[ -z "$PR_HEAD" ] || PR_RECEIPT_ARGS+=(--head-sha "$PR_HEAD" \
-  --head-sha-source "gh pr view $URL --json headRefOid -q .headRefOid")
-# A record that predates project= still gets an honest project name: the forge
-# repo path parsed from the canonical URL.
-[ -z "$PROJECT_PATH" ] || PR_RECEIPT_ARGS+=(--project-fallback "$(basename "$PROJECT_PATH")")
-# The writer's own stderr is folded into the one actionable line rather than
-# leaked beside it: a caller reading this output needs one line naming the
-# task, the consequence and the cause, not a shell error from a nested script.
-PR_RECEIPT_ERR=
-if ! PR_RECEIPT_ERR=$(FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
-    "$FM_ROOT/bin/fm-receipt.sh" "${PR_RECEIPT_ARGS[@]+"${PR_RECEIPT_ARGS[@]}"}" 2>&1 >/dev/null); then
-  printf 'actionable: task %s is registered but its landing receipt could not be written (%s); teardown will refuse cleanup until fm-pr-check.sh is re-run successfully\n' \
-    "$ID" "$(printf '%s' "${PR_RECEIPT_ERR:-no diagnostic}" | tr '\n' ' ' | cut -c1-200)" >&2
-fi
-
 PR_POLL_PUBLISH_LOCK="$STATE/.pr-poll-publish-$ID.lock"
 fm_lock_acquire_wait "$PR_POLL_PUBLISH_LOCK"
 PR_POLL_PUBLISH_LOCK_HELD=1
@@ -406,57 +378,6 @@ if command -v jq >/dev/null 2>&1; then
     || printf 'contributions: observation not armed; coverage is unconfirmed\n' >&2
 else
   printf 'contributions: jq unavailable; coverage is unconfirmed\n' >&2
-fi
-
-# Read the authenticated GitHub login from gh-axi, which answers an --jq request
-# in one of two shapes depending on whether the selected value parses as JSON. A
-# login like ansellchiu does not, so it arrives wrapped in an api_response block
-# whose body: field carries it, read here the way bin/fm-pr-merge.sh reads a pull
-# request state; a login that happens to be all digits does parse, and is printed
-# bare on a line of its own. Both are accepted, and everything else - an absent,
-# repeated or truncated body, extra lines, or a value that is not a single GitHub
-# login - is refused rather than passed on to an assignment that could only fail
-# or name the wrong account.
-github_authenticated_login() {
-  local output
-  output=$(gh-axi api user --jq .login 2>/dev/null) || return 1
-  printf '%s\n' "$output" | awk '
-    { lines++ }
-    NR == 1 { bare = $0 }
-    $1 == "body:" { body++; login = $2; fields = NF }
-    $1 == "truncated:" { truncated++; flag = $2 }
-    END {
-      if (body == 1 && fields == 2 && truncated == 1 && flag == "false") value = login
-      else if (lines == 1) value = bare
-      else exit 1
-      if (value !~ /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$/) exit 1
-      print value
-    }
-  '
-}
-
-# Assignment is deliberately after the durable PR poll and metadata publication:
-# a GitHub API failure must remain visible without losing the ready record. Use
-# the authenticated account rather than a personal name, and make the edit
-# idempotent by adding the same assignee on every registration retry. An absent
-# gh-axi is its own cause and is named as one: reporting it as an undetermined
-# login would send every registration on such a host chasing an account that was
-# never the problem.
-#
-# Putting a PR in the captain's review inbox belongs to registration, and this
-# script is also the metadata recorder bin/fm-pr-merge.sh runs immediately before
-# it merges. FM_PR_ASSIGN_CAPTAIN=0 is how that caller declines the announcement
-# it has no use for: a PR on its way out of review must not be written to the
-# forge again just to re-assert who was already meant to review it.
-if [ "$PROVIDER" = github ] && [ "${FM_PR_ASSIGN_CAPTAIN:-1}" != 0 ]; then
-  CAPTAIN_LOGIN=
-  if ! command -v gh-axi >/dev/null 2>&1; then
-    printf 'actionable: PR %s is registered but GitHub captain assignment requires gh-axi on PATH\n' "$URL" >&2
-  elif ! CAPTAIN_LOGIN=$(github_authenticated_login) || [ -z "$CAPTAIN_LOGIN" ]; then
-    printf 'actionable: PR %s is registered but GitHub captain assignment could not determine the authenticated login\n' "$URL" >&2
-  elif ! gh-axi pr edit "$NUMBER" --repo "$OWNER/$REPO" --add-assignee "$CAPTAIN_LOGIN" >/dev/null 2>&1; then
-    printf 'actionable: PR %s is registered but GitHub captain assignment failed for %s\n' "$URL" "$CAPTAIN_LOGIN" >&2
-  fi
 fi
 # Opt-in config/ready-after-green: a no-mistakes PR is ready only once the
 # child's own status holds the checks-green report naming this exact PR, so a

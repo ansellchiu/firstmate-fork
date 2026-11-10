@@ -8,12 +8,9 @@
 # spawn on codex too, primary config/backlog-backend=manual makes that home
 # hand-edit backlog files too, primary config/backend pins that home's local
 # runtime-backend default for future spawns, primary config/startup-memory-budget
-# bounds that home's startup-memory curation, primary config/av-inject lets that
-# home's own workers make the same point-of-use Automic Vault key-injected tool
-# calls, primary config/secret-backend and config/varlock/.env.schema give that
-# home the same per-key secret backend and the schema it needs, primary
-# config/firstmate-role carries the primary's resolved firstmate-repository role
-# with a proof-of-state receipt (so a secondmate inherits only what the primary
+# bounds that home's startup-memory curation, primary config/firstmate-role
+# carries the primary's resolved firstmate-repository role with a
+# proof-of-state receipt (so a secondmate inherits only what the primary
 # resolves), and primary
 # config/herdr-presentation-spaces carries the same Herdr presentation-projection
 # preference - an absent primary file and an absent destination file both mean
@@ -96,7 +93,7 @@ FM_SHARED_CAPTAIN_MODE="444"
 # The declared inheritable set (space-separated, config-dir-relative item paths).
 # Extend here to inherit more of the primary's local config; override via the
 # environment only in tests. Items must not contain whitespace.
-FM_INHERITABLE_CONFIG="${FM_INHERITABLE_CONFIG:-crew-dispatch.json dispatch-never-send crew-harness backlog-backend backend herdr-presentation-spaces herdr-project-groups startup-memory-budget trace-context av-inject secret-backend varlock/.env.schema launch-env-allowlist claude-permission-mode codex-approval-mode lavish-axi-host t3code-instances keep-ai-trailers supervision-host-off firstmate-role}"
+FM_INHERITABLE_CONFIG="${FM_INHERITABLE_CONFIG:-crew-dispatch.json dispatch-never-send crew-harness backlog-backend backend herdr-presentation-spaces herdr-project-groups startup-memory-budget trace-context launch-env-allowlist claude-permission-mode codex-approval-mode lavish-axi-host t3code-instances keep-ai-trailers supervision-host-off firstmate-role}"
 
 # firstmate-role additionally carries a proof-of-state receipt: a scoped role
 # grant (or its recorded absence) authorizes a secondmate home only while

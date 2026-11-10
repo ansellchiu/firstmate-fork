@@ -30,13 +30,13 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-on.sh`               | Execute one tracked Firstmate command in a configured remote secondmate home, using its job worker except for the doctor bootstrap |
 | `fm-remote-job-lib.sh`   | Shared bounded remote job queue, worker readiness, LaunchAgent contract, and filesystem-composed PATH |
 | `fm-remote-job-worker.sh` | Long-lived remote queue worker for tracked `fm-*.sh` commands in the account runtime |
-| `fm-remote-job-reap-orphans.sh` | Stop remote job workers left running by a pruned code root, and this home's watcher arms whose code root is gone, never a live checkout or another home |
+| `fm-remote-job-reap-orphans.sh` | Stop remote job workers left running by a pruned code root, never one whose checkout still exists |
 | `fm-remote-doctor.sh`    | Check, and with `--fix` repair, one remote account's [second-mate readiness](remote-secondmates.md#readiness-repair-and-the-human-steps) |
 | [`fm-backlog-handoff.sh`](../bin/fm-backlog-handoff.sh) | Move queued backlog items into a secondmate home; its header owns route-specific wake outcomes and retries |
 | `fm-backlog-receive.sh`  | Idempotently ingest one confined remote handoff outbox through tasks-axi             |
 | `fm-captain-hold.sh`     | Hold tasks for the captain, record the captain's answers, gate investigation completion, and report record divergence between the status log and the backlog |
 | `fm-decision-hold.sh`    | One-release compatibility shim mapping the retired decision commands onto fm-captain-hold.sh |
-| `fm-brief.sh`            | Scaffold ship (explicit `--mode`, plus the project's registered `--forge` and `--pr`, packet class via `--packet`), scout, secondmate-charter, and Herdr-lab briefs, with Captain's intent and Firstmate spec subsections on ship/scout |
+| `fm-brief.sh`            | Scaffold ship (explicit `--mode`, plus the project's registered `--forge` and `--pr`), scout, secondmate-charter, and Herdr-lab briefs, with Captain's intent and Firstmate spec subsections on ship/scout |
 | [`fm-dod-lib.sh`](../bin/fm-dod-lib.sh) | Own ship/scout worker role scope, ship definitions of done, the named-head reachability gate on ship `done:` acceptance, and the no-mistakes `--intent` contract |
 | `fm-brief-heading-lib.sh` | Single owner of reading a brief's sections, shared by the `--intent` contract, spawn and promotion validation, and `fm-dispatch-resolve.sh` |
 | `fm-herdr-lab.sh`        | Provision and guardedly operate an isolated, never-default Herdr lab session         |
@@ -73,7 +73,7 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-remote-home-seed.sh` | Register and provision a whole secondmate home on an SSH-reachable host              |
 | `fm-remote-readiness-lib.sh` | Shared remote second-mate readiness gate: check and, when needed, repair then re-check through `fm-remote-doctor.sh` |
 | [`fm-project-origin-lib.sh`](../bin/fm-project-origin-lib.sh) | Accepted origin-form owner shared by both remote provisioning boundaries |
-| `fm-spawn.sh`            | Spawn crewmates, scouts, `id=repo` batches, and secondmates on the resolved harness and runtime backend; enforces the brief's recorded dispatch packet class |
+| `fm-spawn.sh`            | Spawn crewmates, scouts, `id=repo` batches, and secondmates on the resolved harness and runtime backend |
 | [`fm-approval-failover.sh`](../bin/fm-approval-failover.sh) | Save a captain-approved managed-approval fallback and recover a worker after observed defeated bypass |
 | `fm-git-strip-ai-trailers.sh` | Strip known AI commit trailers at commit-msg time and install that hook, plus any forge=external push guard, for a fleet launch |
 | `fm-git-push-guard.sh`  | Refuse a forge=external task's pushes to the shared origin and of task-prefixed branches, and write its per-task guard record ([design](external-review-forge.md)) |
@@ -91,7 +91,7 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `backends/t3code.sh`     | Experimental T3 Code adapter driving the agent session through `fm-t3-mcp.mjs`       |
 | `backends/tern.sh`       | Experimental tern session-provider adapter                                           |
 | `fm-config-push.sh`      | Push declared inherited local material to live local or remote secondmates and send the placement-specific config reread when changed |
-| `fm-project-mode.sh`     | Resolve a project's registered delivery posture, forge binding, PR-text binding, or ship-branch prefix from `data/projects.md` for fleet sync, home seeding, and the forge and PR-text agreements a ship spawn or scout promotion applies, and list the registry for the portfolio classification |
+| `fm-project-mode.sh`     | Resolve a project's registered delivery posture, forge binding, PR-text binding, or ship-branch prefix from `data/projects.md` for fleet sync, home seeding, and the forge and PR-text agreements a ship spawn or scout promotion applies |
 | `fm-forge-detect.sh`     | Propose a clone's forge binding from its origin remote for project-add intake, never recording it |
 | [`fm-merge-local.sh`](../bin/fm-merge-local.sh) | Fast-forward a `local-only` project's local default branch to the approved recorded commit |
 | `fm-review-diff.sh`      | Review a crewmate branch or resolved PR head against the authoritative base          |
@@ -164,15 +164,13 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-check-unregister.sh` | Retire a custom watcher check and its trust binding by validated task id            |
 | `fm-check-lib.sh`        | Validate custom-check registrations and prepare private execution snapshots          |
 | `fm-tool-update-check.sh` | Report watched tooling with an update available, and updates installed but left inert by PATH order |
-| `fm-value-ledger.sh` | Plan payback: sample quota and token draw, derive dollars per quota point and payback against fee, and run the daily check |
-| `fm-burn-watch.sh`   | Fast steering-oriented lane burndown watch: sample quota windows on check cadence, compute per-lane deltas, and alert on threshold crossings |
 | `fm-startup-growth-check.sh` | Daily metadata-only growth check for startup memory and tracked startup/instruction surfaces |
 | `fm-usage-warner.sh`     | Opt-in macOS threshold warner that notifies once when a configured Claude usage window crosses its percentage |
 | `fm-pr-lib.sh`           | Own canonical task and PR validation, the branch-to-PR lookup shared by teardown and the PR health monitor, plus private atomic PR-poll publication, merge-notification identity, and retirement |
 | `fm-pr-poll.sh`          | Provide the byte-static watcher program for validated pull-request, merge-request, and Gerrit-change poll sidecars |
 | `fm-contributions.sh`    | Observe owned publications, retain exact-head judgments, measure required actors, and wake on maintainer or configured review-bot signals |
 | `fm-pr-health.sh`        | Opt-in: enroll owned PRs; wake once per latest commit for conflicts, failing checks, and author actions; record maintainer-gated CI and missing required reviews without waking the task, using GitHub notifications plus a fallback sweep (see [configuration.md](configuration.md#pr-health-monitor-configpr-health-monitor)) |
-| `fm-pr-check.sh`         | Record validated task `pr=` and `pr_head=` values, then atomically arm a static merge poll and put a GitHub PR in the captain's review inbox by assigning the authenticated account; refuses GitHub drafts and persistent secondmate records (see [architecture.md](architecture.md)); `scan`, run by the watcher's check sweep when `config/pr-register-scan` is present, records each PR a task's `done:` line reports when no `pr=` exists |
+| `fm-pr-check.sh`         | Record validated task `pr=` and `pr_head=` values, then atomically arm a static merge poll; refuses GitHub drafts and persistent secondmate records (see [architecture.md](architecture.md)); `scan`, run by the watcher's check sweep when `config/pr-register-scan` is present, records each PR a task's `done:` line reports when no `pr=` exists |
 | `fm-review-check.sh`    | Record a forge=external task's validated `review=` and `review_head=` without arming a merge watch ([design](external-review-forge.md)) |
 | `fm-external-review-lib.sh` | Shared readers for the forge=external review tool adapter, ready-URL pattern, backup remote, and remote URLs |
 | `fm-pr-merge.sh`         | Record PR metadata, merge a task's canonical full GitHub, GitLab, or Forgejo URL, refuse a Gerrit change because firstmate never submits one, then refuse an outcome it cannot prove landed or queued |

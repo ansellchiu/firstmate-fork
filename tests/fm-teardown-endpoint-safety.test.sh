@@ -1086,7 +1086,6 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
   fm_write_meta "$dir/home/state/$id.meta" \
     "window=firstmate:fm-$id" "endpoint_task_id=$id" \
     "worktree=$dir/worktree" "project=$dir/project" "kind=ship"
-  seed_landing_receipt "$dir/home" "$id"
   claim_pool_slot "$dir" "$other" "$dir/other-home"
   ( cd "$dir/worktree" && exec sleep 30 ) &
   worker=$!
@@ -1126,39 +1125,6 @@ test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot() {
     "unreadable-claim refusal should name the claim file to inspect"
 
   pass "fm-teardown: a pool slot claimed by another task is left alone while the task's own cleanup finishes"
-}
-
-# The same reassignment where the record's project is a DIFFERENT clone of the
-# same origin than the clone owning the slot - the shape the shared pool hands a
-# home that holds its own clone. The slot is still a managed pool slot, so its
-# ownership must be read the same way; an accounting that cannot see it at all
-# would skip every ownership check and force-return the slot from under the task
-# that now holds it.
-test_reassigned_cross_clone_pool_slot_is_left_alone() {
-  local dir id=stale-task other=reassigned-task mate rc
-  dir=$(make_case slot-reassigned-cross-clone)
-  mark_case_as_treehouse_pool "$dir"
-  git clone -q --bare "$dir/project" "$dir/origin.git"
-  git -C "$dir/project" remote add origin "file://$dir/origin.git"
-  mate="$dir/mate-clone"
-  git clone -q "file://$dir/origin.git" "$mate"
-  [ "$(git -C "$dir/pool/1/project" rev-parse --path-format=absolute --git-common-dir)" \
-    != "$(git -C "$mate" rev-parse --path-format=absolute --git-common-dir)" ] \
-    || fail "the cross-clone case was vacuous: the slot and the project share one common dir"
-  fm_write_meta "$dir/home/state/$id.meta" \
-    "window=firstmate:fm-$id" "endpoint_task_id=$id" \
-    "worktree=$dir/worktree" "project=$mate" "kind=scout"
-  claim_pool_slot "$dir" "$other" "$dir/other-home"
-
-  set +e
-  run_case "$dir" "$id" > "$dir/stdout" 2> "$dir/stderr"
-  rc=$?
-  set -e
-
-  [ "$rc" -eq 0 ] \
-    || fail "teardown of a cross-clone task whose slot was reassigned failed: $(cat "$dir/stderr")"
-  assert_reassigned_slot_left_alone "$dir" "$id" "$other" "reassigned same-origin cross-clone slot"
-  pass "fm-teardown: a reassigned pool slot owned by a same-origin clone is left alone"
 }
 
 # A T3 task whose pool slot was reassigned still archives its own thread, but
@@ -1310,29 +1276,11 @@ SH
 # write_endpoint_close_meta: a task record whose worktree and project do not
 # exist, which keeps the cases below on the endpoint close itself - the pool
 # return and its own refusals are covered elsewhere in this file.
-# A landed ship task carries a completion receipt and cleanup refuses without
-# one (bin/fm-receipt.sh, bin/fm-teardown.sh's receipt gate). These fixtures
-# stamp landed tasks rather than landing them, so they record the receipt the
-# landing path would have written.
-seed_landing_receipt() {  # <home> <task-id>
-  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$1" FM_STATE_OVERRIDE="$1/state" \
-    FM_DATA_OVERRIDE="$1/data" "$ROOT/bin/fm-receipt.sh" write-landing \
-    --task "$2" --commit-sha 1111111111111111111111111111111111111111 \
-    --sha-source "git -C <worktree> rev-parse HEAD (fixture)" \
-    --verification verified >/dev/null \
-    || fail "could not record a landing receipt for $2"
-}
-
 write_endpoint_close_meta() {  # <case-dir> <id> <window>
   fm_write_meta "$1/home/state/$2.meta" \
     "window=$3" "endpoint_task_id=$2" \
     "worktree=$1/nonexistent-worktree" "project=$1/nonexistent-project" \
     "kind=ship" "mode=no-mistakes"
-  seed_landing_receipt "$1/home" "$2"
-  # These cases exercise the ENDPOINT close, which happens after the landed-work
-  # and completion-receipt gates; a ship task with no receipt refuses before the
-  # close is ever attempted (bin/fm-receipt.sh, bin/fm-teardown.sh).
-  seed_landing_receipt "$1/home" "$2"
 }
 
 test_failed_endpoint_close_refuses_before_removing_the_record() {
@@ -1576,7 +1524,6 @@ test_orca_close_failure_refuses_even_under_force() {
     "window=fm-$id" "endpoint_task_id=$id" "terminal=term-7" \
     "worktree=$dir/nonexistent-worktree" "project=$dir/nonexistent-project" \
     "backend=orca" "orca_worktree_id=worktree-9::/orca/worktree-9" "kind=ship" "mode=no-mistakes"
-  seed_landing_receipt "$dir/home" "$id"
 
   set +e
   env -u TMUX -u TMUX_PANE \
@@ -1677,7 +1624,6 @@ test_reused_pool_slot_refuses_before_touching_the_other_task
 test_cross_home_pool_slot_collision_refuses
 test_sole_slot_record_still_tears_down
 test_reassigned_pool_slot_finishes_own_cleanup_without_touching_the_slot
-test_reassigned_cross_clone_pool_slot_is_left_alone
 test_reassigned_pool_slot_keeps_claimant_codex_overlay_on_t3
 test_stale_record_on_claimed_slot_retires_then_claimant_tears_down
 test_own_and_absent_slot_claims_still_tear_down

@@ -30,11 +30,10 @@ Streaming text and the genuine reply that ends a response remain visible.
 
 ### Working boat
 
-While Calm is active and an agent run is under way, Calm hides Pi's built-in working indicator and shows a small two-row animated boat in its place.
-Where Pi draws that indicator is Pi's own choice and has already changed: [`verification/pi-composer-shapes.md`](verification/pi-composer-shapes.md) owns what a generating Pi renders in each presentation and what Firstmate reads from it.
+While Calm is active and an agent run is under way, Calm hides Pi's built-in `Working...` row and shows a small two-row animated boat in its place.
 No separate Calm status row is added.
 The boat claims the same Pi working-row widget slot as the standalone Pi Calm extension, so a session that loads both Calms shows one boat rather than two, and turning Firstmate Calm off does not clear the standalone boat.
-While Calm is off, Pi's stock working indicator is left exactly as Pi renders it.
+While Calm is off, Pi's stock working row is left exactly as Pi renders it.
 
 The boat looks like this:
 
@@ -55,6 +54,7 @@ Every resize reflows the sprite without wrapping.
 The boat disappears when the run settles, aborts, or fails.
 
 ### Boat position between working periods
+
 Within one Pi session and Calm extension lifetime, the next working period resumes the boat from its last rendered column and travel direction rather than restarting at the left edge.
 Hidden elapsed time does not advance the animation.
 A resize while hidden clamps the frozen boat to the new width without changing its valid travel direction.

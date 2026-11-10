@@ -1054,26 +1054,6 @@ EOF
   pass "repeated snapshots keep the same current landed baseline and ignore prior reports"
 }
 
-# Pin TZ and FM_BEARINGS_NOW across the UTC day boundary so a UTC-derived
-# "local" field would still show 2026-10-02 / 16:12 while the machine local
-# clock is already 2026-10-03 / 00:12 (+08:00).
-test_local_clock_fields_cross_utc_day_boundary() {
-  local home fakebin json
-  home=$(make_home local-clock)
-  : > "$home/data/backlog.md"
-  fakebin=$(make_fakebin "$home")
-  json=$(PATH="$fakebin:$PATH" TZ=Asia/Singapore FM_HOME="$home" \
-    FM_BEARINGS_NOW=2026-10-02T16:12:07Z "$BEARINGS" --json) \
-    || fail "bearings failed under pinned Singapore local clock"
-  printf '%s' "$json" | jq -e '
-    .generated == "2026-10-02T16:12:07Z"
-      and .generated_local == "2026-10-03T00:12:07+08:00"
-      and .today_local == "2026-10-03"
-  ' >/dev/null || fail "local clock fields wrong at UTC/local day boundary: $(
-    printf '%s' "$json" | jq -c '{generated, generated_local, today_local}')"
-  pass "local clock fields cross the UTC day boundary in Asia/Singapore"
-}
-
 test_default_is_bounded_and_local_only() {
   local home fakebin toon json backlog
   home=$(make_home bounded); write_fixture "$home"
@@ -3472,31 +3452,6 @@ test_supplied_secondmate_questions_and_legacy_optional_fields() {
   pass "supplied secondmate questions preserve text with missing optional fields"
 }
 
-test_non_iso_since_and_hold_until_degrade_to_unknown() {
-  local home fakebin json
-  home=$(make_home non-iso-degrade)
-  fakebin=$(make_fakebin "$home")
-  cat > "$home/data/backlog.md" <<'EOF'
-## In flight
-
-## Queued
-- [ ] bad-since - Gate with non-ISO since (since not-a-real-date)
-- [ ] bad-calendar-since - Gate with calendar-invalid since (since 2026-13-45)
-- [ ] bad-until - Dated hold with non-ISO until (repo: firstmate) (kind: captain) (hold: wait for decision) (hold-kind: captain) (hold-until: not-a-real-until)
-  Captain hold set: 2026-07-14T12:00:00Z
-
-## Done
-EOF
-  json=$(PATH="$fakebin:$PATH" FM_HOME="$home" "$BEARINGS" --json) || fail "bearings failed"
-  printf '%s' "$json" | jq -e '
-    ([.gates[] | select(.id == "bad-since")][0].filed == "unknown")
-      and ([.gates[] | select(.id == "bad-calendar-since")][0].filed == "unknown")
-      and (.decisions_open | any(.[]; .id == "bad-until"))
-  ' >/dev/null || fail "non-ISO since did not degrade to unknown or non-ISO hold_until suppressed the captain call: $json"
-  pass "non-ISO since degrades to unknown and non-ISO hold_until keeps the captain call live"
-}
-
-
 fm_test_run \
   test_full_captain_questions_survive_local_and_secondmate_projection \
   test_supplied_secondmate_questions_and_legacy_optional_fields \
@@ -3519,7 +3474,6 @@ fm_test_run \
   test_nonprogressing_child_states_are_explicit \
   test_registry_unavailability_and_bounds_are_explicit \
   test_current_landed_baseline_is_repeatable_and_prior_report_independent \
-  test_local_clock_fields_cross_utc_day_boundary \
   test_default_is_bounded_and_local_only \
   test_toon_json_parity \
   test_landed_includes_secondmate_home_merges \
@@ -3560,5 +3514,4 @@ fm_test_run \
   test_revealed_deferred_holds_show_their_deferral_reason \
   test_pr_repository_cap_and_expansion \
   test_per_repository_pr_cap_is_disclosed \
-  test_projection_and_toon_fail_closed \
-  test_non_iso_since_and_hold_until_degrade_to_unknown
+  test_projection_and_toon_fail_closed

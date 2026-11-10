@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # Spawn a direct report: a crewmate in a treehouse or Orca worktree, or a
 # secondmate in its isolated firstmate home.
-# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--hermes-profile <name>] [--account <entry>] [--backend <name>] [--attention-override] [--herdr-resume-lock-wait]
-#        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--hermes-profile <name>] [--account <entry>] [--backend <name>] [--attention-override] [--herdr-resume-lock-wait]
+# Usage: fm-spawn.sh <task-id> <project-dir> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>] [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--hermes-profile <name>] [--account <entry>] [--backend <name>] [--herdr-resume-lock-wait]
+#        fm-spawn.sh <task-id> <project-dir> --scout [--base-branch <branch>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--hermes-profile <name>] [--account <entry>] [--backend <name>] [--herdr-resume-lock-wait]
 #        fm-spawn.sh <task-id> [<firstmate-home>] [--harness <name>|harness|launch-command] [--model <name>] [--effort <level>] [--backend <name>] --secondmate
-#   <project-dir> is required on the ship and scout forms. A call with only a
-#   task id and --scout is not a supported form: it is refused before any task
-#   work with a line naming the missing project directory. The secondmate home
-#   positional stays optional.
 #   --mode and --yolo are this task's delivery contract, REQUIRED for every ship
 #   spawn and refused on --scout and --secondmate spawns. Firstmate resolves both
 #   per task at intake (AGENTS.md section 7); data/projects.md holds the captain's
@@ -34,16 +30,6 @@
 #   ship or scout spawn also refuses leftover `{TASK}` / `{FIRSTMATE_SPEC}`
 #   placeholders, an empty Task, an incomplete pair of Task subsections, or a
 #   `## Captain's intent` line opening with a Captain label or address.
-#   A ship or scout spawn also reads the brief's recorded
-#   "Packet: class=<ordinary|flagged|prohibited>" line and enforces the
-#   captain's balanced-lane data policy before anything is created. Only the
-#   header field block above the brief's first `#` heading is intake authority,
-#   so the same line quoted inside intent or spec prose is inert. ordinary
-#   dispatches silently; flagged dispatches normally and carries a one-line
-#   China-usage warning; prohibited is a hard stop that asks the captain once;
-#   a malformed line, or two header lines naming different classes, REFUSES. A
-#   brief scaffolded before that line existed warns once and dispatches as
-#   ordinary. bin/fm-brief.sh --packet owns how the line is recorded.
 #   When config/herdr-lifecycle-spawn-guard exists, a brief naming
 #   bin/fm-herdr-lab.sh or a listed Herdr session/server lifecycle command must
 #   carry the Herdr isolation contract emitted by bin/fm-brief.sh --herdr-lab;
@@ -53,10 +39,8 @@
 #   intent. A legacy mixed Task is accepted there only under bin/fm-dod-lib.sh's
 #   provenance-marking rules; unmarked legacy Tasks stop for migration rather
 #   than becoming intent. That library owns the parsing and intent rules. When
-#   the explicit mode is more outward-facing than the project's registered
-#   posture permits, the spawn is refused. When the explicit mode carries less
-#   rigor than the project's standing posture, a loud one-line deviation notice
-#   is printed and the spawn continues.
+#   the explicit mode carries less rigor than the project's standing posture, a
+#   loud one-line deviation notice is printed and the spawn continues.
 #   no-mistakes-prod-only is a registry policy rather than a task mode and is
 #   refused as a flag value.
 #   --branch-prefix is the optional prefix selected at intake for this ship's
@@ -80,13 +64,6 @@
 #   first in the private launch-brief overlay, including the exact task-owned
 #   steering inbox. This never rewrites a project's instruction files or a
 #   secondmate's charter.
-#   --attention-override carries a current explicit captain instruction past a
-#   portfolio attention-limit refusal for THIS dispatch only. It never unparks a
-#   parked project and never becomes standing permission, and it is announced
-#   only where it actually carried the admission. bin/fm-attention-lib.sh owns
-#   the limit and the classification, and docs/configuration.md "Portfolio
-#   attention limit" owns config/attention-limit, which sets or disables the
-#   limit itself rather than admitting past a refusal.
 #        fm-spawn.sh <task-id> --relaunch [--harness <name>] [--model <name>] [--effort <level>] [--account <entry>]
 #   --relaunch launches a replacement agent for an EXISTING task into that
 #   task's own recorded worktree, reusing its recorded endpoint when that
@@ -275,8 +252,7 @@
 #   harness (config/secondmate-harness -> config/crew-harness -> own), so the
 #   secondmate-vs-crewmate split is DURABLE across every respawn (recovery,
 #   /updatefirstmate, restart). A bare adapter name (claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|commandcode|cortex|kiro)
-#   overrides it for this spawn (either kind; the crewmate/scout-only adapters
-#   are refused for --secondmate, see below). A non-flag string containing
+#   overrides it for this spawn (either kind). A non-flag string containing
 #   whitespace is treated as a RAW launch command - the escape hatch for verifying
 #   new adapters. For pi and pi-signed, fm-spawn resolves the selected executable
 #   name from PATH once, probes that concrete path with --help, and launches the
@@ -586,14 +562,7 @@
 #     __BRIEFDOORBELL__ quoted printable doorbell naming the launch-brief record this
 #                  script published into the receiving home's operational inbox
 #     __WORKTREE__  absolute path to the task worktree
-#     __EXTWRAP__   installed extensions' launch-wrap prefixes (bin/fm-ext.sh's
-#                   header owns the hook contract); empty when no extension
-#                   wraps launches, so the rendered launch is byte-identical to
-#                   the unwrapped template. Raw launch commands carry no
-#                   placeholder, so wrapping deliberately applies to verified
-#                   launches only.
 #     __CURSORBIN__ resolved, cursor-verified executable for a cursor launch
-#     __AGYBIN__    resolved agy (Gemini CLI) executable for an agy launch
 #     __GEMINISETTINGS__ firstmate-owned per-task gemini settings file (busy-state hooks)
 #     __ROVOBIN__   resolved, rovo-verified executable for a rovo launch
 #     __DEVINBIN__ resolved Devin executable
@@ -688,41 +657,6 @@
 # resolver because `cursor` is not the CLI name. A cursor SECONDMATE instead runs
 # the tracked project-scope .cursor/hooks.json in its own home, whose stop-hook
 # park owns that home's supervision (docs/supervision-protocols/cursor.md).
-# agy (Gemini CLI, ~/.local/bin/agy, branded "Antigravity CLI") is wired as a
-# CREWMATE/SCOUT launch_template entry, empirically confirmed 2026-08-20 on
-# Antigravity CLI 1.1.15: `agy --dangerously-skip-permissions --model
-# gemini-3.7-flash-medium -i "<brief text>"` delivered and auto-submitted the
-# brief, ran the turn fully unattended (no permission prompt), and returned to
-# an idle composer, live-verified in a real tmux pane end to end including the
-# folder-trust dialog and `/exit`. A bare positional prompt is IGNORED (the TUI
-# opens with an empty idle composer, no error), so `-i`/`--prompt-interactive`
-# is mandatory. `--model <id>` accepts full model+effort ids from `agy models`
-# (e.g. gemini-3.7-flash-medium, gemini-3.7-flash-high); there is no separate
-# --effort axis for Gemini models because effort is baked into the model id,
-# so effort_flag_for_harness emits nothing for agy, the same pattern cursor
-# uses. `--print`/`-p` is deliberately never used by this template: it is
-# BROKEN combined with `--model` or `--dangerously-skip-permissions`
-# (reproducibly ignores the real prompt and emits a canned self-description
-# instead). agy has NO verified turn-end hook; its busy state comes from
-# the rendered-tail fallback verified on 1.2.0 (bin/fm-busy-lib.sh's
-# agy-regex path), which is a pane read rather than a semantic source, so agy
-# is refused for --secondmate below for the same reason
-# muse is - no primary supervision protocol exists for it yet. The binary is
-# resolved through resolve_agy_binary rather than a bare `agy` name because
-# PATH resolution was not probed against a fallback location before this pass.
-# Every agy launch - fresh spawn or --relaunch, and so every fm-control
-# relaunch that resolves to agy - is additionally gated on the bounded
-# authentication preflight in bin/fm-agy-lib.sh, which refuses before any
-# endpoint, worktree, or metadata exists rather than letting an unauthenticated
-# agy park on its interactive OAuth prompt.
-# A spawn is reported only after a launch postcondition confirms an agent is
-# genuinely alive at the endpoint, read through fm_backend_agent_state - the same
-# recovery-grade classifier supervision uses - via fm_control_wait_agent_state.
-# It is cause-agnostic and refuses only on the confident `dead` verdict, so a
-# launch that died in the pane records a `failed:` event and exits non-zero
-# instead of leaving a task reading `working`, while an adapter that cannot
-# answer proceeds untouched. FM_SPAWN_LAUNCH_WAIT (20) and FM_SPAWN_LAUNCH_POLL
-# (0.25) bound it; backends with no classifier are skipped outright.
 # claude is the one harness whose pre-launch setup can REFUSE the spawn: before
 # any per-task state exists, and before its busy hooks are written, every
 # claude launch pre-registers its launch directory -
@@ -786,20 +720,12 @@
 # keeps no data/backlog.md. A configured non-markdown adapter remains
 # active without a markdown file; any active automatic backend without
 # compatible tasks-axi refuses before creating lifecycle state.
-# On success prints: spawned <id> harness=<name> kind=<ship|scout|secondmate> [mode=<mode> yolo=<on|off>] [packet=flagged] window=<backend-target> worktree=<path>
-# packet=flagged appears only when the brief records a flagged (conflict-level)
-# dispatch packet; ordinary and unclassified dispatches omit the token.
-# state/<id>.meta records packet=<class> for every ship or scout task, plus
-# packet_warning=<text> on a flagged one; both are re-derived from the brief on
-# each fresh spawn and relaunch rather than accumulated.
+# On success prints: spawned <id> harness=<name> kind=<ship|scout|secondmate> [mode=<mode> yolo=<on|off>] window=<backend-target> worktree=<path>
 # A ship task records the explicit mode/yolo it was passed; a secondmate spawn records
 # mode=secondmate, yolo=off, home=, and projects=; a scout records neither, and both the
 # success line and state/<id>.meta omit them.
 # Every fresh spawn or relaunch records a new spawn_gen= incarnation token so durable
 # consumers can distinguish a replacement worker that reuses the same task id.
-# A fresh ship or scout spawn also records dispatch_base=<sha>, the worktree HEAD
-# the worker was dispatched at; a relaunch keeps the original value. It is how
-# fm-teardown.sh --standdown proves a worktree has no commits beyond its base.
 # When the home session's frozen trace-context decision is enabled (see
 # docs/configuration.md and bin/fm-trace-context-lib.sh), the meta also records
 # one W3C traceparent= carrier, the same value injected into the pane as
@@ -1031,8 +957,6 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 . "$SCRIPT_DIR/fm-cursor-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
-# shellcheck source=bin/fm-ext-hook-lib.sh
-. "$SCRIPT_DIR/fm-ext-hook-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
 # shellcheck source=bin/fm-role-lib.sh
@@ -1043,8 +967,6 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 . "$SCRIPT_DIR/fm-remote-readiness-lib.sh"
 # shellcheck source=bin/fm-timeout-lib.sh
 . "$SCRIPT_DIR/fm-timeout-lib.sh"
-# shellcheck source=bin/fm-agy-lib.sh
-. "$SCRIPT_DIR/fm-agy-lib.sh"
 # shellcheck source=bin/fm-project-capacity-lib.sh
 . "$SCRIPT_DIR/fm-project-capacity-lib.sh"
 # shellcheck source=bin/fm-worker-account-lib.sh
@@ -1067,8 +989,6 @@ MODE=
 YOLO=
 BRANCH_PREFIX=fm/
 TRACEPARENT_ARG=
-PACKET_CLASS=
-PACKET_WARNING=
 HARNESS_SET=0
 MODEL_SET=0
 EFFORT_SET=0
@@ -1086,7 +1006,6 @@ TRACEPARENT_SET=0
 ACCOUNT_ARG=
 ACCOUNT_SET=0
 RELAUNCH=0
-ATTENTION_OVERRIDE=0
 # Opt-in only: exact-resume presentation-order lock waits instead of refusing.
 # Absent/unset keeps upstream refuse-on-contention. See header.
 HERDR_RESUME_LOCK_WAIT=0
@@ -1167,7 +1086,6 @@ for a in "$@"; do
     KIND_SET=1
     ;;
   --relaunch) RELAUNCH=1 ;;
-  --attention-override) ATTENTION_OVERRIDE=1 ;;
   --herdr-resume-lock-wait) HERDR_RESUME_LOCK_WAIT=1 ;;
   --harness) want_value=harness ;;
   --harness=*)
@@ -2099,7 +2017,7 @@ spawn_abort_cleanup() {
       local reclaim_status=0
       spawn_orca_reclaim_launch_file || reclaim_status=$?
       case "$reclaim_status" in
-        0) spawn_launch_failed "spawn ended before Orca terminal $T ran the launch command; removed the launch file and refused the worker launch" || true ;;
+        0) kimi_spawn_fail "spawn ended before Orca terminal $T ran the launch command; removed the launch file and refused the worker launch" || true ;;
         2) echo "warning: could not remove Orca launch file $SPAWN_STAGED_LAUNCH_FILE; remove it by hand" >&2 ;;
       esac
     fi
@@ -2124,27 +2042,40 @@ spawn_abort_cleanup() {
 }
 trap spawn_abort_cleanup EXIT
 
-# One bounded lock per live Herdr session/socket, shared across all homes.
-# <session> is required so secondmate and primary spawns serialize against the
-# same session without writing any other home's state directory.
-# [max-seconds] bounds the wait (default 30). Passing `wait` instead makes this
-# call wait for the lock without a bound (`fm_lock_acquire_wait`); only the
-# recovery path under the explicit --herdr-resume-lock-wait opt-in passes it, so
-# unbounded blocking on a third-party session lock never becomes the default.
+# One lock per live Herdr session/socket, shared across all homes. <session>
+# is required so secondmate and primary spawns serialize against the same
+# session without writing any other home's state directory.
+#
+# Default mode is one BOUNDED attempt. A clean create uses that default and
+# falls back to the ordinary flat layout on contention. An exact resume also
+# defaults to the bounded attempt and hard-refuses on contention (it does not
+# degrade flat). Passing mode `wait` makes this call WAIT for the lock instead
+# (`fm_lock_acquire_wait`, the same unbounded-wait idiom this file already uses
+# for its other fleet-shared locks). Only the recovery path under the explicit
+# --herdr-resume-lock-wait opt-in passes `wait`, so unbounded blocking on a
+# third-party session lock never becomes the default for every caller.
 # Dead-owner reclaim inside `fm_lock_try_acquire` still bounds a wait against a
 # holder that crashed mid-hold.
-spawn_herdr_presentation_order_lock_acquire() {  # [session] [max-seconds|wait]
-  local session=${1:-} lock_path
+spawn_herdr_presentation_order_lock_acquire() {
+  local session=${1:-} mode=${2:-} attempt lock_path
   [ -n "$session" ] || session=$(fm_backend_herdr_session)
   lock_path=$(fm_backend_herdr_presentation_session_lock_path "$session") || return 1
   HERDR_PRESENTATION_ORDER_LOCK="$lock_path"
-  if [ "${2:-}" = wait ]; then
+  if [ "$mode" = wait ]; then
     fm_lock_acquire_wait "$HERDR_PRESENTATION_ORDER_LOCK"
     HERDR_PRESENTATION_ORDER_LOCK_HELD=1
     return 0
   fi
-  fm_lock_acquire_wait_max "$HERDR_PRESENTATION_ORDER_LOCK" "${2:-30}" || return 1
-  HERDR_PRESENTATION_ORDER_LOCK_HELD=1
+  attempt=0
+  while [ "$attempt" -lt 50 ]; do
+    if fm_lock_try_acquire "$HERDR_PRESENTATION_ORDER_LOCK"; then
+      HERDR_PRESENTATION_ORDER_LOCK_HELD=1
+      return 0
+    fi
+    sleep 0.1
+    attempt=$((attempt + 1))
+  done
+  return 1
 }
 
 clear_relaunch_harness_wiring() {
@@ -2220,7 +2151,6 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
   # spanning several modes is two invocations rather than a silent mixed dispatch.
   [ "$MODE_SET" -eq 0 ] || shared_args+=(--mode "$MODE")
   [ "$YOLO_SET" -eq 0 ] || shared_args+=(--yolo "$YOLO")
-  [ "$ATTENTION_OVERRIDE" -eq 0 ] || shared_args+=(--attention-override)
   [ "$BRANCH_PREFIX_SET" -eq 0 ] || shared_args+=(--branch-prefix "$BRANCH_PREFIX")
   [ "$BASE_BRANCH_SET" -eq 0 ] || shared_args+=(--base-branch "$BASE_BRANCH")
   [ "$HERDR_RESUME_LOCK_WAIT" -eq 0 ] || shared_args+=(--herdr-resume-lock-wait)
@@ -2252,15 +2182,6 @@ if [ "${#POS[@]}" -gt 0 ] && [ "${POS[0]}" != "$idpart" ] && case "$idpart" in *
     fi
   done
   exit "$rc"
-fi
-# A fresh ship or scout has no record to take a project directory from.
-# Refusing here, before task-id checks and any state, lock, or endpoint work,
-# is what keeps `fm-spawn.sh <task-id> --scout` from dying under set -u on the
-# positional read below. Batch pairs already exited above. Relaunch and
-# secondmate resolve their directory from the task record or registry.
-if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "${#POS[@]}" -lt 2 ]; then
-  echo "error: missing project directory; pass <project-dir> after the task id" >&2
-  exit 1
 fi
 ID=${POS[0]}
 fm_task_id_creation_valid "$ID" || {
@@ -2726,10 +2647,7 @@ elif [ "$KIND" = secondmate ]; then
     ;;
   esac
 else
-  # The early refusal above guarantees this positional for a fresh ship or
-  # scout. The default expansion is what keeps a missed guard from dying
-  # under set -u; an empty directory still fails the project check below.
-  PROJ=${POS[1]:-}
+  PROJ=${POS[1]}
   ARG3=${POS[2]:-}
 fi
 [ -z "$HARNESS_ARG" ] || ARG3=$HARNESS_ARG
@@ -2966,7 +2884,7 @@ launch_template() {
   # project and fetched content. A persistent secondmate receives its own
   # supervisor contract instead, so this task-worker statement does not apply.
   claude)
-    printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 __EXTWRAP__claude __CLAUDEPERMFLAG__ __CLAUDEADDDIRS__--settings __CLAUDESETTINGS__ '
+    printf '%s' 'CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude __CLAUDEPERMFLAG__ __CLAUDEADDDIRS__--settings __CLAUDESETTINGS__ '
     if [ "$kind" != secondmate ]; then
       printf '%s' "--append-system-prompt '$(spawn_claude_task_channel_statement)' "
     fi
@@ -3008,14 +2926,14 @@ launch_template() {
   # secondmate launch deliberately keeps hooks on but shares this approval posture.
   codex)
     if [ "$kind" = secondmate ]; then
-      printf '%s' '__EXTWRAP__codex __MODELFLAG____EFFORTFLAG____CODEXAPPROVALFLAG__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' 'codex __MODELFLAG____EFFORTFLAG____CODEXAPPROVALFLAG__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     else
-      printf '%s' '__EXTWRAP__codex __MODELFLAG____EFFORTFLAG____CODEXAPPROVALFLAG__ --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' 'codex __MODELFLAG____EFFORTFLAG____CODEXAPPROVALFLAG__ --disable hooks -c "notify=[\"bash\",\"-c\",\"touch __TURNEND__\"]" "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
     ;;
-  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}__EFFORTFLAG__}'\'' __EXTWRAP____OPENCODEBIN__ __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  opencode) printf '%s' 'OPENCODE_CONFIG_CONTENT='\''{"permission":{"*":"allow"}__EFFORTFLAG__}'\'' __OPENCODEBIN__ __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   pi | pi-signed)
-    printf '%s' '__EXTWRAP____PIBIN____PITUIMODE____PIAPPROVE____PIEXCLUDE____PIRESUME__'
+    printf '%s' '__PIBIN____PITUIMODE____PIAPPROVE____PIEXCLUDE____PIRESUME__'
     if [ "$kind" = secondmate ]; then
       # The two primary extensions supervise the mate's own home. __PIEXT__ is
       # the parent-home busy contract, loaded from outside the home so Pi's
@@ -3039,7 +2957,7 @@ launch_template() {
   # session_stop continuation. The busy extension is the exception: it lives
   # outside the home, so discovery never sees it, and -e is the only load.
   omp)
-    printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_OMP_HARNESS=omp OMP_SKIP_SETUP=1 __EXTWRAP____OMPBIN____OMPPROFILE__ --config __OMPWORKERCFG__ --auto-approve --cwd __WORKTREE__ __MODELFLAG____EFFORTFLAG__-e __OMPEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+    printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_OMP_HARNESS=omp OMP_SKIP_SETUP=1 __OMPBIN____OMPPROFILE__ --config __OMPWORKERCFG__ --auto-approve --cwd __WORKTREE__ __MODELFLAG____EFFORTFLAG__-e __OMPEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     ;;
   # agy (Antigravity CLI): --prompt-interactive "<brief>" starts the supervised
   # interactive session and auto-submits it, so the brief rides the launch
@@ -3064,7 +2982,7 @@ launch_template() {
   # TUI), so bin/fm-harness.sh must not read an agy worker as its launcher.
   # agy exposes no hook surface, so busy state is a rendered-tail fallback
   # (bin/fm-busy-lib.sh) and nothing is armed below.
-  agy) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __EXTWRAP____AGYBIN__ --prompt-interactive "$(__OPINPUT__ encode launch-brief < __BRIEF__)" __MODELFLAG____EFFORTFLAG__--dangerously-skip-permissions' ;;
+  agy) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __AGYBIN__ --prompt-interactive "$(__OPINPUT__ encode launch-brief < __BRIEF__)" __MODELFLAG____EFFORTFLAG__--dangerously-skip-permissions' ;;
   # kiro (Kiro CLI, V2 engine): a positional prompt starts the supervised
   # interactive session and auto-submits the brief (verified: a positional
   # brief submitted itself with no extra Enter, kiro-cli 2.21.4). --agent-engine
@@ -3082,7 +3000,7 @@ launch_template() {
   # inherited CLAUDECODE, so bin/fm-harness.sh must not read a kiro worker as its
   # launcher. The V2 stop hook is a real turn-end pair, so busy state is armed
   # below (unlike agy's screen-scrape-only fallback).
-  kiro) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS KIRO_HOME=__KIROHOME__ __EXTWRAP____KIROBIN__ chat --agent-engine v2 --agent firstmate __MODELFLAG____EFFORTFLAG__--trust-all-tools "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  kiro) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS KIRO_HOME=__KIROHOME__ __KIROBIN__ chat --agent-engine v2 --agent firstmate __MODELFLAG____EFFORTFLAG__--trust-all-tools "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # grok (Grok Build TUI): a positional prompt starts the supervised interactive
   # session. --always-approve auto-approves every tool execution (verified: the
   # crewmate runs fully autonomously, no permission gate), which an unattended
@@ -3090,7 +3008,7 @@ launch_template() {
   # --dangerously-skip-permissions. grok's turn-end signal does NOT ride the
   # launch command - it is a Stop-event hook installed below (global hook +
   # per-task pointer), so the template is identical for ship/scout/secondmate.
-  grok) printf '%s' '__EXTWRAP__grok --always-approve __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  grok) printf '%s' 'grok --always-approve __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Cursor Agent CLI. --trust suppresses the workspace-trust prompt, which
   # --yolo does NOT cover and which would otherwise block every spawn, since
   # each task gets a fresh worktree path cursor has never seen. --yolo is the
@@ -3103,7 +3021,7 @@ launch_template() {
   # inherited CLAUDECODE cannot outrank cursor's own marker in a process that
   # only reads the environment. Cursor exposes no effort flag, so the shared
   # effort axis is deliberately omitted and stays in task metadata only.
-  cursor) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_INVOKED_AS __EXTWRAP____CURSORBIN__ --trust --yolo __MODELFLAG__--workspace __WORKTREE__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  cursor) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_INVOKED_AS __CURSORBIN__ --trust --yolo __MODELFLAG__--workspace __WORKTREE__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # gemini (Google Gemini CLI): a positional query starts the supervised
   # interactive session and auto-submits it, so the brief rides the launch
   # command exactly as it does for claude and grok (verified: a multi-line
@@ -3138,11 +3056,11 @@ launch_template() {
   # stays in task metadata only, per the record-and-omit contract.
   # Its turn-end and busy-state signals do NOT ride the launch command:
   # they are project hooks written into the worktree below.
-  gemini) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS GEMINI_CLI_TRUST_WORKSPACE=true GEMINI_CLI_SYSTEM_SETTINGS_PATH=__GEMINISETTINGS__ __EXTWRAP__gemini -y __MODELFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  gemini) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS GEMINI_CLI_TRUST_WORKSPACE=true GEMINI_CLI_SYSTEM_SETTINGS_PATH=__GEMINISETTINGS__ gemini -y __MODELFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Devin receives the typed launch envelope after --. Its private config
   # appends native worker lifecycle hooks. Clear NO_COLOR so the shared
   # composer guard can distinguish the dim placeholder from a real draft.
-  devin) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u NO_COLOR __EXTWRAP____DEVINBIN__ --permission-mode dangerous --respect-workspace-trust false --config __DEVINCONFIG__ __MODELFLAG__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  devin) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u NO_COLOR __DEVINBIN__ --permission-mode dangerous --respect-workspace-trust false --config __DEVINCONFIG__ __MODELFLAG__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # polytoken (Polytoken CLI): a pane-attached TUI worker whose control verbs
   # ride the daemon REST API (the captain-approved hybrid). The launch runs in
   # the task worktree so the worktree's `.polytoken/` is the project hook and
@@ -3172,28 +3090,28 @@ launch_template() {
   # effort inside the model reference as `<model>(<effort>)`, so the effort
   # axis rides `__MODELFLAG__` after mapping to the nearest compatible
   # level in the installed model's selectable set.
-  polytoken) printf '%s' 'for _fmv in $(env | cut -d= -f1 | grep -E '\''^(ORCA_|FM_)'\''); do case $_fmv in FM_TASK_ID|FM_TASK_INBOX|FM_ZELLIJ_SESSION) ;; *) unset $_fmv ;; esac; done; env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u AGENT __EXTWRAP____POLYTOKENBIN__ --config-dir __POLYTOKENCONFIG__ new --sessions-dir __POLYTOKENSESSIONS__ --facet firstmate-worker --facets-dir __POLYTOKENFACETS__ __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  polytoken) printf '%s' 'for _fmv in $(env | cut -d= -f1 | grep -E '\''^(ORCA_|FM_)'\''); do case $_fmv in FM_TASK_ID|FM_TASK_INBOX|FM_ZELLIJ_SESSION) ;; *) unset $_fmv ;; esac; done; env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u AGENT __POLYTOKENBIN__ --config-dir __POLYTOKENCONFIG__ new --sessions-dir __POLYTOKENSESSIONS__ --facet firstmate-worker --facets-dir __POLYTOKENFACETS__ __MODELFLAG__--prompt "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Command Code receives the typed launch envelope after -- as its initial
   # message. --yolo bypasses permission prompts, --trust skips the folder-trust
   # prompt of a fresh worktree, and --skip-onboarding skips taste onboarding.
   # __COMMANDCODEMOD__ loads the tracked busy-state mod for this process only.
   # NO_COLOR is cleared and COLORTERM pinned so the composer placeholder keeps
   # the truecolor styling the shared composer guard reads.
-  commandcode) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u NO_COLOR COLORTERM=truecolor __EXTWRAP____COMMANDCODEBIN__ --yolo --trust --skip-onboarding --no-auto-update __MODELFLAG____EFFORTFLAG____COMMANDCODEMOD__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  commandcode) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI -u NO_COLOR COLORTERM=truecolor __COMMANDCODEBIN__ --yolo --trust --skip-onboarding --no-auto-update __MODELFLAG____EFFORTFLAG____COMMANDCODEMOD__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Cortex Code receives the typed launch envelope as its positional prompt
   # after --. --dangerously-allow-all-tool-calls approves tool calls and skips
   # the project-trust dialog (verified, cortex 1.1.104); --plugin-dir loads the
   # private per-task plugin with the lifecycle hooks. CLAUDECODE is cleared
   # because Cortex loads Claude-compatible hooks, and Herdr's claude integration
   # hook claims a pane as a claude session whenever that variable is set.
-  cortex) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI __EXTWRAP____CORTEXBIN__ --dangerously-allow-all-tool-calls --plugin-dir __CORTEXPLUGIN__ __MODELFLAG____EFFORTFLAG__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  cortex) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI __CORTEXBIN__ --dangerously-allow-all-tool-calls --plugin-dir __CORTEXPLUGIN__ __MODELFLAG____EFFORTFLAG__-- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Hermes's native interactive query starts a visible TUI, never one-shot.
-  hermes) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI FM_HERMES_HARNESS=hermes HERMES_HOME=__HERMESHOME__ HERMES_MANAGED_DIR=__HERMESHOOKS__ __EXTWRAP____HERMESBIN__ __HERMESPROFILE__chat --tui --yolo --accept-hooks -q "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  hermes) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI FM_HERMES_HARNESS=hermes HERMES_HOME=__HERMESHOME__ HERMES_MANAGED_DIR=__HERMESHOOKS__ __HERMESBIN__ __HERMESPROFILE__chat --tui --yolo --accept-hooks -q "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Kimi Code rejects a positional prompt, so it launches bare and receives
   # only an absolute brief pointer after the TUI readiness gate below.
   # Its turn-end signal is a globally configured Stop hook plus a guarded
   # per-task worktree token, so no launch placeholder belongs here.
-  kimi) printf '%s' '__EXTWRAP____KIMIBIN__ __MODELFLAG__--auto' ;;
+  kimi) printf '%s' '__KIMIBIN__ __MODELFLAG__--auto' ;;
   # muse (Muse Code): a positional prompt starts the supervised interactive
   # session. --yolo is the single flag that makes a crewmate pane viable: muse
   # ships approval prompts AND a filesystem/network sandbox ON by default
@@ -3220,7 +3138,7 @@ launch_template() {
   # inherited marker. The clearing stays on the cursor and muse templates as the
   # verified launch behavior their evidence records, not as the only thing
   # standing between a retained marker and a misidentified worker.
-  muse) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS XDG_CONFIG_HOME=__MUSECONFIG__ XDG_DATA_HOME=__MUSEDATA__ MUSE_EXPERIMENTAL_FOREIGN_PERSONAL_CONTEXT_KILL=on __EXTWRAP____MUSEBIN__ --yolo __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  muse) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS XDG_CONFIG_HOME=__MUSECONFIG__ XDG_DATA_HOME=__MUSEDATA__ MUSE_EXPERIMENTAL_FOREIGN_PERSONAL_CONTEXT_KILL=on __MUSEBIN__ --yolo __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # rovo (Atlassian Rovo CLI): a positional brief is dead-on-arrival - rovo
   # loads, never enters a working state, and drops back to an idle shell within
   # about 10-15 seconds (confirmed live four times over a raw PTY and once under
@@ -3247,7 +3165,7 @@ launch_template() {
   # respect the grant, confirmed live) - merged with agent.efficiencyLevel
   # when a supported effort is requested, since a second --config-override
   # would silently discard the first (confirmed live).
-  rovo) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __EXTWRAP____ROVOBIN__ run --yolo __MODELFLAG____ROVOCONFIGOVERRIDE__' ;;
+  rovo) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __ROVOBIN__ run --yolo __MODELFLAG____ROVOCONFIGOVERRIDE__' ;;
   *) return 1 ;;
   esac
 }
@@ -3333,6 +3251,7 @@ if [ "$KIND" = secondmate ] && [ "$HARNESS" = rovo ]; then
   echo "error: rovo is a verified crewmate/scout adapter only and cannot run a secondmate; it has no primary supervision protocol. Select a harness verified for secondmates." >&2
   exit 1
 fi
+
 # Command Code's idle placeholder reads empty only with a Command Code pane
 # identity, which tmux and Herdr supply and zellij, cmux, orca, paseo, and tern do not, so
 # there the composer would never read empty and steering would stall.
@@ -3460,15 +3379,6 @@ agy)
     echo "error: agy executable not found on PATH; install Antigravity CLI or select a different verified harness" >&2
     exit 1
   }
-  # Authentication preflight, deliberately placed here: this runs before any
-  # endpoint, worktree, or metadata exists, so a down Gemini lane costs one
-  # bounded probe instead of a worker parked on an interactive OAuth prompt
-  # that only stale escalation eventually notices. It covers a fresh spawn and
-  # --relaunch identically, which also covers every fm-control relaunch that
-  # resolves to agy, since those delegate here. A refusal is final: no other
-  # harness is substituted, because silently swapping the adapter would hide
-  # the credential problem the captain has to fix (bin/fm-agy-lib.sh).
-  fm_agy_preflight "$AGY_BIN" || exit 1
   ;;
 kiro)
   KIRO_BIN=$(resolve_pi_executable kiro-cli) || {
@@ -3679,29 +3589,6 @@ resolve_rovo_binary() {
     return 0
   fi
   echo "error: rovo executable not found; searched PATH for 'rovo' and fallback '$fallback'" >&2
-  return 1
-}
-resolve_agy_binary() {
-  local candidate dir fallback
-  candidate=$(command -v agy 2>/dev/null || true)
-  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-    case "$candidate" in
-      /*) printf '%s\n' "$candidate"; return 0 ;;
-      *)
-        dir=$(cd "$(dirname "$candidate")" 2>/dev/null && pwd -P) || dir=
-        if [ -n "$dir" ]; then
-          printf '%s/%s\n' "$dir" "$(basename "$candidate")"
-          return 0
-        fi
-        ;;
-    esac
-  fi
-  fallback="${HOME:-}/.local/bin/agy"
-  if [ -n "${HOME:-}" ] && [ -x "$fallback" ]; then
-    printf '%s\n' "$fallback"
-    return 0
-  fi
-  echo "error: agy executable not found; searched PATH for 'agy' and fallback '$fallback'" >&2
   return 1
 }
 
@@ -3952,9 +3839,6 @@ effort_flag_for_harness() {
     # stays in task metadata but never reaches the launch command. Cursor encodes
     # effort in model ids such as cursor-grok-4.5-high, so it also receives no
     # separate effort flag.
-    # agy is not in that set: its --effort flag was verified on 1.2.0 to accept
-    # exactly low, medium and high, which the agy arm above passes through while
-    # omitting xhigh and max.
   esac
 }
 
@@ -3996,10 +3880,10 @@ case "$LAUNCH" in
 esac
 
 case "$LAUNCH" in
-  *__ROVOBIN__*)
-    ROVO_BIN=$(resolve_rovo_binary) || exit 1
-    LAUNCH=${LAUNCH//__ROVOBIN__/$(shell_quote "$ROVO_BIN")}
-    ;;
+*__ROVOBIN__*)
+  ROVO_BIN=$(resolve_rovo_binary) || exit 1
+  LAUNCH=${LAUNCH//__ROVOBIN__/$(shell_quote "$ROVO_BIN")}
+  ;;
 esac
 
 json_escape() {
@@ -4211,50 +4095,6 @@ if [ "$KIND" = secondmate ]; then
   fi
 fi
 
-# Extension launch-wrap seam resolution for this spawn. bin/fm-ext.sh's header
-# owns the hook contract; bin/fm-ext-hook-lib.sh owns hook execution; this is
-# the spawn-path consumer. Resolution runs BEFORE any per-task mutation - the
-# secondmate call site sits before the home's ff sync, the crewmate/scout call
-# site before the treehouse project lock and slot allocation - so an
-# enabled-but-failing wrapper refuses loudly here, with no worktree, metadata,
-# endpoint, or pane to clean up, the same property the retired single-consumer
-# av-inject launch resolution had. Raw launch commands resolve nothing: the
-# unverified-adapter escape hatch carries no __EXTWRAP__ placeholder, so
-# wrapping deliberately applies to verified launches only.
-# Resolution happens once per spawn: the secondmate path resolves at its own
-# earlier call site, so the later crewmate/scout call site must not re-run the
-# hooks against an already-mutated home.
-SPAWN_LAUNCH_WRAP_RESOLVED=0
-spawn_resolve_launch_wrap() {
-  [ "$SPAWN_LAUNCH_WRAP_RESOLVED" -eq 0 ] || return 0
-  SPAWN_LAUNCH_WRAP_RESOLVED=1
-  FM_EXT_LAUNCHWRAP_PREFIX=
-  FM_EXT_LAUNCHWRAP_WARN=
-  FM_EXT_LAUNCHWRAP_ERROR=
-  [ "$RAW_LAUNCH" -eq 0 ] || return 0
-  local wrap_worktree=
-  if [ "$KIND" = secondmate ]; then
-    wrap_worktree=$WT
-  elif [ "$RELAUNCH" -eq 1 ]; then
-    wrap_worktree=${RELAUNCH_WT:-}
-  fi
-  if ! fm_ext_launchwrap_resolve "$FM_HOME" "$FM_ROOT" "$ID" "$KIND" "$HARNESS" "$wrap_worktree"; then
-    echo "error: $FM_EXT_LAUNCHWRAP_ERROR" >&2
-    exit 1
-  fi
-  local w
-  while IFS= read -r w; do
-    [ -n "$w" ] || continue
-    echo "warning: $w" >&2
-  done <<WARN_EOF
-$FM_EXT_LAUNCHWRAP_WARN
-WARN_EOF
-  if [ "$BACKEND" = t3code ] && [ -n "$FM_EXT_LAUNCHWRAP_PREFIX" ]; then
-    echo "error: backend=t3code cannot run the extension launch-wrap prefix because T3 starts the agent itself; disable that launch-wrap hook or choose another backend" >&2
-    exit 1
-  fi
-}
-
 if [ "$KIND" = secondmate ]; then
   [ -n "$FIRSTMATE_HOME" ] || {
     echo "error: no firstmate home supplied or registered for $ID" >&2
@@ -4269,9 +4109,6 @@ if [ "$KIND" = secondmate ]; then
     SECONDMATE_PROJECTS=$SECONDMATE_REGISTRY_MATCH_PROJECTS
   fi
   WT="$PROJ_ABS"
-  # Launch-wrap resolution before the sync below, the first mutation to this
-  # secondmate home, so a failing wrapper refuses with nothing half-done.
-  spawn_resolve_launch_wrap
   # Local-HEAD sync: before launch, fast-forward this secondmate's worktree to the
   # PRIMARY checkout's current default-branch commit, so a freshly spawned or
   # recovery-respawned secondmate always runs the primary's version (AGENTS.md
@@ -4329,9 +4166,6 @@ else
   WT=""
   BRIEF="$DATA/$ID/brief.md"
 fi
-# Crewmate/scout launch-wrap resolution point: still before any mutation, since
-# the treehouse project lock and slot allocation below are the first.
-spawn_resolve_launch_wrap
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] &&
   git -C "$PROJ_ABS" rev-parse --git-dir >/dev/null 2>&1 &&
   ! git -C "$PROJ_ABS" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
@@ -4389,58 +4223,6 @@ fi
   exit 1
 }
 if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
-  # Packet classification at the dispatch boundary (the captain's balanced-lane
-  # data policy, mechanized). fm-brief.sh emits one fixed
-  # "Packet: class=<class>" line per ship or scout brief; the brief is the
-  # smallest packet the worker will see, so the class recorded on it governs.
-  # Only the brief's structured header - the field region above the first
-  # markdown heading, which is where fm-brief.sh writes the line - is intake
-  # authority, so a line quoted inside the Captain's intent or Firstmate spec
-  # prose is inert and the rendered launch-brief's duplicated intent can never
-  # add a match. Every structured line must name the same class: a disagreement
-  # refuses before anything is created, while identical duplicates stay
-  # idempotent. This runs before the launch-brief overlay is rendered, so a
-  # refusal leaves no file behind.
-  # The harness, model, and backend are never inputs here: classification is
-  # recorded at intake, not inferred, and no provider name implies a
-  # jurisdiction. ordinary stays silent; flagged dispatches normally with the
-  # one-line China-usage warning in the task record and on this output for the
-  # next captain update; prohibited is the residual hard stop and asks the
-  # captain once, exactly as the prose policy requires - no flag bypasses it,
-  # and the answer is recorded by updating the brief's Packet line before a
-  # spawn can pass.
-  while IFS= read -r packet_line; do
-    case "$packet_line" in
-      "Packet: class=ordinary"|"Packet: class=flagged"|"Packet: class=prohibited") ;;
-      *)
-        echo "error: $BRIEF records a malformed Packet line ('$packet_line') in its header packet field; the line must be exactly one of 'Packet: class=ordinary', 'Packet: class=flagged', or 'Packet: class=prohibited'" >&2
-        exit 1
-        ;;
-    esac
-    packet_recorded=${packet_line#Packet: class=}
-    if [ -z "$PACKET_CLASS" ]; then
-      PACKET_CLASS=$packet_recorded
-    elif [ "$packet_recorded" != "$PACKET_CLASS" ]; then
-      echo "error: $BRIEF records disagreeing Packet lines (class=$PACKET_CLASS and class=$packet_recorded); one brief is one packet, so it carries one class - correct the brief to a single recorded class before dispatch" >&2
-      exit 1
-    fi
-  done < <(sed -n '/^#/q;p' "$BRIEF" | grep '^Packet:')
-  case "$PACKET_CLASS" in
-    prohibited)
-      echo "error: $ID packet is recorded prohibited: an explicit legal or contractual prohibition names where this packet may be processed. Ask the captain once before any dispatch; record the answer by updating the Packet line in the brief's header field block above the first '#' heading - only a Packet line in that block is read at dispatch - then spawn." >&2
-      exit 1
-      ;;
-    flagged)
-      PACKET_WARNING="China-usage warning: conflict-level packet dispatched on normal rotation under the captain's balanced-lane data policy"
-      echo "warning: $ID packet is flagged conflict-level; dispatching normally - $PACKET_WARNING. Recorded in the task record; include it in the next captain update." >&2
-      ;;
-    ordinary)
-      ;;
-    *)
-      echo "warning: $BRIEF records no Packet line in its header field block above the first '#' heading (scaffolded before briefs recorded the dispatch packet class); dispatching as ordinary - if this packet is conflict-level or prohibited, classify it at intake by adding the Packet line to the top of the brief above the first '#' heading, which is the only region read at dispatch" >&2
-      PACKET_CLASS=ordinary
-      ;;
-  esac
   HERDR_LIFECYCLE_BRIEF_GUARD=$(fm_config_source_present "$CONFIG/herdr-lifecycle-spawn-guard") || exit 1
   if [ "$HERDR_LIFECYCLE_BRIEF_GUARD" = 1 ]; then
     HERDR_LIFECYCLE_COMMAND=$(perl -ne '
@@ -4532,25 +4314,6 @@ delivery_rigor_rank() { # <mode> -> 3 (most rigor) .. 1 (least); 0 = not a task 
 # differ, which is the exact drift this contract prevents.
 if [ "$KIND" = ship ]; then
   PROJ_NAME=$(basename "$PROJ_ABS")
-  # The registry read must fail closed: a mistyped +annotation exiting non-zero
-  # (or an empty answer) refuses the spawn, because a posture the guard cannot
-  # read must never fall back to the permissive default and silently void the
-  # local-only refusal. The plain command substitution below also cannot swallow
-  # the reader's exit the way the previous `| cut` pipe did. It runs before the
-  # forge read below so the reader's own refusal (a mistyped +annotation or an
-  # unknown forge token) reaches the operator verbatim.
-  pmode_err=$(mktemp "${TMPDIR:-/tmp}/fm-spawn-pmode.XXXXXX")
-  if STANDING_LINE=$("$SCRIPT_DIR/fm-project-mode.sh" --raw "$PROJ_NAME" 2>"$pmode_err") && [ -n "$STANDING_LINE" ]; then
-    rm -f "$pmode_err"
-    STANDING_MODE=${STANDING_LINE%% *}
-  else
-    {
-      echo "error: $ID cannot launch: spawn cannot read the registered delivery posture for $PROJ_NAME, so the registry entry does not resolve to a delivery posture; refusing to dispatch until the registry line is fixed:"
-      sed 's/^/  /' "$pmode_err"
-    } >&2
-    rm -f "$pmode_err"
-    exit 1
-  fi
   # The parser's own refusal reaches the operator here rather than being
   # discarded: an entry it refuses (an unknown forge token, or a forge on
   # local-only) resolves to no posture at all, and launching on the silent
@@ -4562,6 +4325,7 @@ if [ "$KIND" = ship ]; then
     exit 1
   fi
   [ -n "$STANDING_FORGE" ] || STANDING_FORGE=none
+  STANDING_MODE=$("$FM_ROOT/bin/fm-project-mode.sh" --raw "$PROJ_NAME" 2>/dev/null | cut -d' ' -f1) || STANDING_MODE=
   BRIEF_MODE=$(sed -n 's/^Delivery contract: mode=\([^ ]*\).*$/\1/p' "$BRIEF" | head -n 1)
   BRIEF_FORGE=$(sed -n 's/^Delivery contract: mode=[^ ]*.*[[:space:]]forge=\([^ ]*\).*$/\1/p' "$BRIEF" | head -n 1)
   [ -n "$BRIEF_FORGE" ] || BRIEF_FORGE=none
@@ -4691,15 +4455,9 @@ if [ "$KIND" = ship ]; then
   # unregistered project resolves to the same no-mistakes standing default, which
   # is why the notice names the standing posture rather than the registry line. A
   # conditional policy is excluded: both of its legs are legitimate classifications.
-  # Exceeding the registered posture (more outward-facing than registered) is refused,
-  # because a task must not push or open a PR against a local-only project.
-  if [ "$STANDING_MODE" != no-mistakes-prod-only ]; then
-    if [ "$(delivery_rigor_rank "$MODE")" -gt "$(delivery_rigor_rank "$STANDING_MODE")" ]; then
-      echo "error: $ID requested mode=$MODE while the registered posture for $PROJ_NAME is $STANDING_MODE - more outward-facing than the project register permits; refusing spawn" >&2
-      exit 1
-    elif [ "$(delivery_rigor_rank "$MODE")" -lt "$(delivery_rigor_rank "$STANDING_MODE")" ]; then
-      echo "notice: $ID ships mode=$MODE while the standing posture for $PROJ_NAME is $STANDING_MODE - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
-    fi
+  if [ -n "$STANDING_MODE" ] && [ "$STANDING_MODE" != no-mistakes-prod-only ] &&
+    [ "$(delivery_rigor_rank "$MODE")" -lt "$(delivery_rigor_rank "$STANDING_MODE")" ]; then
+    echo "notice: $ID ships mode=$MODE while the standing posture for $PROJ_NAME is $STANDING_MODE - less rigor than the captain's standing posture; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
   fi
   # The registered ship-branch prefix (bin/fm-project-mode.sh) is the captain's
   # answer to "should this project's branches read as firstmate-authored", so a
@@ -4709,41 +4467,6 @@ if [ "$KIND" = ship ]; then
   STANDING_BRANCH=$("$FM_ROOT/bin/fm-project-mode.sh" --branch-prefix "$PROJ_NAME" 2>/dev/null) || STANDING_BRANCH=
   if [ "$BRANCH" != "$STANDING_BRANCH$ID" ]; then
     echo "notice: $ID ships branch=$BRANCH while $PROJ_NAME registers the ship-branch prefix '$STANDING_BRANCH' (branch $STANDING_BRANCH$ID) - the task's branch and PR will read as firstmate-authored; proceed only on a current explicit captain instruction or an intake judgment you can state" >&2
-  fi
-fi
-
-# Portfolio attention limit (AGENTS.md section 7; bin/fm-attention-lib.sh owns
-# the classification and the limit). Only work that opens a NEW captain lane is
-# checked: a ship whose merge or landing the captain must approve (yolo off),
-# and a scout, whose deliverable is a report the captain reads. A yolo ship is
-# autonomous execution that creates no captain decision lane, and a secondmate
-# is not a work item at all, so neither is gated here.
-# A refusal carries the reason bin/fm-attention-lib.sh worded for the case it
-# refused - an at-limit portfolio or a parked project - because those are two
-# different refusals behind one exit code and each states its own remedy.
-# A check that cannot be computed warns and lets the spawn through: this is a
-# working-memory bound on the captain, not a safety boundary, and a broken
-# snapshot must not halt the whole fleet's dispatch.
-if [ "$RELAUNCH" -eq 0 ] && { { [ "$KIND" = ship ] && [ "$YOLO" = off ]; } || [ "$KIND" = scout ]; }; then
-  ATTENTION_PROJECT=$(basename "$PROJ_ABS")
-  attention_args=(check "$ATTENTION_PROJECT")
-  [ "$ATTENTION_OVERRIDE" -eq 0 ] || attention_args+=(--override)
-  if attention_out=$(FM_ROOT_OVERRIDE="$FM_ROOT" FM_HOME="$FM_HOME" \
-      FM_STATE_OVERRIDE="$STATE" FM_DATA_OVERRIDE="$DATA" \
-      FM_PROJECTS_OVERRIDE="$PROJECTS" FM_CONFIG_OVERRIDE="$CONFIG" \
-      "$SCRIPT_DIR/fm-attention.sh" "${attention_args[@]}" 2>&1); then
-    case "$attention_out" in
-      "override applied: "*)
-        echo "notice: $ID dispatches on an explicit captain instruction - ${attention_out#override applied: }" >&2 ;;
-    esac
-  else
-    attention_rc=$?
-    if [ "$attention_rc" -eq 3 ]; then
-      echo "error: $ID cannot start: ${attention_out#error: }" >&2
-      echo "hint: --attention-override carries a current explicit captain instruction past this refusal." >&2
-      exit 1
-    fi
-    echo "warning: the portfolio attention limit could not be checked for $ATTENTION_PROJECT ($attention_out); dispatching anyway - confirm the captain is not already carrying too many projects" >&2
   fi
 fi
 
@@ -4861,17 +4584,6 @@ spawn_endpoint_hint() {
   else
     printf 'inspect window %s' "$T"
   fi
-}
-
-# A slot another task's record still holds is never launched into, fresh or
-# relaunched: that task's worker may be parked in it, and either cleanup would
-# then be refused.
-spawn_slot_held_by() {
-  SPAWN_SLOT_HELD_BY=$(fm_treehouse_slot_record_claimants "$STATE" "$WT" "$ID") || {
-    echo "error: cannot enumerate local Firstmate homes to prove Treehouse pool slot $WT is free; refusing to launch $ID; $(spawn_endpoint_hint)" >&2
-    exit 1
-  }
-  SPAWN_SLOT_HELD_BY=$(printf '%s' "$SPAWN_SLOT_HELD_BY" | paste -sd, -)
 }
 
 validate_spawn_worktree() { # <source> <inspect-target>
@@ -5330,18 +5042,15 @@ else
           echo "error: herdr presentation recovery could not ensure its exact named session" >&2
           exit 1
         }
-        # The holder keeps this lock for its whole spawn, including its bounded
-        # pool-slot acquisition (up to 4 tries, each up to 60s to settle and
-        # 30s to leave a held slot), so a recovery that refuses on timeout
-        # must outlast all of it. --herdr-resume-lock-wait opts into waiting
-        # without that bound instead (see header).
+        # Refuse-by-default on contention. Wait only when the caller opted in
+        # with --herdr-resume-lock-wait (see header).
         if [ "$HERDR_RESUME_LOCK_WAIT" = 1 ]; then
           spawn_herdr_presentation_order_lock_acquire "$HERDR_SES" wait || {
             echo "error: herdr presentation recovery could not resolve its session lock" >&2
             exit 1
           }
         else
-          spawn_herdr_presentation_order_lock_acquire "$HERDR_SES" 420 || {
+          spawn_herdr_presentation_order_lock_acquire "$HERDR_SES" || {
             echo "error: herdr presentation recovery could not acquire its session lock; refusing a concurrent resume" >&2
             exit 1
           }
@@ -5641,13 +5350,6 @@ EOF
       }
       [ -n "$WT" ] || { echo "error: treehouse get --lease did not report a worktree for $ID" >&2; exit 1; }
       validate_spawn_worktree "treehouse get --lease" "$WT (leased to $ID; once inspected, release it with 'treehouse return --force $WT' from $PROJ_ABS)"
-      if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
-        spawn_slot_held_by
-        [ -z "$SPAWN_SLOT_HELD_BY" ] || {
-          echo "error: Treehouse pool slot $WT is still recorded by $SPAWN_SLOT_HELD_BY; refusing to launch $ID into a copy another task record holds. It stays leased to $ID and untouched; reconcile with bin/fm-slot-audit.sh, release it with 'treehouse return --force $WT' from $PROJ_ABS, then respawn" >&2
-          exit 1
-        }
-      fi
       T3CODE_LEASED=1
       freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" "$PROJ_ABS" "$MODE" || {
         if [ "$?" -eq 2 ]; then
@@ -5960,15 +5662,7 @@ kimi_wait_for_delivery() {
   return 1
 }
 
-# Record a launch that did not produce a working agent. The task record is
-# NOT removed: the endpoint and the acquired worktree really do exist, so
-# deleting the metadata would orphan both with nothing left to find them by.
-# What must not survive is the false assertion that a worker is working, and
-# appending a `failed:` event fixes exactly that - it is the wake channel
-# supervision already reads, so the task reconciles as failed instead of
-# sitting at `working` until someone peeks at the pane. Callers exit non-zero
-# straight after, so no `spawned` line is ever printed for such a launch.
-spawn_launch_failed() {  # <detail>
+kimi_spawn_fail() { # <detail>
   printf '%s\n' "$(status_stamp_line "failed: $1")" >>"$STATE/$ID.status"
   echo "error: $1; inspect window $T" >&2
 }
@@ -6159,35 +5853,6 @@ agy_spawn_fail() {  # <detail>
   rovo_endpoint_cleanup
 }
 
-# Step the pane out of a held pool slot: lease it state-only under a holder
-# label and exit the subshell, so no process of this task keeps the copy as its
-# working directory, then wait for the pane to be back in the project.
-spawn_leave_held_slot() {
-  spawn_send_text_line "$WT_TARGET" "$(fm_treehouse_leave_slot_command "$WT" "$(basename "${SPAWN_SLOT_HELD_BY%%,*}" .meta)")" || {
-    echo "error: could not tell the pane to leave held Treehouse pool slot $WT; refusing to launch $ID; $(spawn_endpoint_hint)" >&2
-    exit 1
-  }
-  for _ in $(seq 1 30); do
-    p=$(spawn_current_path "$WT_TARGET" || true)
-    if [ -n "$p" ] && [ "$(real_path_or_raw "$p")" = "$PROJ_ABS_REAL" ]; then
-      break
-    fi
-    sleep 1
-  done
-  if [ -z "$p" ] || [ "$(real_path_or_raw "$p")" != "$PROJ_ABS_REAL" ]; then
-    echo "error: the pane did not leave held Treehouse pool slot $WT; refusing to launch $ID while a process of this task still sits in a copy another record holds; $(spawn_endpoint_hint)" >&2
-    exit 1
-  fi
-}
-
-spawn_refuse_held_slot() {
-  spawn_slot_held_by
-  [ -z "$SPAWN_SLOT_HELD_BY" ] || {
-    echo "error: Treehouse pool slot $WT is still recorded by $SPAWN_SLOT_HELD_BY; refusing to launch $ID into a copy another task record holds. Reconcile with bin/fm-slot-audit.sh, then respawn; $(spawn_endpoint_hint)" >&2
-    exit 1
-  }
-}
-
 # polytoken's launch-then-confirm gate, in the same shape as agy's: the brief
 # rides the launch command (--prompt submits it after the TUI attaches), so
 # readiness is positive proof the brief is being processed rather than proof a
@@ -6335,131 +6000,97 @@ elif [ "$RELAUNCH" -eq 1 ]; then
   fi
   [ "$KIND" = secondmate ] || validate_spawn_worktree "relaunch" "$T"
 elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
-  slot_attempt=0
-  slot_avoid=""
-  while :; do
-    # A t3code slot was leased and validated in its target branch above.
-    if [ "$BACKEND" = t3code ]; then
-      :
-    elif [ "$BACKEND" = herdr ]; then
-      spawn_lease_herdr_slot
-    else
-      WT=""
-      spawn_send_text_line "$WT_TARGET" 'treehouse get'
+  # A t3code slot was leased and validated in its target branch above.
+  if [ "$BACKEND" = t3code ]; then
+    :
+  elif [ "$BACKEND" = herdr ]; then
+    spawn_lease_herdr_slot
+  else
+    spawn_send_text_line "$WT_TARGET" 'treehouse get'
 
-      # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
-      # Target the stable window id, not the name: if the name is ever lost (e.g. an
-      # automatic-rename slips through), display-message -t <bad-name> falls back to the
-      # active client's window, which would misread firstmate's OWN pane path as the
-      # worktree and tangle a hook into the primary checkout. The window id never lies.
-      # The project comparison is physical: spawn_worktree_isolated screens each
-      # read against PROJ_ABS_REAL, not PROJ_ABS, because a symlinked project prefix
-      # would otherwise make the pane's OS-level cwd read differ from PROJ_ABS on
-      # the very first poll, before the pane has actually moved.
-      #
-      # A single read that already looks isolated is not proof the pane settled
-      # there: on some tmux/WSL setups a brand-new window's pane_current_path
-      # transiently reports an unrelated stale path (seen live as another real git
-      # checkout entirely) before the shell catches up with treehouse get's cd. That
-      # stale path passes spawn_worktree_isolated too (it resolves to a real,
-      # distinct worktree top-level), so accepting it on one read alone silently
-      # records the wrong worktree= in state/<id>.meta. Require two consecutive
-      # reads to agree on the same isolated path before accepting it; a mismatch
-      # just becomes the new candidate rather than resetting the wait, so a pane
-      # that is already settled by the first real read only costs the one existing
-      # inter-poll sleep as confirmation, not a whole extra cycle on top.
-      #
-      # Every candidate is screened with the isolation guard's own predicate, so a
-      # read of the project itself or of the repository primary checkout is treated
-      # as the transient it is and the wait continues, instead of being adopted and
-      # then refused by the guard.
-      # A candidate the screen rejects is never adopted, so a host where the pane
-      # never reaches an isolated worktree spends the whole window before refusing.
-      # That wait is deliberate - telling a transient apart from a terminal
-      # misconfiguration would need machinery this path does not want - so the
-      # refusal has to be self-explaining instead: carry the last path seen and the
-      # reason it was rejected, and report both at the deadline.
-      candidate=""
-      last_seen=""
-      last_reason="the pane reported no path"
-      for _ in $(seq 1 60); do
-        p=$(spawn_current_path "$WT_TARGET" || true)
-        [ -z "$p" ] || last_seen="$p"
-        if [ -n "$p" ] && spawn_worktree_isolated "$p"; then
-          p_real=$(real_path_or_raw "$p")
-          if [ -n "$slot_avoid" ] && [ "$p_real" = "$slot_avoid" ]; then
-            candidate=""
-            last_reason="the pane is still in the held slot while the next one is acquired"
-            sleep 1
-            continue
-          fi
-          last_reason="it is an isolated worktree, but no second read agreed with it"
-          if [ -n "$candidate" ] && [ "$p_real" = "$candidate" ]; then
-            WT="$p"
-            break
-          fi
-          candidate="$p_real"
-        else
-          candidate=""
-          [ -z "$p" ] || last_reason=$SPAWN_WT_REASON
+    # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
+    # Target the stable window id, not the name: if the name is ever lost (e.g. an
+    # automatic-rename slips through), display-message -t <bad-name> falls back to the
+    # active client's window, which would misread firstmate's OWN pane path as the
+    # worktree and tangle a hook into the primary checkout. The window id never lies.
+    # The project comparison is physical: spawn_worktree_isolated screens each
+    # read against PROJ_ABS_REAL, not PROJ_ABS, because a symlinked project prefix
+    # would otherwise make the pane's OS-level cwd read differ from PROJ_ABS on
+    # the very first poll, before the pane has actually moved.
+    #
+    # A single read that already looks isolated is not proof the pane settled
+    # there: on some tmux/WSL setups a brand-new window's pane_current_path
+    # transiently reports an unrelated stale path (seen live as another real git
+    # checkout entirely) before the shell catches up with treehouse get's cd. That
+    # stale path passes spawn_worktree_isolated too (it resolves to a real,
+    # distinct worktree top-level), so accepting it on one read alone silently
+    # records the wrong worktree= in state/<id>.meta. Require two consecutive
+    # reads to agree on the same isolated path before accepting it; a mismatch
+    # just becomes the new candidate rather than resetting the wait, so a pane
+    # that is already settled by the first real read only costs the one existing
+    # inter-poll sleep as confirmation, not a whole extra cycle on top.
+    #
+    # Every candidate is screened with the isolation guard's own predicate, so a
+    # read of the project itself or of the repository primary checkout is treated
+    # as the transient it is and the wait continues, instead of being adopted and
+    # then refused by the guard.
+    # A candidate the screen rejects is never adopted, so a host where the pane
+    # never reaches an isolated worktree spends the whole window before refusing.
+    # That wait is deliberate - telling a transient apart from a terminal
+    # misconfiguration would need machinery this path does not want - so the
+    # refusal has to be self-explaining instead: carry the last path seen and the
+    # reason it was rejected, and report both at the deadline.
+    candidate=""
+    last_seen=""
+    last_reason="the pane reported no path"
+    for _ in $(seq 1 60); do
+      p=$(spawn_current_path "$WT_TARGET" || true)
+      [ -z "$p" ] || last_seen="$p"
+      if [ -n "$p" ] && spawn_worktree_isolated "$p"; then
+        p_real=$(real_path_or_raw "$p")
+        last_reason="it is an isolated worktree, but no second read agreed with it"
+        if [ -n "$candidate" ] && [ "$p_real" = "$candidate" ]; then
+          WT="$p"
+          break
         fi
-        sleep 1
-      done
-      if [ -z "$WT" ]; then
-        echo "error: treehouse get did not enter an isolated worktree within 60s (last seen '${last_seen:-none}': $last_reason; spawning project '$PROJ_ABS'); $(spawn_endpoint_hint)" >&2
-        exit 1
-      fi
-
-      if spawn_endpoint_closes_on_abort; then
-        validate_spawn_worktree "treehouse get" "$WT ($(spawn_endpoint_hint))"
+        candidate="$p_real"
       else
-        validate_spawn_worktree "treehouse get" "$T"
+        candidate=""
+        [ -z "$p" ] || last_reason=$SPAWN_WT_REASON
       fi
+      sleep 1
+    done
+    if [ -z "$WT" ]; then
+      echo "error: treehouse get did not enter an isolated worktree within 60s (last seen '${last_seen:-none}': $last_reason; spawning project '$PROJ_ABS'); $(spawn_endpoint_hint)" >&2
+      exit 1
     fi
 
-    # Claim the pool slot for this task. Except on Herdr, whose slot
-    # spawn_lease_herdr_slot leased durably, the interactive `treehouse get` sent
-    # to the pane above records only a process lease, so Treehouse cannot say
-    # which task a slot belongs to once that task's worker exits - and that is
-    # exactly when the slot is handed on and this task's worktree= line goes
-    # stale. The claim is what lets
-    # bin/fm-teardown.sh leave a slot that has since been reassigned untouched, so
-    # a slot that cannot be claimed is refused here, at the cheapest point, rather
-    # than launching a worker whose slot teardown could later release out from
-    # under its successor.
-    # Written under the Treehouse project lock held from before slot allocation
-    # through metadata publication, so no other spawn or return sees a half-claim.
-    if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
-      # A slot the pool hands out while a DIFFERENT task's record still holds it
-      # is left alone - never claimed, its record untouched. The pane leases it
-      # state-only and exits its subshell, so nothing of this task stays in it,
-      # then asks the pool again. Bounded, then a refusal naming the held slot.
-      # A leased Herdr or t3code slot has no pane subshell to step out of, so
-      # a held one is refused rather than retried.
-      spawn_slot_held_by
-      if [ -n "$SPAWN_SLOT_HELD_BY" ]; then
-        case "$BACKEND" in herdr|t3code) spawn_refuse_held_slot ;; esac
-        if [ "$slot_attempt" -ge 3 ]; then
-          spawn_leave_held_slot
-          echo "error: no unheld Treehouse pool slot was available for $ID after $((slot_attempt + 1)) tries; the last slot $WT is still recorded by $SPAWN_SLOT_HELD_BY and is left alone. Reconcile with bin/fm-slot-audit.sh, then respawn; $(spawn_endpoint_hint)" >&2
-          exit 1
-        fi
-        slot_attempt=$((slot_attempt + 1))
-        slot_avoid=$(real_path_or_raw "$WT")
-        spawn_leave_held_slot
-        continue
-      fi
-      if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
-        echo "error: could not claim Treehouse pool slot $WT for task $ID; refusing to launch a worker whose slot cannot later be proved to be its own; $(spawn_endpoint_hint)" >&2
-        exit 1
-      fi
-      SPAWN_SLOT_CLAIMED=1
+    if spawn_endpoint_closes_on_abort; then
+      validate_spawn_worktree "treehouse get" "$WT ($(spawn_endpoint_hint))"
+    else
+      validate_spawn_worktree "treehouse get" "$T"
     fi
-    break
-  done
-fi
-if [ "$RELAUNCH" -eq 1 ] && [ "$KIND" != secondmate ] && fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
-  spawn_refuse_held_slot
+  fi
+
+  # Claim the pool slot for this task. Except on Herdr, whose slot
+  # spawn_lease_herdr_slot leased durably, the interactive `treehouse get` sent
+  # to the pane above records only a process lease, so Treehouse cannot say
+  # which task a slot belongs to once that task's worker exits - and that is
+  # exactly when the slot is handed on and this task's worktree= line goes
+  # stale. The claim is what lets
+  # bin/fm-teardown.sh leave a slot that has since been reassigned untouched, so
+  # a slot that cannot be claimed is refused here, at the cheapest point, rather
+  # than launching a worker whose slot teardown could later release out from
+  # under its successor.
+  # Written under the Treehouse project lock held from before slot allocation
+  # through metadata publication, so no other spawn or return sees a half-claim.
+  if fm_treehouse_pool_slot "$PROJ_ABS" "$WT"; then
+    if ! fm_treehouse_slot_owner_claim "$WT" "$ID" "$FM_HOME"; then
+      echo "error: could not claim Treehouse pool slot $WT for task $ID; refusing to launch a worker whose slot cannot later be proved to be its own; $(spawn_endpoint_hint)" >&2
+      exit 1
+    fi
+    SPAWN_SLOT_CLAIMED=1
+  fi
 fi
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != t3code ]; then
   freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" "$PROJ_ABS" "$MODE" || exit 1
@@ -6483,11 +6114,7 @@ spawn_assert_agent_worktree
 # bin/fm-claude-trust.sh owns the structural scope test for both shapes and
 # refuses anything that is neither this project's own isolated worktree nor a
 # seeded secondmate home marked for this id; a refusal blocks the spawn rather
-# than launching a worker that would wedge. A crewmate a secondmate home spawns
-# takes the worktree shape, and the shared treehouse pool hands it a worktree of
-# whichever clone of that origin is free - often the primary home's - so the
-# worktree scope test accepts a clone sharing the project's origin identity
-# rather than only the exact clone the home knows. Refusing here rather than beside the
+# than launching a worker that would wedge. Refusing here rather than beside the
 # arm keeps this in the same class as the two worktree refusals just above: no
 # temp root, no retired relaunch wiring and no busy record exists yet to strand,
 # so the refusal names the endpoint the same way they do and leaves nothing else
@@ -7576,14 +7203,10 @@ else
   SPAWN_FRESH_COMMIT_PENDING=1
 fi
 SPAWN_META_PATH=$SPAWN_META_TMP
-DISPATCH_BASE=
-if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ -n "$WT" ]; then
-  DISPATCH_BASE=$(git -C "$WT" rev-parse --verify --quiet HEAD 2>/dev/null || true)
-fi
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness hermes_profile hermes_home kind mode yolo packet packet_warning branch tasktmp base_branch upstream_consent forge backup_remote backup_prefix model effort opencode_version account account_provider omp_profile busy_gen spawn_gen approval_mode traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id paseo_terminal_id paseo_workspace_id rex_server rex_session_id rex_window_id rex_block_id t3_thread_id t3_project_id tern_session_id tern_tab_id tern_block_id hc_session hc_terminal home projects control_relaunch_tx polytoken_session polytoken_port polytoken_credential", keys, " ")
+      split("window endpoint_task_id worktree project harness hermes_profile hermes_home kind mode yolo branch tasktmp base_branch upstream_consent forge backup_remote backup_prefix model effort opencode_version account account_provider omp_profile busy_gen spawn_gen approval_mode traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id paseo_terminal_id paseo_workspace_id rex_server rex_session_id rex_window_id rex_block_id t3_thread_id t3_project_id tern_session_id tern_tab_id tern_block_id hc_session hc_terminal home projects control_relaunch_tx polytoken_session polytoken_port polytoken_credential", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -7604,11 +7227,6 @@ preserve_relaunch_meta() {
   echo "kind=$KIND"
   [ -z "$MODE" ] || echo "mode=$MODE"
   [ -z "$YOLO" ] || echo "yolo=$YOLO"
-  # Dispatch packet class (the captain's balanced-lane data policy):
-  # re-derived from the brief on every fresh spawn and relaunch, so the
-  # record never accumulates duplicate warnings.
-  [ -z "$PACKET_CLASS" ] || echo "packet=$PACKET_CLASS"
-  [ -z "$PACKET_WARNING" ] || echo "packet_warning=$PACKET_WARNING"
   [ -z "${BRANCH:-}" ] || echo "branch=$BRANCH"
   echo "tasktmp=$TASK_TMP"
   [ -z "$BASE_BRANCH" ] || echo "base_branch=$BASE_BRANCH"
@@ -7633,7 +7251,6 @@ preserve_relaunch_meta() {
   [ "$HARNESS" != hermes ] || { echo "hermes_profile=$HERMES_PROFILE"; echo "hermes_home=$HERMES_PROFILE_HOME"; }
   [ -z "${BUSY_GEN:-}" ] || echo "busy_gen=$BUSY_GEN"
   echo "spawn_gen=$SPAWN_GEN"
-  [ -z "$DISPATCH_BASE" ] || echo "dispatch_base=$DISPATCH_BASE"
   # Default-off writes no traceparent= line.
   # backend= is written only for a non-default (non-tmux) backend, so the
   # default path's meta stays byte-identical (absent backend= means tmux;
@@ -7935,13 +7552,6 @@ case "$LAUNCH" in
   LAUNCH=${LAUNCH//__CLAUDEADDDIRS__/$CLAUDE_ADD_DIRS}
   ;;
 esac
-# Splice the resolved launch-wrap prefixes. The placeholder sits immediately
-# before the agent binary in every verified template, after firstmate's own env
-# assignments, so an empty prefix reproduces the template's bytes exactly and a
-# nonempty one wraps the binary without disturbing any argument boundary. It is
-# spliced after every other placeholder so the extension's text is delivered
-# verbatim rather than being rescanned for firstmate's own tokens.
-LAUNCH=${LAUNCH//__EXTWRAP__/"${FM_EXT_LAUNCHWRAP_PREFIX-}"}
 case "$HARNESS" in
 claude | codex | opencode | pi | pi-signed | grok | kimi | gemini | muse | rovo | agy | devin | commandcode | cortex | kiro | hermes)
   LAUNCH="env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI $LAUNCH"
@@ -8313,7 +7923,7 @@ else
   sleep 0.3
   spawn_orca_launch_send_fail() {
     rm -f -- "$LAUNCH_FILE" 2>/dev/null || true
-    spawn_launch_failed "launch command could not be delivered to Orca terminal $T"
+    kimi_spawn_fail "launch command could not be delivered to Orca terminal $T"
     rovo_endpoint_cleanup
     exit 1
   }
@@ -8329,7 +7939,7 @@ else
       if [ "$i" -gt "$max" ]; then
         spawn_orca_reclaim_launch_file || reclaim_status=$?
         [ "$reclaim_status" != 1 ] || return 0
-        spawn_launch_failed "Orca terminal $T did not run the launch command or could not remove the launch file; refused the worker launch"
+        kimi_spawn_fail "Orca terminal $T did not run the launch command or could not remove the launch file; refused the worker launch"
         exit 1
       fi
       sleep 0.2
@@ -8396,7 +8006,7 @@ if [ "$HARNESS" = hermes ] && [ "$RAW_LAUNCH" -eq 0 ]; then
 fi
 if [ "$HARNESS" = kimi ]; then
   if ! kimi_wait_for_ready; then
-    spawn_launch_failed "$KIMI_READY_FAILURE_DETAIL"
+    kimi_spawn_fail "$KIMI_READY_FAILURE_DETAIL"
     exit 1
   fi
   KIMI_POINTER="Read the brief at $BRIEF_REAL and follow it exactly."
@@ -8406,15 +8016,15 @@ if [ "$HARNESS" = kimi ]; then
   if ! KIMI_SUBMIT_VERDICT=$(fm_backend_send_text_submit \
     "$BACKEND" "$T" "$KIMI_POINTER" "$KIMI_SUBMIT_RETRIES" \
     "$KIMI_SUBMIT_SLEEP" "$KIMI_SUBMIT_SETTLE" "$W"); then
-    spawn_launch_failed "kimi brief pointer could not be submitted"
+    kimi_spawn_fail "kimi brief pointer could not be submitted"
     exit 1
   fi
   if [ "$KIMI_SUBMIT_VERDICT" = send-failed ]; then
-    spawn_launch_failed "kimi brief pointer could not be submitted"
+    kimi_spawn_fail "kimi brief pointer could not be submitted"
     exit 1
   fi
   if ! kimi_wait_for_delivery; then
-    spawn_launch_failed "kimi brief pointer delivery was not confirmed"
+    kimi_spawn_fail "kimi brief pointer delivery was not confirmed"
     exit 1
   fi
 fi
@@ -8486,70 +8096,6 @@ if [ "$KIND" = secondmate ] && [ "${FM_SKIP_SECONDMATE_INHERIT:-0}" != 1 ]; then
       echo "CONFIG_REREAD: secondmate $ID: cleanup failed; pre-relaunch generations were force-cleared where possible (destination=$PROJ_ABS source=$FM_HOME)" >&2
     fi
   fi
-fi
-
-# --- launch postcondition ---------------------------------------------------
-#
-# Everything above ASSEMBLES a launch; nothing above proves one happened. The
-# task record is written before the launch line is even submitted, so until
-# here `spawned ...` asserts a fact this script never checked: it is true that a
-# command was typed into an endpoint, not that an agent came up. When the launch
-# died in the pane - a missing binary, a rejected model or effort, a harness
-# crashing on startup, a vanished worktree, a full disk - the pane fell back to
-# a shell, nothing read the exit status, and the task read `working` until a
-# human peeked at it. Observed live on 2026-08-25: three tasks sat dead for
-# around 50 minutes each.
-#
-# So confirm an agent is genuinely alive before this task may be reported as
-# started. This is cause-agnostic on purpose: it asks whether an agent is there,
-# never why one might not be, so a cause nobody has met yet is covered too.
-#
-# The verdict comes from fm_backend_agent_state, the same recovery-grade
-# classifier supervision and the control plane already use, through the shared
-# waiter in bin/fm-control-lib.sh. No second notion of liveness is introduced
-# that could disagree with the one the rest of the fleet reads.
-#
-# Only `dead` refuses. Recovery licenses action on `dead` and `missing` both,
-# but the asymmetry here runs the other way from recovery's: a false refusal
-# breaks a spawn that was working, so nothing short of a confident verdict may
-# refuse, and every verdict that merely FAILS to prove an agent proceeds.
-# `dead` is exactly the signature of this defect and of every cause listed
-# above - the endpoint is there and its foreground is nothing but shells.
-# `missing` is excluded deliberately: it means the recorded window is absent
-# from the endpoint inventory, which at this point would mean the endpoint
-# vanished between the launch submission above and this read, and a truly absent
-# endpoint would already have failed those sends. So it adds no real coverage
-# over `dead`, while being the verdict any incomplete inventory read produces -
-# which would turn a momentary inventory hiccup into a refused healthy spawn.
-# `ambiguous`, `unreadable`, and `unverified` proceed for the same reason, which
-# is what keeps adapters that genuinely cannot answer honest rather than broken:
-# zellij, orca, and cmux have no classifier at all and read `unverified`, and an
-# agy pane reads `ambiguous` because no agy process name is attributable yet.
-# Those spawns are left exactly as they were, unprotected but not falsely
-# refused.
-#
-# Waiting is required, not optional: right after the launch line is submitted
-# the pane's foreground is still the shell, so a single immediate read says
-# `dead` for every healthy spawn. The wait ends the moment an agent appears, so
-# a healthy spawn pays only its harness's real startup - measured at 1.16s for
-# claude on tmux (2026-08-25) - while the 20s ceiling is only ever spent on a
-# launch that is already lost. It stays under the kimi readiness window above so
-# that harness's own tighter gate remains the one that fires first.
-# A backend with no recovery-grade classifier is asked nothing at all, rather
-# than being polled to the ceiling for an answer it can never give. Skipping on
-# the capability table (bin/fm-control-lib.sh, the same owner the control plane
-# refuses stop-proving verbs on) is what keeps those spawns at zero added cost.
-SPAWN_LAUNCH_WAIT=${FM_SPAWN_LAUNCH_WAIT:-20}
-SPAWN_LAUNCH_POLL=${FM_SPAWN_LAUNCH_POLL:-0.25}
-if fm_control_backend_state_verified "$BACKEND"; then
-  SPAWN_LAUNCH_STATE=$(fm_control_wait_agent_state \
-    "$BACKEND" "$T" "$SPAWN_LAUNCH_WAIT" "$SPAWN_LAUNCH_POLL" alive) || true
-  case "$SPAWN_LAUNCH_STATE" in
-    dead)
-      spawn_launch_failed "no agent came up for $ID within ${SPAWN_LAUNCH_WAIT}s of launching $HARNESS; the endpoint reads '$SPAWN_LAUNCH_STATE', so the launch died before the agent started"
-      exit 1
-      ;;
-  esac
 fi
 
 # This is the commit point: all endpoint and harness delivery that can reject
@@ -8625,9 +8171,6 @@ fi
 
 SPAWN_DELIVERY=
 [ -z "$MODE" ] || SPAWN_DELIVERY=" mode=$MODE yolo=$YOLO"
-if [ "$PACKET_CLASS" = flagged ]; then
-  SPAWN_DELIVERY="$SPAWN_DELIVERY packet=flagged"
-fi
 SPAWN_ACCOUNT=
 [ -z "$WORKER_ACCOUNT" ] || SPAWN_ACCOUNT=" account=$WORKER_ACCOUNT_DECLARED"
 [ -z "$WORKER_ACCOUNT_PROVIDER" ] || SPAWN_ACCOUNT="$SPAWN_ACCOUNT account_provider=$WORKER_ACCOUNT_PROVIDER"

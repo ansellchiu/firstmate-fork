@@ -187,15 +187,15 @@ test_claude_stop_hook_restores_handoff_when_successor_closed_mid_engine_turn() {
 }
 
 
-test_claude_stop_hook_rewakes_when_closed_successor_downtime_restore_fails() {
-  assert_claude_stop_hook_rewakes_when_closed_successor_downtime_restore_fails pending
-  pass "host+hook: a hand-back on a pending handling marker rewakes main when downtime restoration fails"
+test_claude_stop_hook_notifies_when_closed_successor_downtime_restore_fails() {
+  assert_claude_stop_hook_notifies_when_closed_successor_downtime_restore_fails pending
+  pass "host+hook: a refused hand-back becomes a delivered failure notice"
 }
 
 
-test_claude_stop_hook_rewakes_when_closed_announced_successor_downtime_restore_fails() {
-  assert_claude_stop_hook_rewakes_when_closed_successor_downtime_restore_fails announced
-  pass "host+hook: a hand-back on an announced handling marker rewakes main when downtime restoration fails"
+test_claude_stop_hook_notifies_when_closed_announced_successor_downtime_restore_fails() {
+  assert_claude_stop_hook_notifies_when_closed_successor_downtime_restore_fails announced
+  pass "host+hook: a refused hand-back on an announced handling marker becomes a delivered failure notice"
 }
 
 
@@ -302,16 +302,6 @@ test_claude_stop_hook_runs_the_host_without_the_file_and_off_opts_out() {
   assert_re '	handled	turn=[^	]*	posture=attended	' "$home/state/.supervision-host.log" "the ledger must record the attended turn"
   [ ! -s "$home/hook.rc" ] || fail "a routine attended wake on a Claude home without the file reached main: $(cat "$home/hook.err")"
   watcher_live "$home" || fail "default-on: the host is not parked on a live successor"
-  # A host killed without a close is retried by the Stop hook. The fork acks the
-  # killed watcher's downtime silently while the wake queue is empty, so the
-  # retry's host parks on a live watcher instead of rewaking main.
-  first=$(host_pid "$home")
-  kill -TERM "$first"
-  wait_until 150 retry_host_parked "$home" "$first" \
-    || fail "default-on: the Stop hook did not retry its killed host: $(cat "$home/state/.supervision-host.log" 2>/dev/null)"
-  wait_until 150 grep -q '^acked:downtime:' "$home/state/.watcher-down" \
-    || fail "default-on: the retry must ack the killed host's downtime silently: $(cat "$home/state/.watcher-down" 2>/dev/null)"
-  [ ! -s "$home/hook.rc" ] || fail "default-on: a silently acked downtime reached main: $(cat "$home/hook.err")"
   : > "$home/session.stop"
   stop_home_processes "$home"
 
@@ -564,8 +554,8 @@ fm_test_run \
   test_handoff_retry_respects_the_receiving_pane \
   test_claude_stop_hook_restores_handoff_when_successor_closed_before_exit_to_main \
   test_claude_stop_hook_restores_handoff_when_successor_closed_mid_engine_turn \
-  test_claude_stop_hook_rewakes_when_closed_successor_downtime_restore_fails \
-  test_claude_stop_hook_rewakes_when_closed_announced_successor_downtime_restore_fails \
+  test_claude_stop_hook_notifies_when_closed_successor_downtime_restore_fails \
+  test_claude_stop_hook_notifies_when_closed_announced_successor_downtime_restore_fails \
   test_claude_stop_hook_delivers_a_main_only_pass_through \
   test_claude_stop_hook_rewakes_main_for_an_inbox_note_after_a_handled_wake \
   test_claude_stop_hook_rewakes_a_present_captain_beside_a_quiet_record \
