@@ -20,9 +20,8 @@
 #
 # Scope substitution: fm_quota_scope_substitution_table, beside
 # fm_quota_single_provider_table, is the documented mapping of provider and
-# model-id prefix to the scope that replaces the all_models bound. The longest
-# matching prefix wins and table order breaks equal-length ties; an empty
-# prefix matches nothing. all_products and an exact model: or product: scope
+# model-id prefix to the scope that replaces the all_models bound. The first
+# matching row wins. all_products and an exact model: or product: scope
 # still apply. Consumers pass fm_quota_scope_substitution_json as $scope_subs
 # and prepend FM_QUOTA_SCOPE_SUBSTITUTION_JQ. The quota-array-dispatch
 # eligibility section names this table and does not restate its rows.
@@ -42,17 +41,10 @@ FM_QUOTA_PROVIDER_ID_RE='^[a-z0-9]+(-[a-z0-9]+)*\z'
 # shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
 FM_QUOTA_SCOPE_SUBSTITUTION_JQ='
   def scope_instead_of_all_models($provider; $model):
-    ([$scope_subs[]?
+    (first($scope_subs[]?
       | . as $row
-      | select(
-          $row.provider == $provider and
-          ($row.prefix | type) == "string" and
-          ($row.prefix | length) > 0 and
-          (($model // "") | startswith($row.prefix))
-        )]
-      | sort_by(-(.prefix | length))
-      | first) as $hit
-    | if $hit == null then "all_models" else $hit.scope end;
+      | select($row.provider == $provider and (($model // "") | startswith($row.prefix))))
+      | .scope) // "all_models";
 '
 # shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
 FM_QUOTA_ROW_JQ='
