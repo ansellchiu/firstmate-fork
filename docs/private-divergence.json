@@ -24,7 +24,9 @@
         "docs/configuration.md",
         "docs/t3code-backend.md",
         "tests/fm-backend-t3code.test.sh",
-        "tests/fm-ext-launchwrap.test.sh"
+        "tests/fm-ext-launchwrap.test.sh",
+        "tests/fm-secondmate-sync.test.sh",
+        "tests/fm-shared-captain-inheritance.test.sh"
       ],
       "intent": "Private homes install extensions that register their own load triggers and contribute bounded session-start sections; a failing contributor must never block session start.",
       "provenance": {
