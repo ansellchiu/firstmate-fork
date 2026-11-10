@@ -1,0 +1,11 @@
+ok - provider-table lookup reads the whole table before answering
+ok - provider-table lookup prints the provider when called directly under set -e
+ok - cursor grok- model ids use grok_bot when api_usage has spent all_models
+# all fm-quota-choose tests passed
+rc=
+ok - shared-quota bypasses an unmet profile-level floor: the first declared profile wins with no quota call
+ok - shared-quota keeps preferred_provider narrowing: the preferred family wins in declared order with no quota call
+ok - shared_quota false keeps the unchanged quota-ranked behavior
+ok - cursor grok- model ids use grok_bot when api_usage has spent all_models
+# all fm-dispatch-resolve tests passed
+rc=

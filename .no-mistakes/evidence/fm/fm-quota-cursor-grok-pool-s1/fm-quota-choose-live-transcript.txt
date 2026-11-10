@@ -1,0 +1,10 @@
+== HEAD ==
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:grok-4.7-high -> rc=0 out=cursor grok-4.7-high
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:claude-opus-5-5-medium -> rc=1 out=none
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:cursor-grok-4.7-high -> rc=1 out=none
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:claude-opus-5-5-medium --candidate cursor:grok-4.7-high -> rc=0 out=cursor grok-4.7-high
+== BASE ==
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:grok-4.7-high -> rc=1 out=none
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:claude-opus-5-5-medium -> rc=1 out=none
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:cursor-grok-4.7-high -> rc=1 out=none
+$ fm-quota-choose.sh --snapshot live-cursor-snapshot.json --candidate cursor:claude-opus-5-5-medium --candidate cursor:grok-4.7-high -> rc=1 out=none
