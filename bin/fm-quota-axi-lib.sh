@@ -17,18 +17,35 @@
 # than one account). Schema 5 keeps its exact pre-schema-6 rules so an older
 # quota-axi keeps working unchanged. FM_QUOTA_ROW_JQ is the one join used to
 # bind a candidate to its row under either schema.
+#
+# Scope substitution: fm_quota_scope_substitution_table, beside
+# fm_quota_single_provider_table, is the documented mapping of provider and
+# model-id prefix to the scope that replaces the all_models bound. The first
+# matching row wins. all_products and an exact model: or product: scope
+# still apply. Consumers pass fm_quota_scope_substitution_json as $scope_subs
+# and prepend FM_QUOTA_SCOPE_SUBSTITUTION_JQ. The quota-array-dispatch
+# eligibility section names this table and does not restate its rows.
 
 FM_QUOTA_AXI_MIN=0.1.51
 FM_QUOTA_PROVIDER_ID_RE='^[a-z0-9]+(-[a-z0-9]+)*\z'
 
 # The eligibility section of .agents/skills/quota-array-dispatch/SKILL.md
-# owns the account-matching contract these jq definitions implement.
-# Prepend them to a consumer's program:
+# owns the account-matching contract quota_lane and quota_row implement.
+# FM_QUOTA_SCOPE_SUBSTITUTION_JQ is the matcher for
+# fm_quota_scope_substitution_table; prepend both strings to a consumer's program:
 #   quota_lane($harness; $model)   the candidate's account key, or "" when none
 #                                  is identified by the contract.
 #   quota_row($snapshot; $provider; $lane)
 #                                  the one provider row the candidate binds to,
 #                                  or null; schema 5 ignores $lane.
+# shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
+FM_QUOTA_SCOPE_SUBSTITUTION_JQ='
+  def scope_instead_of_all_models($provider; $model):
+    (first($scope_subs[]?
+      | . as $row
+      | select($row.provider == $provider and (($model // "") | startswith($row.prefix))))
+      | .scope) // "all_models";
+'
 # shellcheck disable=SC2016,SC2034  # jq program text, not shell expansion; read by the sourcing consumers
 FM_QUOTA_ROW_JQ='
   def quota_lane($harness; $model):
@@ -153,6 +170,22 @@ fm_quota_single_provider_table() {
     'cursor cursor' \
     'agy agy' \
     'muse meta'
+}
+
+# Documented scope substitution. Columns: provider, model-id prefix, scope
+# used in place of all_models. See the file header for match order.
+fm_quota_scope_substitution_table() {
+  printf '%s\n' \
+    'cursor grok- grok_bot'
+}
+
+fm_quota_scope_substitution_json() {
+  fm_quota_scope_substitution_table | jq -Rsc '
+    [split("\n")[]
+      | select(length > 0)
+      | split(" ")
+      | select(length == 3 and .[0] != "" and .[1] != "" and .[2] != "")
+      | {provider: .[0], prefix: .[1], scope: .[2]}]'
 }
 
 # Reads the whole table before answering: leaving the loop early closes the
