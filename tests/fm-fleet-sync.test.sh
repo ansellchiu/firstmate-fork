@@ -130,34 +130,6 @@ build_enclosing_home() {
   printf '%s\n' "$enclosing"
 }
 
-# build_unborn <home> <name>: a clone made while its bare origin was EMPTY, so
-# projects/<name> has HEAD on refs/heads/main with no commit ("No commits yet").
-# A side work repo is wired to the origin but has pushed nothing yet; use
-# push_unborn_origin to give origin its first commit. Echoes the clone path.
-build_unborn() {
-  local home=$1 name=$2 work remote clone remote_abs
-  work="$home/work-$name"
-  remote="$home/remotes/$name.git"
-  clone="$home/projects/$name"
-  mkdir -p "$home/remotes"
-  git init -q --bare "$remote"
-  git -C "$remote" symbolic-ref HEAD refs/heads/main
-  remote_abs=$(cd "$remote" && pwd)
-  git clone --quiet "file://$remote_abs" "$clone" 2>/dev/null
-  git -C "$clone" symbolic-ref HEAD refs/heads/main
-  git init -q "$work"
-  git -C "$work" symbolic-ref HEAD refs/heads/main
-  git -C "$work" remote add origin "file://$remote_abs"
-  printf '%s\n' "$clone"
-}
-
-push_unborn_origin() {
-  local home=$1 name=$2 work
-  work="$home/work-$name"
-  commit_file "$work" file.txt v0 C0
-  git -C "$work" push -q origin main
-}
-
 # --- packed-refs.lock fixtures ----------------------------------------------
 
 # build_packed_prunable <home> <name>: like build_pair, but the clone has PACKED
@@ -438,64 +410,11 @@ test_local_only_skipped() {
   pass "local-only clone is skipped (benign), not flagged STUCK"
 }
 
-# A mistyped +annotation makes the posture read exit non-zero. The sync must
-# refuse the affected project loudly (the STUCK shape, so a stdout-only
-# session-start relay still carries it), name the registry file and annotation,
-# leave the clone untouched, and exit non-zero - never default to a mode that
-# would silently void the local-only guard. Project names are unique within the
-# file because every test shares one fixture home.
-test_mistyped_annotation_refuses_sync() {
-  local home clone_iota out status
-  home=$(new_home)
-  clone_iota=$(build_pair "$home" pm-iota)
-  advance_origin "$home" pm-iota C1
-  build_pair "$home" pm-theta >/dev/null
-  advance_origin "$home" pm-theta C1
-  mkdir -p "$home/data"
-  printf -- '- pm-iota [local-only +parkd] (added 2026-06-27) - test project\n- pm-theta [no-mistakes] (added 2026-06-27) - test project\n' > "$home/data/projects.md"
-
-  out=$(run_sync "$home" pm-iota)
-  status=$?
-  assert_contains "$out" "pm-iota: STUCK: cannot read the registered delivery posture" \
-    "a mistyped annotation refuses the single-project sync instead of guessing"
-  assert_contains "$out" 'unknown flag "+parkd"' \
-    "the refusal surfaces the reader's annotation error"
-  assert_contains "$out" "$home/data/projects.md" \
-    "the refusal names the registry file"
-  # The session-start relay forwards only lines carrying a recognized marker, so
-  # the annotation detail has to carry the STUCK marker itself or it is dropped
-  # before the captain sees it.
-  assert_contains "$(printf '%s\n' "$out" | grep ': STUCK:' || true)" 'unknown flag "+parkd"' \
-    "every refusal detail line must carry the STUCK marker the relay filters on"
-  [ "$status" -ne 0 ] || fail "the single-project sync must exit non-zero on an unreadable posture"
-  [ "$(head_sha "$clone_iota")" = "$(git -C "$home/work-pm-iota" rev-parse main^)" ] \
-    || fail "the refused clone was still fast-forwarded"
-  pass "a mistyped annotation refuses the single-project sync and leaves the clone untouched"
-
-  # The whole-fleet form still refreshes healthy projects in the same home,
-  # refuses only the unreadable one, and exits non-zero for scripted callers.
-  out=$(run_sync "$home")
-  status=$?
-  assert_contains "$out" "pm-iota: STUCK: cannot read the registered delivery posture" \
-    "the whole-fleet form refuses the unreadable project"
-  assert_contains "$out" "pm-theta: synced" \
-    "the whole-fleet form still refreshes projects whose posture reads fine"
-  [ "$status" -ne 0 ] || fail "the whole-fleet sync must exit non-zero when a project's posture cannot be read"
-  pass "the whole-fleet form refuses the unreadable project, refreshes the rest, and exits non-zero"
-
-  # Defensive: neutralize this test's registry before leaving, so no later
-  # whole-fleet run over the shared fixture home inherits the refusal (and its
-  # non-zero exit) from these clones.
-  printf -- '- pm-iota [local-only] (added 2026-06-27) - test project\n- pm-theta [no-mistakes] (added 2026-06-27) - test project\n' > "$home/data/projects.md"
-}
-
-# A registry entry the parser refuses for a reason other than an annotation (here
-# a mistyped forge) resolves to no posture at all, so sync must refuse the clone
-# rather than fall back to the default posture: reading a refusal as
-# "no-mistakes" is how a local-only clone would be fetched and fast-forwarded.
-# The single-project form here names the clone by its path.
-test_unresolvable_registry_posture_refused() {
-  local home clone out before status
+# A registry entry the parser refuses resolves to no posture at all, so sync must
+# skip the clone rather than fall back to the default posture: reading a refusal
+# as "no-mistakes" is how a local-only clone would be fetched and fast-forwarded.
+test_unresolvable_registry_posture_skipped() {
+  local home clone out before
   home=$(new_home)
   clone=$(build_pair "$home" omicron)
   advance_origin "$home" omicron C1
@@ -504,17 +423,12 @@ test_unresolvable_registry_posture_refused() {
   printf -- '- omicron [local-only forge=githb] - test project (added 2026-06-27)\n' > "$home/data/projects.md"
 
   out=$(run_sync "$home" "$clone")
-  status=$?
 
-  assert_contains "$out" "omicron: STUCK: cannot read the registered delivery posture" \
-    "a refused registry entry was not reported as a sync refusal"
-  [ "$status" -ne 0 ] || fail "a refused registry entry must make the sync exit non-zero"
+  assert_contains "$out" "omicron: skipped: registry entry does not resolve to a delivery posture" \
+    "a refused registry entry was not reported as a skip"
+  assert_not_contains "$out" "STUCK" "a refused registry entry was escalated to STUCK"
   [ "$(head_sha "$clone")" = "$before" ] || fail "a clone whose registry entry was refused was still fast-forwarded"
-  pass "a clone whose registry entry the parser refuses is refused, never synced on the default posture"
-
-  # Neutralize the registry so no later whole-fleet run over the shared fixture
-  # home inherits this refusal.
-  printf -- '- omicron [local-only] - test project (added 2026-06-27)\n' > "$home/data/projects.md"
+  pass "a clone whose registry entry the parser refuses is skipped, never synced on the default posture"
 }
 
 test_single_project_by_bare_name_resolves() {
@@ -833,125 +747,6 @@ test_non_signature_fetch_failure_is_not_retried() {
   pass "a non-packed-refs.lock fetch failure keeps today's behavior (no retry)"
 }
 
-test_unborn_default_with_empty_origin_is_skipped() {
-  local home clone out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-empty)
-
-  out=$(run_sync "$home" "$clone")
-
-  assert_contains "$out" "unborn-empty: skipped" "unborn clone of an empty origin is a quiet skip"
-  assert_not_contains "$out" "recovered" "empty origin is not labelled recovered"
-  if git -C "$clone" rev-parse --verify --quiet HEAD >/dev/null; then fail "empty-origin clone gained a commit"; fi
-  pass "unborn default with empty origin stays skipped"
-}
-
-test_unborn_default_with_origin_commits_advances() {
-  local home clone out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-ff)
-  push_unborn_origin "$home" unborn-ff
-
-  out=$(run_sync "$home" "$clone")
-
-  assert_contains "$out" "unborn-ff: recovered:" "unborn default is advanced and reported recovered"
-  assert_not_contains "$out" "skipped" "unborn default with origin commits is no longer skipped"
-  [ "$(git -C "$clone" symbolic-ref --short HEAD)" = main ] || fail "clone is not on main"
-  [ "$(head_sha "$clone")" = "$(git -C "$clone" rev-parse origin/main)" ] || fail "clone was not advanced to origin/main"
-  [ "$(cat "$clone/file.txt")" = v0 ] || fail "origin content was not checked out"
-  [ -z "$(git -C "$clone" status --porcelain)" ] || fail "clone is not clean after advance"
-  pass "unborn default advances to origin's default branch"
-}
-
-test_unborn_default_without_origin_head_advances() {
-  local home clone out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-noohead)
-  push_unborn_origin "$home" unborn-noohead
-  git -C "$clone" symbolic-ref --delete refs/remotes/origin/HEAD 2>/dev/null || true
-
-  out=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.followRemoteHEAD GIT_CONFIG_VALUE_0=never \
-    run_sync "$home" "$clone")
-
-  if git -C "$clone" symbolic-ref --quiet refs/remotes/origin/HEAD >/dev/null; then
-    fail "fixture unexpectedly gained origin/HEAD"
-  fi
-  assert_contains "$out" "unborn-noohead: recovered:" "unborn default without origin/HEAD is advanced"
-  [ "$(git -C "$clone" symbolic-ref --short HEAD)" = main ] || fail "clone is not on main"
-  [ "$(head_sha "$clone")" = "$(git -C "$clone" rev-parse origin/main)" ] || fail "clone was not advanced to origin/main"
-  pass "unborn default advances when fetch does not create origin/HEAD (git < 2.48)"
-}
-
-test_unborn_default_with_conflicting_untracked_file_is_untouched() {
-  local home clone out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-dirty)
-  push_unborn_origin "$home" unborn-dirty
-  printf '%s\n' precious > "$clone/file.txt"
-
-  out=$(run_sync "$home" "$clone")
-
-  assert_not_contains "$out" "recovered" "conflicting untracked file blocks the advance"
-  if git -C "$clone" rev-parse --verify --quiet HEAD >/dev/null; then fail "clone advanced over an untracked file"; fi
-  [ "$(cat "$clone/file.txt")" = precious ] || fail "untracked file content was lost"
-  pass "unborn default with a conflicting untracked file is left untouched"
-}
-
-test_unborn_default_with_conflicting_ignored_file_is_untouched() {
-  local home clone out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-ignored)
-  push_unborn_origin "$home" unborn-ignored
-  printf '%s\n' file.txt >> "$clone/.git/info/exclude"
-  printf '%s\n' precious > "$clone/file.txt"
-
-  out=$(run_sync "$home" "$clone")
-
-  assert_contains "$out" "unborn-ignored: skipped: cannot fast-forward unborn main" "ignored file in the way skips with a reason"
-  if git -C "$clone" rev-parse --verify --quiet HEAD >/dev/null; then fail "clone advanced over an ignored file"; fi
-  [ "$(cat "$clone/file.txt")" = precious ] || fail "ignored file content was lost"
-  pass "unborn default with a conflicting ignored file is left untouched"
-}
-
-test_unborn_default_with_ignored_file_at_leading_dir_is_untouched() {
-  local home clone work out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-prefix)
-  work="$home/work-unborn-prefix"
-  mkdir -p "$work/a"
-  commit_file "$work" a/b v0 C0
-  git -C "$work" push -q origin main
-  printf '%s\n' a >> "$clone/.git/info/exclude"
-  printf '%s\n' precious > "$clone/a"
-
-  out=$(run_sync "$home" "$clone")
-
-  assert_contains "$out" "unborn-prefix: skipped: cannot fast-forward unborn main: a already exists" "ignored file at a leading directory skips with a reason"
-  if git -C "$clone" rev-parse --verify --quiet HEAD >/dev/null; then fail "clone advanced over an ignored leading-directory file"; fi
-  [ -f "$clone/a" ] && [ "$(cat "$clone/a")" = precious ] || fail "ignored leading-directory file was lost"
-  pass "unborn default with an ignored file at a leading directory is left untouched"
-}
-
-test_unborn_default_with_existing_ignored_dir_still_advances() {
-  local home clone work out
-  home=$(new_home)
-  clone=$(build_unborn "$home" unborn-dir)
-  work="$home/work-unborn-dir"
-  mkdir -p "$work/a"
-  commit_file "$work" a/b v0 C0
-  git -C "$work" push -q origin main
-  printf '%s\n' a/keep >> "$clone/.git/info/exclude"
-  mkdir -p "$clone/a"
-  printf '%s\n' kept > "$clone/a/keep"
-
-  out=$(run_sync "$home" "$clone")
-
-  assert_contains "$out" "unborn-dir: recovered: created main from origin/main (was unborn)" "existing directory on a tree path does not block"
-  [ "$(cat "$clone/a/b")" = v0 ] || fail "origin file not checked out"
-  [ "$(cat "$clone/a/keep")" = kept ] || fail "ignored file inside directory was lost"
-  pass "unborn default with an existing directory on a tree path advances"
-}
-
 test_detached_clean_ancestor_recovers
 test_detached_unique_commit_is_stuck_untouched
 test_detached_clean_ancestor_with_diverged_local_default_is_stuck_untouched
@@ -962,8 +757,7 @@ test_on_default_clean_behind_fast_forwards
 test_already_current_unchanged
 test_no_origin_skipped
 test_local_only_skipped
-test_mistyped_annotation_refuses_sync
-test_unresolvable_registry_posture_refused
+test_unresolvable_registry_posture_skipped
 test_single_project_by_bare_name_resolves
 test_single_project_by_bare_name_ignores_cwd_shadow
 test_single_project_by_projects_relative_name_resolves
@@ -980,10 +774,3 @@ test_non_clone_dir_never_syncs_the_enclosing_repo
 test_non_clone_dir_named_directly_never_syncs_the_enclosing_repo
 test_symlinked_clone_still_syncs
 test_clone_root_named_by_another_spelling_still_syncs
-test_unborn_default_with_empty_origin_is_skipped
-test_unborn_default_with_origin_commits_advances
-test_unborn_default_without_origin_head_advances
-test_unborn_default_with_conflicting_untracked_file_is_untouched
-test_unborn_default_with_conflicting_ignored_file_is_untouched
-test_unborn_default_with_ignored_file_at_leading_dir_is_untouched
-test_unborn_default_with_existing_ignored_dir_still_advances

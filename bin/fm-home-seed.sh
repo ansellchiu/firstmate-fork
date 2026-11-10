@@ -456,41 +456,29 @@ EOF
   return 1
 }
 
-# Read one project's registered delivery posture through fm-project-mode.sh and
-# print the mode word, or fail loudly: a read that exits non-zero - a mistyped
-# +annotation, say - refuses the seed rather than answering with an empty mode
-# that would silently pass the local-only guard. The first two arguments are the
-# FM_HOME and FM_DATA_OVERRIDE values the caller wants the reader to run under,
-# so parent-registry reads (clone/validate) and sub-home-registry reads (init)
-# keep their exact existing registry sources. The indented reader error names
-# the registry file and the bad annotation.
-project_delivery_mode() {  # <fm-home> <fm-data-override ('' = inherit fm-home/data)> <project>
-  local home=$1 data_ovr=$2 project=$3 mode_line mode err
-  err=$(mktemp "${TMPDIR:-/tmp}/fm-home-seed-pmode.XXXXXX")
-  if mode_line=$(FM_ROOT_OVERRIDE='' FM_STATE_OVERRIDE='' FM_PROJECTS_OVERRIDE='' FM_CONFIG_OVERRIDE='' \
-    FM_HOME="$home" FM_DATA_OVERRIDE="$data_ovr" "$FM_ROOT/bin/fm-project-mode.sh" "$project" 2>"$err") && [ -n "$mode_line" ]; then
-    rm -f "$err"
-    read -r mode _ <<EOF
-$mode_line
-EOF
-    printf '%s\n' "$mode"
-    return 0
-  fi
-  {
-    echo "error: home seeding cannot read the registered delivery posture for $project: project $project does not resolve to a delivery posture; refusing the seed until the registry line is fixed:"
-    sed 's/^/  /' "$err"
-  } >&2
-  rm -f "$err"
-  return 1
+# Single reader of a project's registered posture for seeding. It prints the
+# parser's "<mode> <yolo>" line, and fails when bin/fm-project-mode.sh
+# refuses the registry entry, so a posture the fleet cannot resolve stops the
+# seed instead of arriving as an empty mode that passes every posture guard.
+registered_posture_line() {  # <project>
+  local project=$1 line
+  line=$(FM_HOME="$FM_HOME" FM_DATA_OVERRIDE="$DATA" "$FM_ROOT/bin/fm-project-mode.sh" "$project") || {
+    echo "error: project $project does not resolve to a delivery posture (see the refusal above); correct $DATA/projects.md" >&2
+    return 1
+  }
+  printf '%s\n' "$line"
 }
 
 clone_project() {
-  local project=$1 home=$2 src dst url dst_url mode
+  local project=$1 home=$2 src dst url dst_url mode mode_line
   src="$PROJECTS/$project"
   dst=$(validate_project_destination "$home" "$project") || return 1
   [ -d "$src" ] || { echo "error: project $project not found at $src" >&2; return 1; }
   git -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "error: project $project is not a git repo" >&2; return 1; }
-  mode=$(project_delivery_mode "$FM_HOME" "$DATA" "$project") || return 1
+  mode_line=$(registered_posture_line "$project") || return 1
+  read -r mode _ <<EOF
+$mode_line
+EOF
   if [ "$mode" = local-only ]; then
     echo "error: project $project is local-only; secondmate routes support only no-mistakes and direct-PR projects" >&2
     return 1
@@ -511,11 +499,14 @@ clone_project() {
 }
 
 validate_seed_project() {
-  local project=$1 src mode url
+  local project=$1 src mode url mode_line
   src="$PROJECTS/$project"
   [ -d "$src" ] || { echo "error: project $project not found at $src" >&2; return 1; }
   git -C "$src" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "error: project $project is not a git repo" >&2; return 1; }
-  mode=$(project_delivery_mode "$FM_HOME" "$DATA" "$project") || return 1
+  mode_line=$(registered_posture_line "$project") || return 1
+  read -r mode _ <<EOF
+$mode_line
+EOF
   if [ "$mode" = local-only ]; then
     echo "error: project $project is local-only; secondmate routes support only no-mistakes and direct-PR projects" >&2
     return 1
@@ -709,8 +700,14 @@ registry_line_for_project() {
 }
 
 project_mode_in_home() {
-  local home=$1 project=$2 mode
-  mode=$(project_delivery_mode "$home" '' "$project") || return 1
+  local home=$1 project=$2 mode mode_line
+  mode_line=$(FM_ROOT_OVERRIDE='' FM_STATE_OVERRIDE='' FM_DATA_OVERRIDE='' FM_PROJECTS_OVERRIDE='' FM_CONFIG_OVERRIDE='' FM_HOME="$home" "$FM_ROOT/bin/fm-project-mode.sh" "$project") || {
+    echo "error: project $project does not resolve to a delivery posture in $home (see the refusal above); correct $home/data/projects.md" >&2
+    return 1
+  }
+  read -r mode _ <<EOF
+$mode_line
+EOF
   printf '%s\n' "$mode"
 }
 
@@ -741,8 +738,6 @@ sync_project_registry() {
 
 initialize_no_mistakes_project() {
   local home=$1 project=$2 created=$3 mode dst
-  # An unreadable posture is a refusal, not a skip: defaulting away from
-  # no-mistakes here would silently skip initializing a pipeline project.
   mode=$(project_mode_in_home "$home" "$project") || return 1
   [ "$mode" = no-mistakes ] || return 0
   dst=$(validate_project_destination "$home" "$project") || return 1

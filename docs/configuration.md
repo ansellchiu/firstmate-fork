@@ -103,7 +103,7 @@ Each effective `FM_HOME` contains private operational directories.
 - Task metadata, append-only status events, and endpoint signals.
 - Watcher and wake-queue coordination, away-mode state, and generated Relay artifacts.
 - Inactive terminal-outcome receipts under `state/terminal-outcomes/`.
-- Enabled extension working namespaces and opt-in Pi extension records under `state/extensions/`.
+- Enabled extension working namespaces under `state/extensions/`.
 - Parent-side remote ledger copies under `state/secondmate-summary-cache/`.
 - One-shot Bearings reconcile requests under `state/reconcile-notify/`.
 - Private secondmate config-reread generations with their retry and quarantine state.
@@ -273,28 +273,7 @@ While away, the entry is saved, but processing waits until the away-posture reco
 The branch prompt's "Verdict: routine or captain" section owns the distinction between captain-facing, unsolicited routine, and unchanged-review outcomes.
 
 The generated [Pi supervision protocol](supervision-protocols/pi.md) owns main's event ownership, acknowledgement duty, and conversational treatment for merged outcomes, while the persisted entry itself owns captain visibility.
-A task-level routine no-change outcome or a no-change heartbeat explicitly reported with `silent=true` is delivered without a rendered note; the branch prompt owns task-level eligibility, and every other routine outcome still appends a rendered, sailboat-prefixed note unless it repeats a fact the captain has already read: an unchanged routine fact about one task is stored every time but presented once per `FM_BRANCH_OUTCOME_DEDUPE_WINDOW` window, and [docs/pi-supervision-branch.md](pi-supervision-branch.md) "Repeat suppression" owns that boundary.
-
-## Pi idle observer (config/pi-auto-afk)
-
-A Pi primary can notice that nothing has reached its terminal for a long time and run a short countdown toward the away posture.
-This home-local, gitignored toggle arms only the observing half of that: the value `observe`, alone on the line, turns it on, and an absent file or any other value leaves the session exactly as it is today.
-It is not inherited into secondmate homes.
-The toggle takes effect at the next Pi session: the value is read when the session subscribes its raw terminal listener, and the observer never arms without that listener, so a value written mid-session cannot produce a countdown only a submitted message could cancel.
-Taking it away is immediate in the safe direction: the file is re-read every time the observer acts, so an armed session stands down at its next byte or timer wakeup.
-
-The observer watches, reports, and stops there.
-It never writes `state/.afk-contract` or the legacy `state/.afk`, never calls the away-posture scripts or the `/afk` path, and never sends the model a message.
-The reason is what the signal can and cannot say: Pi reports that input arrived through the interactive terminal, not that a human typed it, and it cannot see the captain working in another window.
-So the countdown reaching zero is evidence that the captain is ABSENT, while the away posture requires their CONSENT - the read-back of their own away words that [`bin/fm-afk-contract.sh`](../bin/fm-afk-contract.sh) confirms - and absence is not consent.
-Automatic entry would need a captain product decision that adds an explicit advance-consent grant and a new validated transition in that record owner; until then this toggle cannot produce one.
-
-Lock ownership and away state are re-checked whenever the observer acts rather than sampled at session start, so a session that takes the home lock or returns from the away posture mid-session picks the observer up without a restart.
-
-While armed on a TUI Pi session that holds this home's fleet lock, is not a secondmate home, and has no away posture, legacy flag, or unfinished return in progress, the observer waits 1,740 seconds with no observed Pi-local input, then shows a 60-second countdown in the Pi status bar.
-Any nonempty byte reaching the terminal cancels it and is returned to Pi unchanged, as does a submitted interactive message that arrived without one; Firstmate's own `pi.sendUserMessage` traffic is reported as extension-sourced and deliberately does not count as the captain.
-Countdown starts, cancellations with their remaining seconds, and would-have-entered expiries append one line each to `state/.pi-auto-afk-observations`, which is the prototype's whole output - it exists so a real week of use can answer how often terminal replies or other processes writing to the terminal cancel the countdown falsely.
-[`.pi/extensions/fm-pi-auto-afk-observe.ts`](../.pi/extensions/fm-pi-auto-afk-observe.ts) owns the detection, the gates, and that consent boundary, and [`tests/fm-pi-auto-afk-observe.test.sh`](../tests/fm-pi-auto-afk-observe.test.sh) is its regression test.
+A task-level routine no-change outcome or a no-change heartbeat explicitly reported with `silent=true` is delivered without a rendered note; the branch prompt owns task-level eligibility, and every other routine outcome still appends a rendered, sailboat-prefixed note.
 
 ## Pi supervision branch model and effort (config/supervision-branch-model, config/supervision-branch-effort)
 
@@ -825,7 +804,7 @@ Role is never inferred from GitHub identity, forge permissions, remotes, reposit
 `bin/fm-role.sh report` prints the resolved role with no network call, and the session-start digest shows it in the HOME ROLE subsection.
 
 `bin/fm-role-lib.sh` owns the fail-closed parser, self-repository detection, and the gate that `bin/fm-brief.sh`, `bin/fm-spawn.sh`, and `bin/fm-promote.sh` apply.
-The publication target is selected from the first configured remote whose `remote.<name>.gh-resolved` value is exactly `base`, including custom remote names, otherwise from `remote.pushDefault`, then the current branch's configured remote (`branch.<name>.remote`), then `origin`, `github`, `upstream`; selection is offline, and `bin/fm-role-lib.sh` owns URL and local-path normalization.
+The publication target is selected from the first configured remote whose `remote.<name>.gh-resolved` value is exactly `base`, including custom remote names, otherwise from the first configured remote in the order `upstream`, `github`, `origin`; selection is offline, and `bin/fm-role-lib.sh` owns URL and local-path normalization.
 An unreadable or URL-less marked remote is not replaced by a fallback remote, and an undeterminable target never authorizes a task, even under task consent.
 A task's project counts as the firstmate repository when it shares the code root's lineage - the same git common dir, or a root commit of the code root's history, which every fork, the parent, and any clone of either share - computed offline; undeterminable lineage (for example a shallow clone sharing no root commit) is refused, even under task consent.
 Secondmate homes inherit the primary's resolved role, never its raw file: a primary file that resolves to user for any reason propagates as revocation.
@@ -1352,8 +1331,6 @@ On Zellij, cmux, Orca, Paseo, and tern a typed-plane Cursor send (a harness-nati
 
 muse is verified for crewmate and scout launches ONLY, and `fm-spawn.sh` refuses it for a secondmate, because muse ships no usable hook surface for a primary session's turn-end supervision; [`docs/verification/muse.md`](verification/muse.md) owns that evidence.
 muse also needs a worker-reachable credential before spawning, and the portable fleet path is the `<config>/muse/auth.json` credential stored by `muse login`, because a caller-only `META_API_KEY` does not cross a long-lived backend daemon.
-agy (Antigravity CLI, Google's Gemini CLI) is verified for crewmate and scout launches and lifecycle control ONLY and refused for a secondmate, the same carve-out as muse.
-Its busy-state source remains unverified, so a spawned agy task still classifies `unknown agy-unverified`; interrupt and exit are verified through Herdr's native agy registration, while tmux still refuses because it cannot attribute the agy process and Zellij, Orca, and cmux cannot prove the stop postcondition; [`.agents/skills/harness-adapters/SKILL.md`](../.agents/skills/harness-adapters/SKILL.md) owns that evidence.
 
 gemini is likewise refused for secondmates because it has no primary supervision protocol; [its adapter reference](../.agents/skills/harness-adapters/references/harness/gemini.md) owns the credential precondition, canonical-launch wiring, and raw-launch limitations.
 rovo is likewise verified for crewmate and scout launches ONLY, refused for a secondmate for the same reason - no turn-end hook and no primary supervision protocol; [`docs/verification/rovo.md`](verification/rovo.md) owns that evidence, including the OAuth token's silent background refresh from a stored refresh token and both tmux and herdr pane liveness (herdr placement is verified live, with a Herdr-side agent-detection gap left open for recovery classification).
@@ -2495,7 +2472,7 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 
 **Repeat reporting and inheritance**
 
-- The check prints nothing when everything is current, and `state/.tool-updates` records the keys the last report was made from, so the same pending update is reported once instead of on every poll; a git source is keyed on the tool and its behind condition, never on the moving upstream sha or commit count.
+- The check prints nothing when everything is current, and `state/.tool-updates` records the findings the last report was made from so the same pending update is reported once instead of on every poll.
 - A changed or returning condition is reported again.
 - Adding, removing, or changing a watched tool is an edit to this file and needs no code change or re-arming.
 - This file is not inherited by secondmate homes, so each home watches the tools it actually depends on.
@@ -3055,23 +3032,12 @@ The Lavish version floors and feature probe are owned by `bin/fm-bootstrap.sh`.
 - The cross-home gap between worker rounds remains an accepted residual until lavish-axi's exclusive listener lands.
 - The interim crew instruction emitted by `bin/fm-brief.sh` points workers at this arm-and-acknowledge contract.
 
-**Watch fleet infrastructure health**
-
-The fleet-health adapter (`bin/fm-procevent-fleet-health.sh`) watches the infrastructure the fleet's own work runs on and wakes firstmate only when that infrastructure changes state.
-Arm it with `bin/fm-procevent-fleet-health.sh arm --repo <owner/name> [--repo ...] [--host <ssh-host>] [--interval <secs>] [--confirm <n>]`, where each `--repo` is a repository whose GitHub Actions runner registration must stay online, and `--host` is the SSH host name of the box those runners run on, which is what tells a dead box apart from a dead runner and is what the kernel-log OOM check reads.
-A watch with no `--host` does the runner checks alone.
-`--interval` (default 60) is how long the blocking poll waits between evaluations, and `--confirm` (default 2) is how many consecutive evaluations must agree before a change is announced, so one API blip or dropped connection does not open and close an episode.
-The announced health is recorded in this home's `state/fleet-health.state`, so one outage produces one wake and its recovery produces one more however long the outage lasts, and a restart mid-outage stays quiet rather than re-announcing it.
-The adapter records that health but never acknowledges its own capture, so the transition stays eligible for re-announcement on every reconcile until the handler records it with `bin/fm-procevent.sh handled`, and a wake that is published but never acted on is not lost.
-The script's header owns the exact watched conditions and the rest of its behaviour.
-
 **Register deterministic condition and action watches**
 
 The `when` adapter (`bin/fm-procevent-when.sh`) registers a deterministic condition and action once.
 Its blocking child polls the condition without waking firstmate.
 A stable true fires the action at most once.
 One terminal outcome is then durably captured and published as a wake, which remains eligible for re-announcement until handled.
-
 
 The (condition, action) spec is stored privately under `state/when/` and hash-bound by a trust record the same way `bin/fm-check-register.sh` binds a custom check, while the spec separately binds the resolved action executable's bytes; a mutated or unregistered spec or a changed action executable is refused before the action runs, and that binding is reloaded from disk immediately before each fire rather than trusted from when polling started.
 A repo update that fast-forwards an in-repo action's bytes in place would otherwise desync every already-armed watch's trust binding with no tampering involved; `bin/fm-procevent-when.sh rebind-all` re-hashes and republishes the binding for every registered watch whose action lives under `FM_ROOT`, including one already polling, so it keeps firing across such an update instead of being refused on its next fire.
@@ -3374,12 +3340,6 @@ The runner proves exactly one durability boundary: output that reached the runne
 
 `docs/verification/process-event-sources.md` holds the measurements and `.agents/skills/process-event-sources/SKILL.md` owns the handling procedure.
 
-## Discord spike (config/discord-*)
-
-The two-week Discord spike is off until this home writes its settings, and [`discord-spike.md`](discord-spike.md) owns them, the setup, the content boundary, and the exit.
-`config/discord-webhook` is what the outbound half needs; `config/discord-bot-token`, `config/discord-channel`, and `config/discord-captain` are what the inbound half needs.
-The two secrets are bearer-equivalent, are read only from this home's gitignored `config/` or the matching environment variable, and refuse with the path to write rather than the value when they are absent.
-
 ## Spoken interface and captain inbox (config/voice-*, config/inbox-*)
 
 The spoken interface in [`docs/voice-relay.md`](voice-relay.md) and the model-backed subcommands of `bin/fm-inbox.sh` reach a paid API in a named account, so no region, model id or AWS profile is shipped as a tracked default.
@@ -3451,7 +3411,7 @@ FM_BACKEND_TERN_SUBMIT_MIN_SLEEP=0.6  # tern-only: minimum per-Enter confirmatio
 CMUX_SOCKET_PASSWORD=   # cmux-only: socket password fallback when config/cmux-socket-password is absent (docs/cmux-backend.md)
 FM_SESSION_START_STATUS_TAIL=2   # state/*.status lines printed per task in the session-start digest; each line is capped by bin/fm-line-cap-lib.sh
 FM_SESSION_START_BUDGET_WORK=10240   # byte ceiling for the session-start digest's work-under-way section (meta records, endpoint reads, status tails); invalid or zero values fall back to 10240; an overflow prints the omitted-task count plus a recovery command
-FM_SESSION_START_QUEUED_LIMIT=20   # plain queued backlog rows in the session-start digest; in-flight, held, and blocked rows are never count-bounded (only the digest's backlog byte ceiling applies) and done rows are never listed
+FM_SESSION_START_QUEUED_LIMIT=20   # plain queued backlog rows in the session-start digest; in-flight, held, and blocked rows are never bounded and done rows are never listed
 FM_SESSION_START_ENDPOINT_TIMEOUT=10   # seconds bounding each per-task endpoint liveness read in the session-start digest (bin/fm-session-start.sh); nonpositive or invalid values fall back to 10; a read that hits the bound or dies becomes that task's own `endpoint: error` line and the digest continues
 FM_BACKLOG_ROW_TIMEOUT_SECS=10   # seconds bounding each backlog row read (bin/fm-backlog-transition-lib.sh) and the tasks-axi replay of each captain-hold Done-archive row (bin/fm-captain-hold.sh, which stops with 124 on a replay timeout); the archive scan itself is not bounded; nonpositive or invalid values fall back to 10; the first backlog read bound hit latches the sweep so later reads return immediately, each still naming its own item
 FM_BOOTSTRAP_DETECT_ONLY=0   # internal/read-only session-start mode: skip bootstrap's mutating sweeps and print advisory TANGLE wording
@@ -3464,12 +3424,6 @@ FM_TASKS_AXI_CHECK_REASON=   # internal one-hop handoff of the reason behind tha
 FM_GUARD_READ_ONLY=0    # internal/read-only guard mode: keep alarms but suppress drain, supervision repair, and checkout repair commands
 FM_GUARD_CONTINUE_LINE='This is a supervision warning only; the guarded operation WILL still run.'   # banner continuation line; fm-send.sh overrides it to name the requested message specifically
 FM_POLL=15              # seconds between watcher poll cycles
-FM_LOAD_ALARM_MULTIPLE=4   # machine-load backstop: the watcher wakes firstmate once per episode when BOTH the one- and five-minute load averages reach cores x this value for FM_LOAD_ALARM_POLLS consecutive polls; `off` disables it, and any other invalid value uses 4. It only sees a leak's aftermath; the specific, always-on signal is an orphaned shell (ppid 1) matching the FM_ORPHAN_* thresholds below on two consecutive polls. Both surface and attribute the hungriest processes and never kill anything (docs/worker-process-leak-rca.md)
-FM_LOAD_ALARM_POLLS=12     # consecutive overloaded polls (about 3 minutes at the default FM_POLL) before the load backstop wakes; invalid values use 12
-FM_ORPHAN_MIN_AGE=180      # orphaned-shell guard, cumulative path: seconds an orphaned shell must have been alive; invalid values use 180
-FM_ORPHAN_MIN_CPU=10       # orphaned-shell guard, cumulative path: seconds of the shell's own cumulative CPU (ps `time`); invalid values use 10
-FM_ORPHAN_MIN_RATIO=0.02   # orphaned-shell guard, cumulative path: cumulative CPU / lifetime, which separates a spinner (its received share, ~0.05 even at load 237) from a mostly-sleeping daemonized shell; invalid values use 0.02
-FM_ORPHAN_FAST_PCPU=20     # orphaned-shell guard, secondary fast path: instantaneous percent of one core that alarms sooner on a quiet machine; never the only way in; invalid values use 20
 FM_HOME_SUMMARY_INTERVAL=300   # seconds before a live watcher refreshes this home's state/home-summary.json even without a status signal; invalid or zero values use 300
 FM_HOME_SUMMARY_TIMEOUT=60     # seconds bounding the complete best-effort home-summary refresh, including lock acquisition, validation, atomic publication, and worker-side failure logging; invalid or zero values use 60
 FM_HOME_SUMMARY_ERROR_LOG_MAX_BYTES=65536   # approximate size cap for state/.home-summary-refresh.log before it is trimmed to the newest 200 lines; invalid or zero values use 65536
@@ -3535,7 +3489,6 @@ FMX_FOLLOWUP_MAX_COUNT=3   # local cap on Relay completion follow-ups per linked
 FM_PF_RETRY_BACKOFF_SECS=900   # seconds before the next attempt after a retryable promised-public-reply delivery error
 FM_LOCK_STALE_AFTER=2   # grace seconds for missing or nonnumeric lock-owner PIDs (minimum 2s); dead numeric PIDs, and live ones whose start time (or, for the watch lock, process identity) no longer matches the holder's recorded value, have no age grace
 FM_GUARD_GRACE=300      # beacon freshness threshold for guard verdicts, arm health checks, and the primary turn-end guard; see docs/turnend-guard.md for model-aware exceptions
-FM_PR_ASSIGN_CAPTAIN=1  # fm-pr-check.sh assigns a registered GitHub PR to the authenticated account; 0 declines that edit, as fm-pr-merge.sh does when it records metadata for a PR it is about to merge
 FM_CLAUDE_AUTOARM_ATTEMPTS=2   # bounded Stop-owned arm attempts per Claude auto-arm cycle; accepted values are 1, 2, or 3
 FM_CLAUDE_AUTOARM_SYNC_WAIT_MS=800   # milliseconds the --claude turn-end guard waits for watcher health, an open Stop auto-arm generation claim, or a fresh epoch before deciding recovery ownership or failure progression
 FM_CLAUDE_AUTOARM_EPOCH_FRESH=15   # seconds a recorded auto-arm outcome remains eligible for the current event epoch's recovery or failure decision

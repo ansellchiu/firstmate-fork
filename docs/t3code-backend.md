@@ -9,6 +9,7 @@ Firstmate drives the server only through its Orchestrator V2 `/mcp` endpoint, si
 
 Pick T3 Code when you already run the T3 Code app and want each task to be a visible T3 thread working in a Treehouse worktree, and each secondmate a visible T3 thread working in its own home.
 T3 Code runs only the `claude` and `codex` harnesses; every other harness, and a raw launch command, is refused at spawn.
+An extension `launch-wrap` prefix is refused at spawn too, before anything is leased, because T3 starts the agent itself and could not run the wrapper.
 
 Prerequisites:
 

@@ -40,18 +40,6 @@ It does not replace the reasoning-class, runway-feasibility, or authentication g
 Firstmate can optionally arm `bin/fm-procevent-quota.sh` for a recurring mid-task check that wakes when the tracked provider drops below its configured threshold or its runway becomes `exhausted_now`.
 The opt-in [typed resolver](../../../docs/configuration.md#typed-dispatch-resolution-env-fm_dispatch_provider-fm_dispatch_model) has its own documented gates.
 It never removes this skill's authority, and its `ambiguous`, `escalate`, and `error` outcomes return here.
-`quota-axi`'s provider set is compiled in, so a candidate whose provider it does not report is unmetered rather than exhausted; run `bin/fm-quota-unmetered.sh` once per intake alongside that snapshot when a candidate sits on one of those providers, and read its schema-compatible records the same way.
-
-## Claude account list
-
-When the home declares `config/claude-accounts`, each Claude candidate is one candidate per declared account, and the spawn needs the chosen account as `--account <entry>`.
-Measure them with `bin/fm-claude-account-quota.sh [--model <model>]` instead of the default TOON's single `claude` row, which reads only the ambient account; its header owns the per-account read and output.
-It prints data only, never a choice: each account's applicable scopes and any uncertainty it could not measure.
-Apply the three gates below to each account's rows, taking a projected runway's time from the row's own `usableRunwaySeconds`, rank the eligible ones by their limiting scope's `spendPriority` exactly as for profiles, and pass the chosen entry as `--account <entry>`.
-A genuine tie or no rankable account is the same terminal case as below: decide in the open from the rows or ask the captain, never by file order.
-Account for every declared account in the rationale, including unmeasured ones.
-A typed-resolver `clear` profile for Claude still needs this step's `--account`.
-The account is chosen once, at intake: a relaunch keeps the recorded one, and only an explicit `--account` relaunch moves a task ([`docs/configuration.md`](../../../docs/configuration.md#several-claude-accounts-configclaude-accounts) owns the contract).
 
 ## Claude account list
 
@@ -74,7 +62,6 @@ Sparse `attention[]` names auth, stale, and unmeasurable facts.
 `spendPriority` is THE quota-perspective ranker.
 It already computes the economics that older instructions reconstructed by hand from headroom, pace, reserve, and window-id lists; do not recompute those.
 Do not read `--json` on the normal path, and do not reach for `--full` to rebuild that economics.
-DeepSeek reports `credits` with no windows for the same reason: it publishes no usage window at all, so its quota is genuinely unknown and its balance is never headroom.
 
 After reading the TOON, fall back to one `quota-axi --json` call only when that TOON is genuinely ambiguous for the decision, or when the installed quota-axi is somehow below the floor so its TOON lacks `spendPriority`.
 Ambiguous means a candidate's `spendPriority` is the literal `unknown` or unmeasurable, a real tie still needs extra evidence, or a candidate's eligibility is unclear from `quota[]` plus `attention[]`.
@@ -113,9 +100,6 @@ Uncertainty and ineligibility are different findings:
 
 - No model-level window, no matching auth source, an unmeasurable or `unknown` scope, or a surface quota-axi does not model at all is disclosed uncertainty.
   Keep the candidate eligible, state the unknown, and prefer known viable evidence when otherwise comparable.
-- An `unresolved_windows` entry in `attention[]` for the candidate's provider is not a healthy scope row, so never read the row as healthy.
-  Read the raw windows with `quota-axi --provider <p> --full --json` and gate on the unresolved window's own percent remaining.
-  When it cannot be read, dispatch one probe worker, read the window again after about 15 minutes, compute points per worker-hour, record that rate for the lane with the date in `data/lane-burn-rates.md`, and only then admit more workers under the batch rules below.
 - An expired credential is a short-lived session token the owning vendor renews on next use, not a sign-out.
 - Only concrete contradictory evidence blocks: an authoritative catalog proving the model unsupported, or proof that the credential the candidate actually selects is unusable.
 - Reserve login wording for that proven-unusable case, and name the harness, model, surface, and evidence.
@@ -142,25 +126,6 @@ Read `runway` from the `quota[]` row: `through_reset` passes this generic feasib
 A high `spendPriority` on a nearly empty window that will exhaust soon must not route into a mid-task stall.
 Unknown or unmeasurable runway stays eligible with disclosed uncertainty and is never assumed to pass.
 Do not invent a generic percentage floor, and honor an explicit captain floor for a candidate when one exists.
-
-## Batch dispatch
-
-This section applies to dispatching or relaunching three or more workers in one turn, including a captain's model suggestion for the group and a relaunch that skips the intake gates above.
-Before any spawn or relaunch, write one line per lane: workers x expected hours x the lane's burn rate (percentage points of its limiting window per worker-hour) = projected points.
-Take the burn rate from `data/lane-burn-rates.md`; when the lane has none, use 25 points per worker-hour and mark it a guess.
-Expected hours default to 2 per ship and 1 per scout until measured.
-Admit the batch to a lane only when its projected points are at most half of that lane's limiting-window percent remaining; spread the rest to the next eligible lane.
-No lane takes more than two workers or half the batch, whichever is larger, unless its limiting window is `through_reset` with at least 60% remaining.
-State the resulting split in one line.
-In a home that declares `"shared_quota": true`, the quota-derived parts of these batch rules (lane percent-remaining reads, raw-window probes, and the unmeasured-window trigger) are off by home declaration, exactly as in the [Shared-quota opt-out](#shared-quota-opt-out); the lane concentration cap and the stop-and-ask trigger still apply.
-
-Stop and give the captain the one-line estimate and split before dispatching when any of these holds:
-
-- The batch's projected burn on any lane exceeds 70% of that lane's limiting window remaining.
-- The lane has an unresolved or unmeasured weekly window and the batch is larger than one worker.
-- The lane is outside the matched rule and the batch is larger than two.
-
-Otherwise state the split and proceed.
 
 ## Rank by spendPriority
 

@@ -21,8 +21,16 @@
 #     actually ran: a comparison that could not run answers nothing, so it
 #     never contradicts the claim;
 #   - UNCOVERED DRIFT - a CONTENDED path (changed by both sides since they
-#     diverged, and still differing between them) that no entry claims. That set
-#     comes from git, not from the file, so a missing entry cannot stay quiet.
+#     diverged, and still differing between them) that no active entry claims.
+#     That set comes from git, not from the file, so a missing entry cannot stay
+#     quiet.
+# A `parked` entry records private behavior deliberately removed in favor of
+# upstream: its required `parkedAt` names the last commit that still carried it,
+# so a later restore is a cherry-pick from there. A parked entry is a resting
+# state, not a finding: it reports `parked: restore from <sha>` without raising
+# attention, skips the stale-path and upstream-review checks its removed paths
+# would trip, and claims no contended path, so leftover drift on a parked path
+# still surfaces as uncovered.
 # Everything except a missing or schema-invalid inventory is REPORTED, never
 # dropped: those findings exit 0 with `inventory: attention` so the caller
 # surfaces them.
@@ -50,6 +58,7 @@
 #   inventory: ok|attention
 #   inventory-entries: <n>
 #   inventory-entry: <id> <status>[: <detail>]
+#   inventory-entry: <id> parked: restore from <parkedAt>
 #   inventory-drift: compared <base>..<head> vs <base>..<upstream>|unavailable: <reason>
 #   inventory-contended: <path>
 #   inventory-uncovered: <path>
@@ -74,7 +83,7 @@ from pathlib import Path
 ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 UPSTREAM_EQUIVALENT = ("none", "partial", "present", "unknown")
-DISPOSITIONS = ("retain", "superseded", "needs-review")
+DISPOSITIONS = ("retain", "superseded", "needs-review", "parked")
 REQUIRED = ("id", "area", "paths", "intent", "provenance", "upstreamEquivalent", "disposition")
 
 
@@ -136,6 +145,12 @@ def validate(data: object, source: Path) -> list[dict]:
             raise SchemaError(
                 f"entry {entry_id} provenance.commits must be a non-empty list of commit shas"
             )
+        parked_at = entry.get("parkedAt")
+        if entry["disposition"] == "parked":
+            if not (isinstance(parked_at, str) and SHA_RE.match(parked_at)):
+                raise SchemaError(f"entry {entry_id} is parked but parkedAt is not a commit sha")
+        elif parked_at is not None:
+            raise SchemaError(f"entry {entry_id} has parkedAt but its disposition is not parked")
         reviewed = entry.get("upstreamReviewedAt")
         if reviewed is not None and not (isinstance(reviewed, str) and SHA_RE.match(reviewed)):
             raise SchemaError(f"entry {entry_id} upstreamReviewedAt must be a commit sha")
@@ -277,6 +292,13 @@ def main() -> int:
     for entry in entries:
         entry_id = entry["id"]
         statuses: list[str] = []
+        if entry["disposition"] == "parked":
+            parked_at = entry["parkedAt"]
+            if is_repo and git(root, "cat-file", "-e", f"{parked_at}^{{commit}}")[0] != 0:
+                attention = True
+                lines.append(f"inventory-entry: {entry_id} unresolved-parked-at: {parked_at}")
+            lines.append(f"inventory-entry: {entry_id} parked: restore from {parked_at}")
+            continue
         if is_repo:
             stale = [p for p in entry["paths"] if not git(root, "ls-files", "--", p)[1]]
             if stale:
@@ -312,7 +334,8 @@ def main() -> int:
             lines.append(f"inventory-entry: {entry_id} ok")
 
     lines.append(drift)
-    uncovered = [p for p in contended if not any(claims(e, p) for e in entries)]
+    active = [e for e in entries if e["disposition"] != "parked"]
+    uncovered = [p for p in contended if not any(claims(e, p) for e in active)]
     lines.extend(f"inventory-contended: {p}" for p in contended)
     lines.extend(f"inventory-uncovered: {p}" for p in uncovered)
     lines.append(f"inventory-uncovered-count: {len(uncovered)}")

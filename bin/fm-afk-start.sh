@@ -78,24 +78,51 @@ fm_afk_clear_stale_artifacts() {  # <state-dir>
   rm -f "$state/.subsuper-escalations" \
         "$state/.subsuper-escalations.since" \
         "$state/.subsuper-inject-wedged" \
-        "$state/.subsuper-inject-wedged.count" \
         "$state/.subsuper-unknown-acked" 2>/dev/null
 }
 
 daemon_lock_owner() {
-  fm_daemon_lock_owner "$FM_AFK_STATE"
+  local owner
+  if [ -L "$FM_AFK_LOCK" ]; then
+    owner=$(readlink "$FM_AFK_LOCK" 2>/dev/null) || return 1
+    [ -n "$owner" ] || return 1
+    case "$owner" in
+      /*) printf '%s\n' "$owner" ;;
+      *) printf '%s/%s\n' "$(dirname "$FM_AFK_LOCK")" "$owner" ;;
+    esac
+    return 0
+  fi
+  [ -d "$FM_AFK_LOCK" ] || return 1
+  printf '%s\n' "$FM_AFK_LOCK"
 }
 
 daemon_pid_matches() {
-  fm_daemon_pid_matches "$1" "$2"
+  local pid=$1 owner=$2 identity current command
+  identity=$(cat "$owner/pid-identity" 2>/dev/null || true)
+  if [ -n "$identity" ]; then
+    current=$(fm_pid_identity "$pid") || return 1
+    [ "$current" = "$identity" ]
+    return
+  fi
+  command=$(ps -p "$pid" -o command= 2>/dev/null || true)
+  case "$command" in
+    *"$FM_AFK_DAEMON"*|*"fm-supervise-daemon.sh"*) return 0 ;;
+  esac
+  return 1
 }
 
 daemon_lock_pid() {
-  fm_daemon_lock_pid "$FM_AFK_STATE"
+  local owner
+  owner=$(daemon_lock_owner) || return 1
+  cat "$owner/pid" 2>/dev/null || true
 }
 
 daemon_lock_held_by_live_daemon() {
-  fm_daemon_lock_held "$FM_AFK_STATE"
+  local owner pid
+  owner=$(daemon_lock_owner) || return 1
+  pid=$(cat "$owner/pid" 2>/dev/null || true)
+  fm_pid_alive "$pid" || return 1
+  daemon_pid_matches "$pid" "$owner"
 }
 
 fm_afk_flag_write() {  # <state-dir> [mode]

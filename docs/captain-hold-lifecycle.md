@@ -92,7 +92,7 @@ It requires a non-empty captain decision file of at most 8192 bytes.
 A quiet record is a present captain and does not refuse.
 It then works in this order:
 
-1. It durably writes a resolution block carrying the decision digest and a `Resolution mode:`, plus optional `Batch item:` / `Item decision:` lines when answering a batch.
+1. It durably writes a resolution block carrying the decision digest and a `Resolution mode:`.
 2. It retains the leading hold-set stamp until the selected `tasks-axi done` or `tasks-axi unhold` transition succeeds.
 3. It then restores the successful record's resolution-first body ordering.
    The previous body remains preserved below the block and archived through tasks-axi `--archive-body`.
@@ -100,10 +100,9 @@ It then works in this order:
 If the close is interrupted, the still-held task therefore keeps its original age basis.
 A matching retry also completes any resolution-first normalization left unfinished after the close itself succeeded.
 
-
 ### Answer retries and tasks closed elsewhere
 
-- An exact retry is idempotent only when the requested close mode and any recorded item fields match the newest record.
+- An exact retry is idempotent only when the requested close mode matches the newest record.
 - A drifted answer or a mode mismatch is rejected.
 - A re-held task accepts a new answer as a new record on top.
 
@@ -137,11 +136,6 @@ The event names the reviewed inventory.
 `bin/fm-classify-lib.sh` recognizes it as closing the live status copy without claiming that the captain has answered it.
 
 ### Checking before scout teardown (`verify`)
-
-**Claims audit (postmortem REC-4).** When the origin has a filed report (`data/<origin>/report.md`), `complete` also requires `--claims-checked N`, an attestation of how many load-bearing claims were spot-verified before completion.
-A grep classifier reused from REC-1 scans the report for its negative-claim phrase set (`bin/fm-captain-hold.sh --help` owns the exact phrases); N must be at least 2 when it fires and at least 1 otherwise.
-This is an idempotent-attestation forcing function in the same style as the completion inventory itself - the gate never re-verifies a claim, it only refuses to complete without the count - and a detected negative claim with an omitted or insufficient count is refused with the offending report line quoted.
-An origin with no filed report is unaffected.
 
 Scout teardown calls the read-only `verify` subcommand after checking for the report and before removing any source state.
 `verify` checks three things:
@@ -216,7 +210,7 @@ Only `answer` with the captain's words or evidence-backed `reconcile close` reso
 
 "A keyed answer resolves its matching captain-held task" is one capability with one owner.
 `answers` is its channel-agnostic entry point.
-It reads `<task-id>\t<answer>\t<label>[\t<mode>[\t<item>[\t<item-decision>]]]` lines and resolves each named task through the same `answer` path.
+It reads `<task-id>\t<answer>\t<label>[\t<mode>]` lines and resolves each named task through the same `answer` path.
 Every guard therefore applies identically no matter which channel the answer arrived on.
 
 The optional mode column carries a card-declared close:
@@ -226,8 +220,6 @@ The optional mode column carries a card-declared close:
 | `done` (default) | Completes the task. |
 | `release` | Lifts the hold so held work resumes. |
 | Any other value | Skipped. |
-
-Optional fifth and sixth columns record the batch item position and captain's words for that item.
 
 Each key is reported as follows:
 
@@ -295,11 +287,12 @@ The Lavish adapter splits each capture between two commands:
 
 | Command | What it emits |
 | --- | --- |
-| `bin/fm-procevent-lavish.sh answers` | An exact non-reconcile selection that is one of the card's authored `options` (carried in the context), and nothing for a note alone or a value no option carries, so a freeform note never closes or releases a call. |
+| `bin/fm-procevent-lavish.sh answers` | An exact non-reconcile selection, or a bare note when no option was selected. |
 | `reconciles` | Only task ids whose structured selection is Reconcile, carrying their notes as request provenance. |
 
 Current rows require the versioned shape and the `choice` tag.
-The old question/answer shape feeds neither intake, because a bare freeform answer there cannot be told from a question, and stays announced for deliberate handling.
+A time-limited rollout branch accepts ordinary answers from the old question/answer shape.
+That branch refuses the old shape's bare and separator-annotated reconcile values from both intakes, because those rows do not separate the selected option from its note.
 Every other structurally uncertain capture feeds neither intake, remains announced, and cannot forge a task id from freeform prose.
 
 The adapter-agnostic runner pipes reconcile rows into `reconcile-requests` only for a bound source.
@@ -374,7 +367,6 @@ For a main-home call, the reconcile option is the recovery path for whatever sti
 ### Fleet snapshot buckets
 
 `bin/fm-fleet-snapshot.sh` parses canonical tasks-axi `(hold: ...)`, `(hold-kind: ...)`, and `(hold-until: ...)` metadata alongside existing backlog fields.
-A hold reason that spans several lines is assembled into its row before parsing, and fields such as `since` are read only outside the hold reason, so hold prose cannot leak into them.
 It resolves every repeated `blocked-by:` edge against structured Done records and keeps missing blockers unresolved.
 It then assigns every captain hold exactly one `hold_bucket`.
 The bucket is decided only from structured fields: `hold_kind`, `state`, `hold_until`, `unresolved_blocker_ids`, and the machine-written hold-set timestamp.
@@ -386,11 +378,9 @@ The first matching row in this order decides the bucket:
 | Order | `hold_bucket` | Condition |
 | --- | --- | --- |
 | 1 | `blocked` | Any blocker is unresolved. |
-| 2 | `dated` | `hold_until` is a valid ISO date in the future. |
+| 2 | `dated` | `hold_until` is in the future. |
 | 3 | `aged` | An undated hold's hold-set timestamp is at least `FM_SNAPSHOT_UNDATED_HOLD_AGE_DAYS` old (default 14, floored elapsed days). |
 | 4 | `live` | None of the above. |
-
-A non-ISO `hold_until` is neither dated nor undated, so it stays a `live` call.
 
 No captain hold can fall through them and none can match two, which is what keeps a hold from vanishing from every view.
 `captain_actionable` - waiting on the captain now - is exactly `hold_bucket == "live"`.
@@ -411,7 +401,6 @@ It preserves every captain hold in the bounded queued inventory of the owning ho
 | `live` | A default Captain's Call entry. |
 | `blocked`, `dated`, or `aged` | Leaves the default Captain's Call, renders as a Charted Next gate stating why - the blocking work, the `until <date>`, or the floored age - and contributes to the concrete `omitted[]` disclosure. |
 
-A non-ISO `since` or `hold_until` renders as `unknown` rather than as a date.
 `--all-decisions` reveals every captain hold available within the remote-summary bound and drops its gate.
 An available hold is therefore never in both Captain's Call and Charted Next.
 An actively worked held task may also appear in Underway, which reports running work independently of those decision buckets.
@@ -634,8 +623,8 @@ The captured-source coverage proves:
 
 - Lavish deduplicates each card before separating versioned structured selections from notes.
 - Bare and annotated Reconcile choices never reach keyed answers.
-- A current authored-option choice still closes normally.
-- A note-only answer, a value no authored option carries, and every legacy question/answer value feed no keyed answer and leave the call queued and held.
+- Genuine current and legacy choices still close normally.
+- Legacy bare and separator-annotated reconcile values feed neither intake.
 - Mixed repeated selections preserve every other card's final value.
 - The generic runner creates a request only through a verified bound source.
 - Chat reconcile text creates none.

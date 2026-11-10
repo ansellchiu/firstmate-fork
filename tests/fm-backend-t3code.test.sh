@@ -1869,6 +1869,40 @@ test_spawn_codex_accepts_bypass_approval_mode() {
   pass "fm-spawn.sh --backend t3code codex: config/codex-approval-mode=bypass still launches"
 }
 
+test_spawn_refuses_extension_launch_wrap() {
+  local id out rc pkg
+  id=$(t3_uid t3wrapz)
+  t3_case spawn-refuse-launch-wrap
+  t3_worker_setup "$id"
+  pkg="$CASE_DIR/exts/wrap-ext"
+  mkdir -p "$pkg/hooks"
+  cat > "$pkg/ext.json" <<'JSON'
+{
+  "schema": "firstmate.ext.v1",
+  "name": "wrap-ext",
+  "version": "1.0.0",
+  "trigger": "load when a worker launch is wrapped",
+  "hooks": {"launch-wrap": "hooks/launch-wrap"}
+}
+JSON
+  printf -- '---\nname: wrap-ext\ndescription: Fixture launch wrapper.\n---\n\n# wrap-ext\n' > "$pkg/SKILL.md"
+  cat > "$pkg/hooks/launch-wrap" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = prefix ] && printf "'/bin/env' "
+exit 0
+SH
+  chmod +x "$pkg/hooks/launch-wrap"
+  "$ROOT/bin/fm-ext.sh" install "$pkg" --home "$CASE_DIR/home" >/dev/null 2>&1 \
+    || fail "installing the launch-wrap fixture extension failed"
+  out=$(t3_worker_spawn "$id" claude --model claude-sonnet-5); rc=$?
+  expect_code 1 "$rc" "a t3code spawn must refuse a configured launch-wrap prefix"$'\n'"$out"
+  assert_contains "$out" "backend=t3code cannot run the extension launch-wrap prefix" "the refusal must name the launch wrapper"
+  [ -z "$(t3_dispatch_types)" ] || fail "the refusal must come before any T3 mutation, got '$(t3_dispatch_types)'"
+  [ "$(t3_log_line_of 'r.tool === "treehouse"')" -eq 0 ] || fail "the refusal must come before the slot is leased"
+  assert_absent "$CASE_DIR/state/$id.meta" "a refused spawn records nothing"
+  pass "fm-spawn.sh --backend t3code: refuses a configured extension launch-wrap before any mutation"
+}
+
 test_spawn_refuses_raw_launch_command() {
   local id out rc
   id=$(t3_uid t3rawz)
@@ -2795,6 +2829,7 @@ test_spawn_refuses_launch_settings_t3_cannot_honor codex-permission-mode restric
 test_spawn_codex_accepts_bypass_approval_mode
 test_spawn_refuses_launch_settings_t3_cannot_honor launch-env-allowlist HOME "config/launch-env-allowlist"
 test_spawn_refuses_raw_launch_command
+test_spawn_refuses_extension_launch_wrap
 test_spawn_abort_returns_lease_only_after_archive ok
 test_spawn_abort_returns_lease_only_after_archive fail
 test_uncertain_thread_launch_keeps_lease

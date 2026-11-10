@@ -263,7 +263,6 @@ clear_delivery_artifacts() {
     "$STATE/.subsuper-escalations" \
     "$STATE/.subsuper-escalations.since" \
     "$STATE/.subsuper-inject-wedged" \
-    "$STATE/.subsuper-inject-wedged.count" \
     "$STATE/.subsuper-unknown-acked"
 }
 

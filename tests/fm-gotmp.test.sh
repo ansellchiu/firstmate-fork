@@ -39,7 +39,6 @@ cleanup() {
 trap cleanup EXIT
 
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/fm-gotmp-tests.XXXXXX")
-TMP_ROOT=$(cd -P "$TMP_ROOT" && pwd -P)
 
 # Build a fake FM_HOME/FM_ROOT so the real fm-teardown.sh (symlinked in) resolves
 # state and helper scripts inside it. Stub the helper scripts fm-teardown calls so no
@@ -122,9 +121,7 @@ fm_tasks_axi_backend_available() { return 1; }
 fm_tasks_axi_compatible() { return 1; }
 fm_backlog_backend_manual() { return 1; }
 SH
-  for f in "$ROOT/bin/"*; do
-    [ -e "$fake/bin/${f##*/}" ] || ln -s "$f" "$fake/bin/${f##*/}"
-  done
+  ln -s "$ROOT/bin/fm-backlog-transition-lib.sh" "$fake/bin/fm-backlog-transition-lib.sh"
   # Meta with a nonexistent worktree so the dirty/treehouse blocks skip.
   cat > "$fake/state/$id.meta" <<META
 window=fakeses:fm-$id
@@ -136,13 +133,6 @@ mode=no-mistakes
 yolo=off
 tasktmp=$tasktmp
 META
-  # Teardown refuses a ship task that recorded no completion receipt, so this
-  # fixture records the landing its subject - tasktmp removal - presumes.
-  FM_HOME="$fake" FM_STATE_OVERRIDE="$fake/state" \
-    "$ROOT/bin/fm-receipt.sh" write-landing --task "$id" \
-      --project-fallback fixture \
-      --commit-sha 1111111111111111111111111111111111111111 \
-      --sha-source 'fixture commit' >/dev/null
   printf '%s' "$fake"
 }
 
@@ -229,10 +219,7 @@ fm_tasks_axi_backend_available() { return 1; }
 fm_tasks_axi_compatible() { return 1; }
 fm_backlog_backend_manual() { return 1; }
 SH
-  # Every other real sibling teardown sources, as make_fake_root links them.
-  for f in "$ROOT/bin/"*; do
-    [ -e "$fake/bin/${f##*/}" ] || ln -s "$f" "$fake/bin/${f##*/}"
-  done
+  ln -s "$ROOT/bin/fm-backlog-transition-lib.sh" "$fake/bin/fm-backlog-transition-lib.sh"
   # No tasktmp= line at all.
   cat > "$fake/state/$id.meta" <<META
 window=fakeses:fm-$id
@@ -243,13 +230,8 @@ kind=ship
 mode=no-mistakes
 yolo=off
 META
-  FM_HOME="$fake" FM_STATE_OVERRIDE="$fake/state" \
-    "$ROOT/bin/fm-receipt.sh" write-landing --task "$id" \
-      --project-fallback fixture \
-      --commit-sha 1111111111111111111111111111111111111111 \
-      --sha-source 'fixture commit' >/dev/null
-  FM_HOME="$fake" bash "$fake/bin/fm-teardown.sh" "$id" > "$fake/out" 2> "$fake/err" \
-    || fail "teardown exited non-zero when tasktmp= was absent: $(cat "$fake/err")"
+  FM_HOME="$fake" bash "$fake/bin/fm-teardown.sh" "$id" >/dev/null 2>&1 \
+    || fail "teardown exited non-zero when tasktmp= was absent"
   pass "fm-teardown skips gracefully when tasktmp= is absent (backward compat)"
 }
 

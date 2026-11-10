@@ -1194,10 +1194,6 @@ crew_dispatch_validate() {
       elif $h == "pi" or $h == "pi-signed" or $h == "omp" then (["low","medium","high","xhigh","max"] | index($e))
       elif $h == "muse" then (["low","medium","high","xhigh","max"] | index($e))
       elif $h == "rovo" then (["low","medium","high","max"] | index($e))
-      # cursor, opencode and kimi bake the reasoning class into the model id
-      # or expose no verified effort flag, so a configured effort field is
-      # rejected rather than silently dropped. agy is NOT in that set: its
-      # --effort flag was verified on 1.2.0 and bin/fm-spawn.sh emits it.
       elif $h == "opencode" or $h == "kimi" or $h == "cursor" then false
       else true
       end;
