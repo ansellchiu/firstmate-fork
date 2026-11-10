@@ -1,0 +1,1 @@
+ok - a 402px board keeps the count banner on screen and a wide board keeps it on one line
