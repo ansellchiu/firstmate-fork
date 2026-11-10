@@ -281,6 +281,16 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 900px) {
   .bb-cols { grid-template-columns: 1fr; }
+  /* Section signs stay one line on a wide board. On a phone the nowrap banner
+     ("N items wait on you, captain") is wider than the padded column, so let
+     every sign in the header shrink and wrap inside the column. */
+  .bb-section__head { flex-wrap: wrap; min-width: 0; }
+  .bb-section__head .fm-sign {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 </style>
 </head>

@@ -4,7 +4,8 @@
 # `fm-bearings-board.sh build` and then executed under the minimal DOM shim in
 # tests/assets/board-render-harness.mjs. The assertions are on what the page
 # renders - row badges, the stat strip, the empty state - never on the
-# template's source text.
+# template's source text. With Chrome installed, one case also loads the built
+# page at a phone width and asserts the board does not scroll sideways.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -325,6 +326,53 @@ test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status
 test_an_underway_identifier_label_is_not_replaced_by_run_status
 test_charted_next_reads_newest_filed_first
 test_charted_rows_without_a_filed_date_follow_the_dated_rows_in_payload_order
+
+# The reported phone failure is the header banner "22 items wait on you, captain"
+# running past a 402px viewport. A long charted count fills the other header
+# sign. Both have to stay inside the viewport, and a wide board still keeps the
+# banner on one line.
+test_a_phone_width_board_does_not_scroll_sideways() {
+  local home calls out phone wide
+  home=$(make_home phone-width)
+  calls=$(jq -n '[range(22) | {
+    key: ("call-" + tostring),
+    type: "decision",
+    repo: "sample",
+    title: "Rollout scope",
+    about: "The phone board scrolls sideways.",
+    decide: "Keep the banner on screen.",
+    options: [{value:"yes", label:"Yes"}]
+  }]')
+  out=$(render_board "$home" '[]' '[
+    {"id":"queued-one","repo":"sample","title":"Queued work","reason":"queued behind the cutover","dispatchable":true}
+  ]' 999999999 0 "$calls")
+  printf '%s' "$out" | jq -e '.error == ""' >/dev/null \
+    || fail "the phone-width board rendered its fail-closed error: $out"
+  phone=$(node "$HARNESS" "$home/.lavish/bearings-board.html" --viewport 402) \
+    || fail "the phone-width layout could not be measured"
+  if printf '%s' "$phone" | jq -e 'has("skip")' >/dev/null; then
+    printf 'skip: %s\n' "$(printf '%s' "$phone" | jq -r '.skip')"
+    return 0
+  fi
+  printf '%s' "$phone" | jq -e '
+    .clientWidth as $vw
+    | ($vw == 402)
+      and (.scrollWidth <= $vw)
+      and all(.signs[]; .left >= -1 and .right <= ($vw + 1))
+      and ([.signs[].text] | index("22 items wait on you, captain")) != null
+      and ([.signs[].text] | index("showing 1 of 1000000000")) != null
+  ' >/dev/null || fail "the board scrolled sideways at 402px: $phone"
+  wide=$(node "$HARNESS" "$home/.lavish/bearings-board.html" --viewport 1200) \
+    || fail "the wide layout could not be measured"
+  printf '%s' "$wide" | jq -e '
+    .clientWidth as $vw
+    | (.scrollWidth <= $vw)
+      and (([.signs[] | select(.text == "22 items wait on you, captain")] | .[0].height) <= 22)
+  ' >/dev/null || fail "the wide board wrapped the banner or scrolled sideways: $wide"
+  pass "a 402px board keeps the count banner on screen and a wide board keeps it on one line"
+}
+
+test_a_phone_width_board_does_not_scroll_sideways
 test_a_warning_row_reads_as_a_repair_not_as_queued_work
 test_warnings_are_excluded_from_the_charted_next_count
 test_a_board_of_only_warnings_still_reports_nothing_queued
