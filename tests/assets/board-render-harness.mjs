@@ -8,7 +8,7 @@
 //     charted:[{title,sub,badges,pickable}], decisions:[{context,tag,open}], empty, more, error }
 // With --viewport, loads the built page in headless Chrome at that width and
 // prints { viewport, scrollWidth, clientWidth, signs:[{text,left,right,width,height}] }.
-// When no Chrome binary is available that mode prints { skip } instead.
+// When no Chrome binary or no global WebSocket is available that mode prints { skip } instead.
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -40,6 +40,7 @@ function findChrome() {
 }
 
 async function measureViewport(htmlPath, viewport) {
+  if (typeof globalThis.WebSocket !== "function") return { skip: "node has no global WebSocket" };
   const bin = findChrome();
   if (!bin) return { skip: "chrome not found" };
   const dir = mkdtempSync(join(tmpdir(), "board-layout-"));
