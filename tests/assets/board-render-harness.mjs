@@ -55,16 +55,25 @@ async function measureViewport(htmlPath, viewport) {
     "--user-data-dir=" + join(dir, "profile"),
     "--remote-debugging-port=0",
     "about:blank",
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+  ], { stdio: ["ignore", "pipe", "pipe"], detached: true });
+  // Chrome forks renderer and helper processes that keep writing to the
+  // profile; kill the whole process group so none outlive the measurement.
+  const kill = () => {
+    try { process.kill(-chrome.pid, "SIGKILL"); } catch { /* already gone */ }
+  };
   const stop = async () => {
-    if (chrome.exitCode === null && chrome.signalCode === null) chrome.kill("SIGKILL");
+    kill();
     await new Promise((resolve) => {
       if (chrome.exitCode !== null || chrome.signalCode !== null) resolve();
       else chrome.once("exit", () => resolve());
     });
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    // The profile is scratch space; a helper Chrome reparented outside the
+    // group must not turn a finished measurement into a failure.
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    } catch { /* leave the temp profile behind */ }
   };
-  const deadline = setTimeout(() => { chrome.kill("SIGKILL"); }, 20000);
+  const deadline = setTimeout(kill, 20000);
   try {
     let log = "";
     const wsUrl = await new Promise((resolve, reject) => {
