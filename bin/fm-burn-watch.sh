@@ -22,12 +22,17 @@
 # and re-arms on recovery; defaults apply only when the config file is absent.
 # A failed state write prints a storage diagnostic and the check exits non-zero.
 # The watcher kills a check still running at FM_CHECK_TIMEOUT (default 30s).
-# check calls `quota-axi --json --no-credential-refresh` under fm_run_timed,
-# with a budget of FM_CHECK_TIMEOUT minus 3 seconds, capped at 20. That stays
-# under the watcher kill, leaves room for quota-axi's own 15s provider reads,
-# and cuts off a keychain value read (quota-axi waits up to 60s) or a delegated
-# credential refresh (up to 45s). A read that fails or does not finish is the
-# instrument alert above, and the check exits 0.
+# check and sample make the same read: `quota-axi --json --no-credential-refresh`
+# with stdin from /dev/null, under fm_run_timed, with a budget of
+# FM_CHECK_TIMEOUT minus 3 seconds, capped at 20. The bound is the general
+# protection against any wait inside quota-axi that outlasts the watcher; no
+# single cause of a stalled read is assumed. The cap stays under the watcher
+# kill and under quota-axi's longest internal waits (a keychain value read
+# behind a prompt, up to 60s; a delegated credential refresh, up to 45s), and
+# leaves room for its own 15s provider reads. Credential refresh is off, so a
+# lane whose session has expired reads as unmeasured until another quota-axi
+# run with refresh on renews it. In check, a read that fails or does not finish
+# is the instrument alert above, and the check exits 0; sample exits non-zero.
 # FM_BURN_NOW (epoch seconds) overrides the clock for tests.
 set -u
 export LC_ALL=C
@@ -203,8 +208,8 @@ now_epoch() { printf '%s\n' "${FM_BURN_NOW:-$(date +%s)}"; }
 # Seconds for the quota-axi read. Three seconds under the watcher budget covers
 # fm_run_timed's alarm and kill grace. The 20s cap still lets a parallel
 # provider read use its own 15s budget. A non-positive result means the
-# watcher budget leaves no room, and the caller reports the instrument failed
-# without starting a read. Zero is not a bound: timeout 0 disables the deadline.
+# watcher budget leaves no room, and read_quota fails without starting a
+# read. Zero is not a bound: timeout 0 disables the deadline.
 quota_read_timeout() {
   local budget=${FM_CHECK_TIMEOUT:-30}
   case "$budget" in
@@ -215,6 +220,18 @@ quota_read_timeout() {
     budget=20
   fi
   printf '%s\n' "$budget"
+}
+
+# Bounded quota read shared by check and sample, so a hang inside quota-axi
+# fails the read instead of reaching the watcher's kill. Prints the JSON.
+read_quota() {
+  local quota_timeout out
+  command -v quota-axi >/dev/null 2>&1 || return 127
+  quota_timeout=$(quota_read_timeout)
+  [ "$quota_timeout" -ge 1 ] || return 124
+  out=$(fm_run_timed "$quota_timeout" quota-axi --json --no-credential-refresh 2>/dev/null </dev/null) || return
+  jq -e '.providers' >/dev/null 2>&1 <<< "$out" || return 1
+  printf '%s\n' "$out"
 }
 
 read_config() {
@@ -301,25 +318,11 @@ action_disarm() {
 }
 
 action_check() {
-  local quota_json rc=0 now config_json quota_timeout
+  local quota_json now config_json
   mkdir -p "$STATE" || return 1
   now=$(now_epoch)
 
-  # Check instrument availability and output. The read is bounded so a hang
-  # inside quota-axi becomes the instrument alert instead of the watcher's kill.
-  quota_timeout=$(quota_read_timeout)
-  if ! command -v quota-axi >/dev/null 2>&1; then
-    rc=127
-  elif [ "$quota_timeout" -lt 1 ]; then
-    rc=124
-  else
-    quota_json=$(fm_run_timed "$quota_timeout" quota-axi --json --no-credential-refresh 2>/dev/null </dev/null) || rc=$?
-    if [ "$rc" -eq 0 ]; then
-      jq -e '.providers' >/dev/null 2>&1 <<< "$quota_json" || rc=1
-    fi
-  fi
-
-  if [ "$rc" -ne 0 ]; then
+  if ! quota_json=$(read_quota); then
     alert_once "instrument:quota-axi" "instrument failed - quota-axi"
     return
   fi
@@ -378,7 +381,7 @@ action_sample() {
   if ! command -v quota-axi >/dev/null 2>&1; then
     die "quota-axi is required"
   fi
-  quota_json=$(quota-axi --json 2>/dev/null) || die "quota-axi --json failed"
+  quota_json=$(read_quota) || die "quota-axi --json failed"
   config_json=$(read_config) || die "invalid config - $CONFIG_FILE"
 
   printf 'timestamp: %s\n' "$now"
