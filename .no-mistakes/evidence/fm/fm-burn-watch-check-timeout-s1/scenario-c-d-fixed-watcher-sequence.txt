@@ -1,0 +1,19 @@
+## Fixed build a29f94ca through real bin/fm-watch.sh (FM_CHECK_TIMEOUT default 30s)
+[sweep 1: quota-axi hangs 60s] watcher rc=0 elapsed=21.2s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.hQ2YNy/state/burn-watch.check.sh: burn watch: instrument failed - quota-axi
+prev.timestamp=1794405921 alerts={"active":["instrument:quota-axi","unmeasured:alibaba"]}
+acked: --ack-through 4 --recovery-generation 96963.1794406150.sx0LXR
+[sweep 2..n: still hung (expect no wake; test bound 50s)] watcher rc=124 elapsed=50.4s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: 
+prev.timestamp=1794405921 alerts={"active":["instrument:quota-axi","unmeasured:alibaba"]}
+acked: --ack-through 0 --recovery-generation 16661.1794406201.K0Xx8s
+[recovery: real quota-axi answers (bound 15s)] watcher rc=0 elapsed=3.8s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.hQ2YNy/state/burn-watch.check.sh: burn watch: claude unmeasured
+prev.timestamp=1794406203 alerts={"active":["unmeasured:alibaba","unmeasured:claude"]}
+acked: --ack-through 5 --recovery-generation 64289.1794406205.DE5gfI
+[hang again after recovery (expect re-armed alert)] watcher rc=0 elapsed=21.5s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.hQ2YNy/state/burn-watch.check.sh: burn watch: instrument failed - quota-axi
+prev.timestamp=1794406203 alerts={"active":["instrument:quota-axi","unmeasured:alibaba","unmeasured:claude"]}
+acked: --ack-through 6 --recovery-generation 68064.1794406228.Ji3iml
+--- quota-axi invocations seen by the wrapper during these sweeps:
+   6 watcher stdin=Character Device args=--json --no-credential-refresh

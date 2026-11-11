@@ -1,0 +1,18 @@
+ok - arm writes and binds the byte-static shim and disarm removes it
+ok - healthy check stays silent
+ok - drop threshold crossing, no-repeat, recovery, and re-arm
+ok - floor threshold crossing, no-repeat, recovery, and re-arm
+ok - anchored rate warmup, crossing, no-repeat, recovery, and re-arm
+ok - a single integer step never alerts the rate by itself
+ok - sub-second reset jitter does not start a new period
+ok - integer one-point steps do not produce fast-poll rate spikes
+ok - rate anchors survive missing measurements and reset on rise or period change
+ok - check and sample accept only exact fresh windows and report missing lanes once
+ok - failed instrument prints one line once and re-arms on recovery
+ok - a hung instrument finishes inside the watcher budget, once, and re-arms
+ok - check and sample make the same bounded quota-axi read
+ok - existing invalid config is reported once instead of silently using defaults
+ok - mistyped config fields are reported as invalid config
+ok - state write failures are reported instead of reporting success
+ok - failed alert publication restores the baseline so the drop is retried
+ok - init writes default config when absent

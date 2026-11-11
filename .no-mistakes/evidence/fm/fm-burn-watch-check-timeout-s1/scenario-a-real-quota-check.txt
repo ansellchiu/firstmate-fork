@@ -1,0 +1,7 @@
+## Scenario A: armed shim, real quota-axi 0.1.69, run like the watcher (timeout 30 bash <shim>, stdin /dev/null)
+run 1: rc=0 elapsed=3.90s output=[burn watch: alibaba unmeasured] prev.timestamp=1794405900
+run 2: rc=0 elapsed=3.34s output=[] prev.timestamp=1794405905
+run 3: rc=0 elapsed=3.85s output=[] prev.timestamp=1794405909
+lanes in prev sample:
+["agy","alibaba","claude","codex"]
+

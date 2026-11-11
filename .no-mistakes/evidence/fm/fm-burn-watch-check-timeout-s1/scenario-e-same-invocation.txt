@@ -1,0 +1,12 @@
+## Scenario E: check and sample through a logging wrapper that execs the real quota-axi
+check rc=0
+--- sample output:
+timestamp: 1794405927
+claude: unmeasured
+codex: 70% (weekly)
+agy: 85% (gemini_weekly)
+alibaba: unmeasured
+sample rc=0
+--- observed quota-axi invocations:
+check stdin=Character Device args=--json --no-credential-refresh
+sample stdin=Character Device args=--json --no-credential-refresh

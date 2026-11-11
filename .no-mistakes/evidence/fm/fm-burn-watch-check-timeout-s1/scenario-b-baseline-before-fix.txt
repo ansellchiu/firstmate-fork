@@ -1,0 +1,8 @@
+[BASELINE 54605f87 sweep 1: quota-axi hangs 60s] watcher rc=0 elapsed=31.1s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.hQ2YNy/state/burn-watch.check.sh: timed out after 30s
+prev.timestamp=1794405921 alerts={"active":["instrument:quota-axi","unmeasured:alibaba"]}
+acked: --ack-through 2 --recovery-generation 7778.1794406085.VtzHV1
+[BASELINE 54605f87 sweep 2: still hung] watcher rc=0 elapsed=31.3s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.hQ2YNy/state/burn-watch.check.sh: timed out after 30s
+prev.timestamp=1794405921 alerts={"active":["instrument:quota-axi","unmeasured:alibaba"]}
+acked: --ack-through 3 --recovery-generation 52245.1794406117.pB3RRt

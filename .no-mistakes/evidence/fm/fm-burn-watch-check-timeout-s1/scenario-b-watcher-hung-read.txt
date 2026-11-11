@@ -1,0 +1,3 @@
+[B: first sweep, quota-axi hangs 60s] watcher rc=0 elapsed=22.3s (rc 124 = still blocking at test bound, i.e. no wake)
+watcher stdout: check: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-lab.hQ2YNy/state/burn-watch.check.sh: burn watch: instrument failed - quota-axi
+prev.timestamp=1794405921 alerts={"active":["instrument:quota-axi","unmeasured:alibaba"]}
