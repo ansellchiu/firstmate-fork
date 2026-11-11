@@ -21,6 +21,13 @@
 # A failed instrument or an invalid existing config prints one line, once,
 # and re-arms on recovery; defaults apply only when the config file is absent.
 # A failed state write prints a storage diagnostic and the check exits non-zero.
+# The watcher kills a check still running at FM_CHECK_TIMEOUT (default 30s).
+# check calls `quota-axi --json --no-credential-refresh` under fm_run_timed,
+# with a budget of FM_CHECK_TIMEOUT minus 3 seconds, capped at 20. That stays
+# under the watcher kill, leaves room for quota-axi's own 15s provider reads,
+# and cuts off a keychain value read (quota-axi waits up to 60s) or a delegated
+# credential refresh (up to 45s). A read that fails or does not finish is the
+# instrument alert above, and the check exits 0.
 # FM_BURN_NOW (epoch seconds) overrides the clock for tests.
 set -u
 export LC_ALL=C
@@ -37,6 +44,9 @@ PREV_SAMPLE="$STATE/.burn-watch-prev"
 ALERTS_FILE="$STATE/.burn-watch-alerts"
 REGISTER_BIN="$SCRIPT_DIR/fm-check-register.sh"
 UNREGISTER_BIN="$SCRIPT_DIR/fm-check-unregister.sh"
+
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$SCRIPT_DIR/fm-timeout-lib.sh"
 
 # Default configuration when config/burn-watch.json is absent.
 DEFAULT_CONFIG='{
@@ -190,6 +200,23 @@ usage() { sed -n '2,/^set -u/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 die() { printf 'fm-burn-watch: %s\n' "$*" >&2; exit 1; }
 now_epoch() { printf '%s\n' "${FM_BURN_NOW:-$(date +%s)}"; }
 
+# Seconds for the quota-axi read. Three seconds under the watcher budget covers
+# fm_run_timed's alarm and kill grace. The 20s cap still lets a parallel
+# provider read use its own 15s budget. A non-positive result means the
+# watcher budget leaves no room, and the caller reports the instrument failed
+# without starting a read. Zero is not a bound: timeout 0 disables the deadline.
+quota_read_timeout() {
+  local budget=${FM_CHECK_TIMEOUT:-30}
+  case "$budget" in
+    ''|*[!0-9]*|0) budget=30 ;;
+  esac
+  budget=$((budget - 3))
+  if [ "$budget" -gt 20 ]; then
+    budget=20
+  fi
+  printf '%s\n' "$budget"
+}
+
 read_config() {
   if [ -e "$CONFIG_FILE" ]; then
     jq -e '
@@ -274,15 +301,19 @@ action_disarm() {
 }
 
 action_check() {
-  local quota_json rc=0 now config_json
+  local quota_json rc=0 now config_json quota_timeout
   mkdir -p "$STATE" || return 1
   now=$(now_epoch)
 
-  # Check instrument availability and output.
+  # Check instrument availability and output. The read is bounded so a hang
+  # inside quota-axi becomes the instrument alert instead of the watcher's kill.
+  quota_timeout=$(quota_read_timeout)
   if ! command -v quota-axi >/dev/null 2>&1; then
     rc=127
+  elif [ "$quota_timeout" -lt 1 ]; then
+    rc=124
   else
-    quota_json=$(quota-axi --json 2>/dev/null) || rc=$?
+    quota_json=$(fm_run_timed "$quota_timeout" quota-axi --json --no-credential-refresh 2>/dev/null </dev/null) || rc=$?
     if [ "$rc" -eq 0 ]; then
       jq -e '.providers' >/dev/null 2>&1 <<< "$quota_json" || rc=1
     fi
