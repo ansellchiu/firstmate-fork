@@ -2571,6 +2571,8 @@ Starting thresholds include:
 - The Alibaba monthly bucket burning faster than 1.5%/day.
 
 If an instrument fails or a lane is unmeasured, the check prints one diagnostic line once, staying silent on subsequent failed polls until measurement recovers and re-arms.
+The quota read is bounded below the watcher's `FM_CHECK_TIMEOUT`, so a read that stalls is an instrument failure instead of a killed check; the timing contract is in the `bin/fm-burn-watch.sh` header.
+The read runs without credential refresh, so a lane whose vendor session has expired reads as unmeasured until another quota-axi run with refresh on renews it.
 Thresholds and monitored windows are configurable in `config/burn-watch.json`.
 Defaults apply only when that file is absent; an existing unreadable or invalid file prints `burn watch: invalid config - <path>` once and skips evaluation until it is fixed.
 A file is invalid when `lanes` is not an object, a lane entry is not an object, `provider` or `window` is not a string, or `drop_threshold_pp`, `floor_pct`, or `rate_pct_day` is present but not a number.

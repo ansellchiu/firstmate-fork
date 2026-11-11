@@ -15,7 +15,9 @@ make_home() {
   cat > "$home/bin/quota-axi" <<'SH'
 #!/usr/bin/env bash
 [ "${1:-}" = "--version" ] && { echo "quota-axi stub"; exit 0; }
+printf '%s\n' "$*" >> "$STUB/quota-args"
 [ -f "$STUB/quota-fail" ] && exit 1
+[ -f "$STUB/quota-hang" ] && sleep 60
 cat "$STUB/quota.json"
 SH
   chmod +x "$home/bin/quota-axi"
@@ -307,6 +309,75 @@ test_failed_instrument_prints_one_line_once_and_rearms() {
   pass "failed instrument prints one line once and re-arms on recovery"
 }
 
+test_hung_instrument_finishes_inside_watcher_budget_and_rearms() {
+  local home out rc=0 start elapsed
+  home=$(make_home hang)
+  set_quota "$home" 80 70 60 95
+  touch "$home/stub/quota-hang"
+  start=$(date +%s)
+  out=$(FM_BURN_NOW=1000 bw "$home" check) || rc=$?
+  elapsed=$(( $(date +%s) - start ))
+  assert_equals 0 "$rc" "a hung instrument exits 0"
+  assert_equals "burn watch: instrument failed - quota-axi" "$out" "a hung instrument prints one line"
+  [ "$elapsed" -ge 10 ] || fail "a hung instrument must wait for its own bound, took ${elapsed}s"
+  [ "$elapsed" -lt 27 ] || fail "a hung instrument must finish well inside 30s, took ${elapsed}s"
+  assert_absent "$home/state/.burn-watch-prev" "a hung instrument stores no sample"
+
+  rc=0
+  start=$(date +%s)
+  out=$(FM_CHECK_TIMEOUT=8 FM_BURN_NOW=1300 bw "$home" check) || rc=$?
+  elapsed=$(( $(date +%s) - start ))
+  assert_equals 0 "$rc" "a repeated hang exits 0"
+  assert_equals "" "$out" "a hung instrument does not alert twice"
+  [ "$elapsed" -lt 8 ] || fail "a repeated hang stays inside the watcher budget, took ${elapsed}s"
+
+  rm -f "$home/stub/quota-hang"
+  out=$(FM_BURN_NOW=1600 bw "$home" check)
+  assert_equals "" "$out" "a read that recovers is silent"
+  assert_present "$home/state/.burn-watch-prev" "recovery stores a sample"
+  assert_equals 1600 "$(jq -r '.timestamp' "$home/state/.burn-watch-prev")" "recovery sample is the successful read"
+
+  touch "$home/stub/quota-hang"
+  rc=0
+  start=$(date +%s)
+  out=$(FM_CHECK_TIMEOUT=8 FM_BURN_NOW=1900 bw "$home" check) || rc=$?
+  elapsed=$(( $(date +%s) - start ))
+  assert_equals 0 "$rc" "a hang after recovery exits 0"
+  assert_equals "burn watch: instrument failed - quota-axi" "$out" "the instrument alert re-arms after recovery"
+  [ "$elapsed" -lt 8 ] || fail "a re-armed hang stays inside the watcher budget, took ${elapsed}s"
+  assert_equals 1600 "$(jq -r '.timestamp' "$home/state/.burn-watch-prev")" "a later hang keeps the last good sample"
+  pass "a hung instrument finishes inside the watcher budget, once, and re-arms"
+}
+
+test_check_and_sample_make_the_same_bounded_read() {
+  local home out check_args sample_args rc start elapsed
+  home=$(make_home sameread)
+  set_quota "$home" 80 70 60 95
+  FM_BURN_NOW=1000 bw "$home" check >/dev/null
+  check_args=$(cat "$home/stub/quota-args")
+  rm -f "$home/stub/quota-args"
+  bw "$home" sample >/dev/null
+  sample_args=$(cat "$home/stub/quota-args")
+  assert_equals "--json --no-credential-refresh" "$check_args" "check reads quota once without credential refresh"
+  assert_equals "$check_args" "$sample_args" "sample makes the same quota-axi call as check"
+
+  touch "$home/stub/quota-hang"
+  rc=0
+  start=$(date +%s)
+  out=$(FM_CHECK_TIMEOUT=6 FM_BURN_NOW=1300 bw "$home" check) || rc=$?
+  elapsed=$(( $(date +%s) - start ))
+  assert_equals 0 "$rc" "a hung check read exits 0"
+  assert_equals "burn watch: instrument failed - quota-axi" "$out" "a hung check read alerts"
+  [ "$elapsed" -lt 6 ] || fail "a hung check read stays inside the watcher budget, took ${elapsed}s"
+  rc=0
+  start=$(date +%s)
+  FM_CHECK_TIMEOUT=6 bw "$home" sample >/dev/null 2>&1 || rc=$?
+  elapsed=$(( $(date +%s) - start ))
+  assert_equals 1 "$rc" "a hung sample read exits non-zero"
+  [ "$elapsed" -lt 6 ] || fail "a hung sample read has the same bound as check, took ${elapsed}s"
+  pass "check and sample make the same bounded quota-axi read"
+}
+
 test_invalid_config_reports_once_instead_of_defaults() {
   local home out
   home=$(make_home badcfg)
@@ -427,6 +498,8 @@ test_integer_steps_at_fast_poll_cadence_stay_below_rate_limit
 test_rate_anchor_resets_on_rise_or_window_reset_and_survives_missing
 test_exact_fresh_lane_extraction_shared_by_check_and_sample
 test_failed_instrument_prints_one_line_once_and_rearms
+test_hung_instrument_finishes_inside_watcher_budget_and_rearms
+test_check_and_sample_make_the_same_bounded_read
 test_invalid_config_reports_once_instead_of_defaults
 test_mistyped_config_fields_are_invalid
 test_state_write_failure_is_reported_not_silent
