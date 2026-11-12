@@ -942,13 +942,14 @@
           "654d3f8",
           "712c954",
           "81bad20",
-          "e741b29"
+          "e741b29",
+          "e7e56d8a"
         ]
       },
       "upstreamEquivalent": "none",
       "disposition": "parked",
       "upstreamReviewedAt": "4869cf58e36b4fe9113cc3684648ed4e9fb4d0dc",
-      "parkedAt": "787a8e5bbcdfed2b1e9dfe58fef0c9655157d595"
+      "parkedAt": "afbc4b447550c7ff9b981970090cb0522d24a29a"
     },
     {
       "id": "pi-idle-observer",
@@ -1195,12 +1196,15 @@
         "bin/fm-session-start.sh",
         "tests/fm-session-start.test.sh",
         "tests/fm-wake-drain-open-decisions.test.sh",
-        "bin/fm-wake-drain.sh"
+        "bin/fm-wake-drain.sh",
+        "docs/sessionstart-nudge.md",
+        "docs/configuration.md"
       ],
-      "intent": "The session-start digest stays bounded: every bulk section except the wake queue and supervision block has a byte ceiling with an `N more omitted - <command>` pointer, OPEN DECISIONS names every key its cap omits, per-task meta renders as a compact identity line, orphan status logs are counted rather than printed, and a DIGEST OVERSIZE banner marks a digest past 64 KB.",
+      "intent": "The session-start digest stays bounded: every bulk section except the wake queue and supervision block has a byte ceiling with an `N more omitted - <command>` pointer, OPEN DECISIONS names every key its cap omits, per-task meta renders as a compact identity line, orphan status logs are counted rather than printed, and a DIGEST OVERSIZE banner marks a digest past 64 KB. The digest also leads with a budgeted FIRST CONTEXT block copied from the captain identity and communication-preference sections (54605f87).",
       "provenance": {
         "commits": [
-          "ce05defb"
+          "ce05defb",
+          "54605f87"
         ]
       },
       "upstreamEquivalent": "none",
@@ -1458,12 +1462,13 @@
       "intent": "A fast check samples quota windows per lane and alerts when a lane crosses its burndown thresholds.",
       "provenance": {
         "commits": [
-          "87049f1e"
+          "87049f1e",
+          "afbc4b44"
         ]
       },
       "upstreamEquivalent": "none",
       "disposition": "parked",
-      "parkedAt": "787a8e5bbcdfed2b1e9dfe58fef0c9655157d595"
+      "parkedAt": "afbc4b447550c7ff9b981970090cb0522d24a29a"
     },
     {
       "id": "held-slot-audit",
@@ -1554,6 +1559,27 @@
       "upstreamEquivalent": "none",
       "disposition": "parked",
       "parkedAt": "787a8e5bbcdfed2b1e9dfe58fef0c9655157d595"
+    },
+    {
+      "id": "cursor-grok-quota-scope",
+      "area": "Quota dispatch",
+      "paths": [
+        ".agents/skills/quota-array-dispatch/SKILL.md",
+        "bin/fm-dispatch-resolve.sh",
+        "bin/fm-quota-axi-lib.sh",
+        "bin/fm-quota-choose.sh",
+        "tests/fm-dispatch-resolve.test.sh",
+        "tests/fm-quota-choose.test.sh"
+      ],
+      "intent": "Cursor grok- models are bounded by the grok_bot quota scope instead of all_models when dispatch ranks quota.",
+      "provenance": {
+        "commits": [
+          "6ea68f86"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "parked",
+      "parkedAt": "afbc4b447550c7ff9b981970090cb0522d24a29a"
     }
   ]
 }
