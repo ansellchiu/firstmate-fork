@@ -265,10 +265,6 @@ case "${FM_FAKE_SSH_MODE:-normal}:$command_name:$command_rel" in
     while [ ! -f "$FM_FAKE_SEED_RELEASE" ]; do sleep 0.02; done
     exit 1
     ;;
-  launch-slow:fm-remote-secondmate-control.sh:*)
-    # A loaded CI host takes tens of seconds to land one remote launch.
-    [ "$_command_action" != launch ] || sleep "${FM_FAKE_LAUNCH_DELAY:-0}"
-    ;;
   launch-block:fm-remote-secondmate-control.sh:*)
     [ "$_command_action" = launch ] || exit 93
     touch "$FM_FAKE_LAUNCH_ENTERED"
@@ -840,9 +836,7 @@ assert_grep "$REMOTE_HOME/state/parent-replies.status" "$REMOTE_HOME/data/charte
 assert_no_grep "$PARENT/state/ios.status" "$REMOTE_HOME/data/charter.md" "remote charter retained the inaccessible local status path"
 assert_grep "$PARENT_ROUTE_INBOX" "$REMOTE_HOME/data/charter.md" "remote charter did not name its host-local steering inbox"
 assert_no_grep "$PARENT/state/ios.inbox" "$REMOTE_HOME/data/charter.md" "remote charter retained the inaccessible local steering inbox path"
-# fm-brief.sh shell-quotes the inbox path, so the rendered ack move is
-# `mv '<inbox>'/NNN.msg '<inbox>'/handled/`; match it including the quotes.
-assert_grep "mv '$PARENT_ROUTE_INBOX'/NNN.msg '$PARENT_ROUTE_INBOX'/handled/" "$REMOTE_HOME/data/charter.md" "remote charter did not render the inbox acknowledgement move host-local"
+assert_grep "$PARENT_ROUTE_INBOX'/NNN.msg '$PARENT_ROUTE_INBOX'/handled/" "$REMOTE_HOME/data/charter.md" "remote charter did not render the inbox acknowledgement move host-local"
 if FM_SECONDMATE_CHARTER='Own iOS delivery on the build Mac.' \
   FM_SECONDMATE_SCOPE='iOS implementation and Xcode validation' \
   remote_env "$ROOT/bin/fm-remote-home-seed.sh" ios remote-mac "$REMOTE_ROOT" "$TMP_ROOT/other-home" alpha \
@@ -916,20 +910,10 @@ assert_present "$PARENT/state/procevent/remote-reply-ios.source" "remote spawn d
 publish_healthy_watcher_identity "$PARENT/state" "$PARENT" "$ROOT/bin/fm-watch.sh"
 [ "$(remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh state ios)" = alive ] \
   || fail "remote endpoint was not projected alive from its own host"
-# The observation must run on the endpoint's own host and return a verdict the
-# delivery layer can act on. This home deliberately classifies herdr's native
-# "idle" agent state as inconclusive rather than idle, because herdr reads idle
-# while a harness waits on its own long foreground tool call and trusting it
-# would report a busy worker as idle; bin/backends/herdr.sh's
-# fm_backend_herdr_classify_agent_status owns that mapping. The observation
-# therefore resolves through the same rendered-output fallback a tmux endpoint
-# uses, and fm_pending_reply_busy_state_from_observation turns that
-# "fallback-idle" into idle once the pending-reply record is eligible. Public
-# upstream maps native idle straight to idle, so this expectation tracks that
-# divergence rather than relaxing the check.
-observed=$(remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh observe ios)
-[ "$observed" = fallback-idle ] \
-  || fail "remote endpoint delivery observation did not execute on its own host: got '$observed'"
+# Herdr reports a native agent state, so the delivery observation resolves
+# without the rendered-output fallback a tmux endpoint needs.
+[ "$(remote_env "$ROOT/bin/fm-on.sh" ios fm-remote-secondmate-control.sh observe ios)" = idle ] \
+  || fail "remote endpoint delivery observation did not execute on its own host"
 pass "remote spawn launches on the remote-local backend and records a host-qualified route"
 
 remote_route_meta="$REMOTE_HOME/state/parent-route/ios.meta"
@@ -1353,10 +1337,7 @@ tabs_before=$(grep -c '^tab create' "$HERDR_LOG" || true)
 watch_relaunch_timeout=120
 # exec keeps $! the watcher itself rather than the function's subshell, so a
 # kill reaches the process that probes and writes into the fixture root.
-# The fake launch is slower than the old 30s relaunch bound, which pins that
-# the watcher waits for its configured timeout rather than a fixed one.
-FM_FAKE_SSH_MODE=launch-slow FM_FAKE_LAUNCH_DELAY=35 \
-  FM_STATE_OVERRIDE="$WATCH_STATE" FM_SECONDMATE_LIVENESS_SECS=1 FM_POLL=1 \
+FM_STATE_OVERRIDE="$WATCH_STATE" FM_SECONDMATE_LIVENESS_SECS=1 FM_POLL=1 \
   FM_SECONDMATE_LIVENESS_TIMEOUT="$watch_relaunch_timeout" \
   FM_SIGNAL_GRACE=0 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 \
   remote_env exec "$ROOT/bin/fm-watch.sh" \

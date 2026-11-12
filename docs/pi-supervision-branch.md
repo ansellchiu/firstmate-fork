@@ -17,7 +17,7 @@ This document stays the owner and the contract.
 | Why delivery never freezes the captain's terminal | [Off-thread delivery](#off-thread-delivery) |
 | How a captain-facing event whose wake was lost still surfaces | [Lost-wake outcome backstop](#lost-wake-outcome-backstop) |
 | What the branch sees of the captain's conversation | [How the branch knows what the captain said](#how-the-branch-knows-what-the-captain-said) |
-| How outcomes are classified, shown, and acknowledged | [Three-stage noise filter](#three-stage-noise-filter) |
+| How outcomes are classified, shown, and acknowledged | [Two-stage noise filter](#two-stage-noise-filter) |
 | How fleet-wide heartbeat reviews are routed | [Heartbeat routing](#heartbeat-routing) |
 | Prompt caching and the branch model | [Cost model and the byte-stable prefix](#cost-model-and-the-byte-stable-prefix) |
 | What changes while the captain is away | [Postures](#postures) |
@@ -225,7 +225,7 @@ Its header owns the byte-stable-prefix contract (no timestamps, no fleet snapsho
 ### Outcome store
 
 The outcome store is `bin/fm-branch-outcome.sh`.
-Its header owns the append-only format, read cursor, bounded per-task status-coverage indexes, and the bounded per-task repeat-suppression window.
+Its header owns the append-only format, read cursor, and bounded per-task status-coverage indexes.
 
 Outcomes are written to the store before delivery to Pi.
 A captain row advances the cursor only after its matching visible session entry exists.
@@ -382,21 +382,19 @@ The cursor keeps advancing incrementally from there.
 The branch prompt frames mirrored text as context for judgment, never as instructions addressed to the branch.
 An authorization addressed to main (for example "you may merge when green") does not relax the branch's role limits.
 
-## Three-stage noise filter
+## Two-stage noise filter
 
 Stage one is unchanged: the bash watcher absorbs everything provably fine at zero token cost.
 Stage two is the branch's verdict on each handled event, reported through its `fm_branch_report` tool:
 
 | Verdict | Delivery |
 | --- | --- |
-| `routine` | A non-silent outcome uses the custom-message path unless "Repeat suppression" below collapses it as a fact the captain has already read; a silent outcome is stored without a rendered note. Neither opens a follow-up turn. |
+| `routine` | A non-silent outcome uses the custom-message path; a silent outcome is stored without a rendered note. Neither opens a follow-up turn. |
 | `captain` | Appends a versioned `fm-branch-visible-outcome` custom session entry. |
-
-Stage three is repeat suppression, below: it collapses a routine fact the captain has already read, after the branch has already decided that fact is worth a note.
 
 ### The visible captain entry
 
-The captain entry contains the store sequence, task, verdict, exact summary, and the row's silence and presentation fields.
+The captain entry contains the store sequence, task, verdict, exact summary, and silent flag.
 Its renderer presents the exact task and summary with an anchor prefix.
 
 Pi custom session entries persist in the transcript but do not enter model context.
@@ -468,33 +466,6 @@ Its "PR identity: copy or abstain" section owns where a PR URL in a summary or t
 - Otherwise, only the identifier the branch actually has.
 
 Main can read the durable outcome store on demand through its `fm_branch_outcomes` tool.
-
-### Repeat suppression
-
-Stages one and two both judge one event at a time, so neither can see that the twelfth delivery of "benign idle flag on worker X, nothing new" is the same fact the captain read eleven times already.
-Repeats like that train the captain to skim past outcomes, which is how a real one gets missed, so a standing routine fact is delivered once per bounded window rather than every time it recurs.
-
-`bin/fm-branch-outcome.sh`'s header owns the mechanism: the fingerprint, the per-task window, the bounded cache behind it, the `FM_BRANCH_OUTCOME_DEDUPE_WINDOW` override, and the failure directions.
-What matters at this level is the boundary it holds.
-
-Suppression is a presentation decision and nothing else.
-Every outcome the branch reports is stored in full, in sequence, exactly as before; the row carries `present` and `repeat` recording what was shown, and `fm_branch_outcomes` still returns the complete history.
-Both delivery paths obey that stored decision rather than recomputing it, so the live merge note and the locked session-start replay can never disagree about what the captain has seen.
-
-What is never suppressed is the whole captain-facing class.
-A `captain` verdict - a decision, a failure, review-ready work, a credential or quota ask - is delivered every time and additionally clears its task's window, so the next routine note about that task is presented again.
-A window that cannot be cleared fails the append loudly after the outcome is already durable, because a surviving window would collapse the next routine note; the stored outcome is still delivered by the next read.
-A fact's first occurrence is always delivered, so first-of-a-kind progress reaches the captain at full speed.
-A changed fact is a new fingerprint and is delivered immediately, however long the run behind it was.
-An expired window re-delivers the standing fact ONCE, annotated with how many identical updates it stands for, and then reopens the window, so expiry surfaces a still-true fact without resuming the stream that made it noise.
-
-Suppression also never claims status coverage.
-The per-task outcome index records how far a task's status log has reached the captain, so a suppressed repeat holds it at the last presented row; a status event that arrived behind the suppressed note stays uncovered and main's drain backstop resurfaces it.
-
-A retired task id is dropped from the window at teardown, so a later task reusing that id starts from a first-of-a-kind fact rather than the retired task's standing one.
-
-The branch is not asked to police any of this.
-It reports every handled event honestly and identically each time, and the store collapses the repeat; a branch that self-censored instead would be deciding what the captain may see, on judgment, with no durable record of the call.
 
 ## Heartbeat routing
 
@@ -574,43 +545,6 @@ That carve-out is scoped to provider registration alone:
 No caching machinery beyond this exists, deliberately.
 Any later dynamic content in the branch prefix silently removes most of the cache benefit.
 That is why `bin/fm-branch-prompt.sh`'s header is the contract's single owner and `tests/fm-branch-supervision.test.sh` pins the output to byte identity.
-
-## Rotation
-
-The branch conversation is persistent, so every wake it handles becomes context the next wake re-sends.
-Left alone long enough, a session eventually pays more for its own transcript than the byte-stable prefix ever saved it.
-Rotation retires that conversation and starts a fresh one, and it happens only at a boundary that is safe to cross.
-
-The policy lives in `.pi/extensions/lib/fm-branch-rotation.ts`, which is pure: it reads no clock, touches no file, and imports nothing, so it is the single owner of the decision and nothing else.
-`.pi/extensions/fm-branch-supervision.ts` owns every side effect the decision implies.
-
-The primary conversation has its own separate growth mechanism with its own measured thresholds; see [docs/pi-primary-growth.md](pi-primary-growth.md).
-The two deliberately share no code, because a branch conversation and a primary conversation grow for different reasons and are safe to replace at different moments.
-
-A conversation rotates on whichever of these comes first:
-
-- Its first compaction, observed through the branch's own `session_compact` event.
-  A compacted branch has already outgrown its window and still pays to re-send the summary, so replacing it beats compacting it again.
-- A one-day age boundary, measured from when the conversation was created.
-- Three meaningful milestones, where a milestone is a `captain`-verdict outcome reaching the store and merging into main.
-
-Each threshold is env-overridable, and a malformed value falls back to its default rather than silently disabling a trigger: `FM_BRANCH_ROTATE` (`0` disables rotation entirely), `FM_BRANCH_ROTATE_MAX_AGE_SECONDS`, `FM_BRANCH_ROTATE_COMPACTIONS`, and `FM_BRANCH_ROTATE_MILESTONES`.
-A threshold of `0` retires that one axis and leaves the others live.
-Every rotation prints exactly one loud line naming its reason, its evidence, and the rotation count.
-
-The safe boundary is structural rather than a rule the policy has to enforce.
-The decision is consulted only inside `enqueueWake`'s serialized `branchChain`, after the wake's prompt has returned and its wake-row grant has been released.
-Because that chain runs one branch action at a time, a rotation cannot land between a prompt's start and its end, so a mid-action session is never split.
-
-Before the conversation is dropped, it gets one bounded capture turn - the `/stow` equivalent - to persist anything durable that exists only in that chat.
-A capture that fails does not block the rotation, because a session that can no longer answer is exactly the one that must be replaced; the failure is reported on the same loud line.
-
-Continuity is not carried in the conversation, so it survives rotation untouched.
-Queued steers and open decisions live in the durable wake queue and the status logs, in-flight task state lives in `state/<id>.meta`, claimed rows live in the per-actor grant files, per-task leases are held by the branch ACTOR rather than the session and are deliberately left alone, and the outcome store keeps every merged outcome.
-What the replacement genuinely loses is chat-only context, which is what the capture sweep and the catch-up replace.
-
-The successor must not act on a fleet it has never looked at, so its first wake is prefixed with the requirement to run `bin/fm-session-start.sh` and reconcile from the durable records first.
-That obligation is durable in `state/.branch-rotation` alongside the counters, so a rotation interrupted before the successor's first wake still produces a catching-up successor rather than a fresh branch acting blind.
 
 ## Postures
 
@@ -711,7 +645,6 @@ The generated prompt includes the [scout-completion](../.agents/skills/scout-com
 - Dispatch, and signal and stale report scoping with unscoped heartbeat reports.
 - The new branch conversation at every main session start with continuation inside one session, and the mirror re-anchor that pairs with it.
 - Requested-versus-unsolicited delivery, exact visible entry content, and no unkeyed model turn.
-- Suppressed routine repeats with both rows still stored, and an annotated re-delivery after window expiry.
 - The sequence-keyed processing request and its acknowledgement.
 - Suppression of empty or exact-repeat retry finals with differing replies preserved, preserved tool calls and user responses, the triggered-then-next-turn pacing, and session-start re-presentation.
 - Routine outcomes staying turn-free, task-level no-change notes staying hidden, absent-marker re-presentation, and malformed-age reporting without acknowledgement.
@@ -720,19 +653,15 @@ The generated prompt includes the [scout-completion](../.agents/skills/scout-com
 - Mirroring.
 - Post-construction provider-error and no-report fallback, the consecutive-error latch, cooldown probe, exponential backoff, report-plus-settlement recovery, and report-before-error re-latch.
 - Cache key, and model and effort selection.
-- The rotation boundary that replaces the conversation only after a settled wake and does not reopen the retired one, and the settled wake that still counts when its durable-outcome guard rejects it.
 - In `test_branch_dispatch_classifies_main_only_rows_and_writes_the_eligible_snapshot`: decision-owned signal and stale rows' exclusion from `eligibleSeqs`, their presence in `needsDecisionKeys`, task alias resolution, reserved-key configuration, status-log race and symlink refusal, non-vetoing behavior for unrelated eligible rows, and decision-only queues reading as ordinary main-only absence.
 - In `test_branch_dispatch_routes_secondmate_signal_by_new_span`: second-mate signal routing by new span on the Pi and attended-host paths, including an unrelated open hold, mixed, same-key, stamped-key, key-less blocked, and resolution spans, the whole-log fallback, stale-row isolation, and crewmate routing.
 - In `test_branch_dispatch_resolves_terminal_keyed_orca_stale_row`: a unique Orca `terminal=` handle resolving to its task and project in routine and heartbeat scans, and conflicting terminal, window, or task aliases refusing the whole scan in either record order.
-
-`tests/fm-branch-rotation.test.sh` covers the rotation triggers and their fixed order, threshold overrides and malformed-input fallback, the durable record and its catch-up obligation, the completed-action boundary, and the extension's wiring of it.
 
 `tests/fm-branch-supervision.test.sh` covers:
 
 - Prompt stability, including the landed-work cleanup instruction and the second-mate relay, signal-span, and stale-liveness rules.
 - The emitted completed-scout cleanup instructions and verbatim completion policies, including incomplete-work boundaries and refusal reporting; these assertions verify prompt delivery, not a model's adherence.
 - Store append-only behavior, the captain cursor barrier, processed-marker sequence bounds and absent-marker safety, and captain-only recorded ages.
-- Repeat suppression: collapsed unchanged facts, immediate re-delivery on change, per-task window isolation, never-suppressed captain rows, one annotated re-delivery at window expiry, and the broken-cache, disabled-window, and poisoned-row failure directions.
 - Leases, guards, and non-branch-home invariance.
 - The away relocation: only under a valid live record, never for local-only landing, queued-only branch dispatch rather than orphaned in-flight recovery, the spend cap for both actors and its lock-held recheck, and the attended guarded-action behavior restored by archive or an invalid record.
 
@@ -755,7 +684,7 @@ For the away posture:
 
 `tests/fm-wake-drain-outcome-backstop.test.sh` covers keyless resurfacing, causal suppression, same-second ordering, one-shot presentation, first-drain index self-healing under the outcome lock, store-fault fail-closed behavior, bounded history cost and output, and the oversized-line limit.
 
-`tests/fm-teardown.test.sh` covers removal of the retired task's outcome index and repeat-suppression window while a live task's window is spared, and the append-side rule that a post-teardown report does not recreate the index.
+`tests/fm-teardown.test.sh` covers removal of the retired task's outcome index and the append-side rule that a post-teardown report does not recreate it.
 
 Other tests remain where they were:
 
@@ -775,7 +704,6 @@ Other tests remain where they were:
 
 - Needs-decision, no-verb captain-held, and pending-reply second-mate escalation signal rows are marked `needs-decision:`.
 - A needs-decision whose key transition was rejected by the reserved-key vocabulary (`fm-classify-lib.sh`'s `reconciliation-required:` wrapper) is still marked.
-- A batch re-queued after a failed classified-position commit carries the same marking, and every queued row's payload names only its own file rather than the whole batch.
 - Ordinary blocked or captain-relevant signals stay unmarked.
 
 ### Live guards

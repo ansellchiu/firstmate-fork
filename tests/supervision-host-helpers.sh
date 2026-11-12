@@ -210,10 +210,7 @@ stop_home_processes() {  # <home>
   [ -z "$pid" ] || kill -TERM "$pid" 2>/dev/null || true
   while IFS= read -r pid; do
     if [ -e "$home/session.stop" ]; then
-      # Bounded: a session whose Stop hook never returns is stopped, not awaited forever.
-      ( sleep 30; kill -TERM "$pid" ) >/dev/null 2>&1 &
       wait "$pid" 2>/dev/null || true
-      kill "$!" 2>/dev/null || true
     else
       kill -TERM "$pid" 2>/dev/null || true
     fi
@@ -381,12 +378,6 @@ watcher_live() {  # <home>
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 host_exited() { [ -s "$1/host.rc" ]; }
-host_pid() { awk -F '\t' '$1 == "host" { print $2; exit }' "$1/state/.supervision-host" 2>/dev/null; }
-retry_host_parked() {  # <home> <killed host pid>
-  local pid
-  pid=$(host_pid "$1")
-  [ -n "$pid" ] && [ "$pid" != "$2" ] && kill -0 "$pid" 2>/dev/null && watcher_live "$1"
-}
 # The recovery marker's episode kind (downtime or handling), read through its
 # owner's parser; the Claude re-arm owner delivers a close only on downtime.
 marker_kind() {  # <home>
@@ -659,7 +650,7 @@ SH
 }
 
 
-assert_claude_stop_hook_rewakes_when_closed_successor_downtime_restore_fails() {
+assert_claude_stop_hook_notifies_when_closed_successor_downtime_restore_fails() {
   local status=$1 home real_mktemp successor
   home=$(make_primary_home "hook-successor-restore-fails-$status")
   ln -s "$ROOT/.agents" "$home/.agents"
@@ -696,13 +687,10 @@ SH
   : > "$home/fail-downtime-write"
   printf 'continue\n' > "$home/stub-release"
   wait_until_deadline 60 hook_exited "$home" || fail "restore failure: the Stop hook did not finish"
-  # This home's actionable rewake accepts a handling marker, so the hand-back
-  # itself reaches main even though downtime restoration failed.
-  expect_code 2 "$(cat "$home/hook.rc")" "the Stop hook must rewake main when downtime restoration fails"
-  assert_re '^supervision-host: branch-outcome: ' "$home/hook.err" "the hand-back must carry the host's captain outcome to main"
-  assert_no_grep 'firstmate watcher auto-arm FAILED' "$home/hook.err" "a committed hand-back must not deliver a failure notice"
-  assert_re '^epoch=[0-9]+ owner_pid=[0-9]+ outcome=rewake ' "$home/state/.claude-autoarm-epoch" \
-    "the hand-back rewake must be committed"
+  expect_code 2 "$(cat "$home/hook.rc")" "the Stop hook must notify main when neither hand-back nor downtime restoration commits"
+  assert_grep 'firstmate watcher auto-arm FAILED' "$home/hook.err" "the refused rewake must turn into a delivered failure notice"
+  assert_re '^epoch=[0-9]+ owner_pid=[0-9]+ outcome=failed ' "$home/state/.claude-autoarm-epoch" \
+    "the failed hand-back must be committed"
 }
 
 
@@ -796,16 +784,9 @@ quiet_pass_through_successor() {  # <home>
 
 
 park_after_stop() {  # <home>
-  local acked
-  acked="acked:downtime:$(sed -n 's/^pending:downtime://p' "$1/state/.watcher-down" 2>/dev/null)"
   rm -f "$1/host.rc"
   : > "$1/park.go"
-  wait_until_deadline 60 sh -c '[ -s "$1/host.rc" ] || [ "$(cat "$1/state/.watcher-down" 2>/dev/null)" = "$2" ]' _ "$1" "$acked" \
-    || fail "the watcher's downtime was neither acked silently nor resurfaced to main: $(cat "$1/host.out")"
-  if ! host_exited "$1"; then
-    watcher_live "$1" || fail "the silently acked downtime left no live watcher"
-    return 0
-  fi
+  wait_until_deadline 60 host_exited "$1" || fail "the watcher's downtime resurface did not reach main: $(cat "$1/host.out")"
   assert_re '^check: rearm-resurface' "$1/host.out" "fixture: the first close after the watcher stopped was not its resurface"
   main_drain_and_ack "$1"
   quiet_pass_through_successor "$1"

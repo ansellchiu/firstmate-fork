@@ -66,8 +66,6 @@ So a running Pi process whose replacement did not load this extension is reporte
 A main follow-up counts as delivered once Pi accepts it, never once the model reads it.
 The reason is that a follow-up queued while main is streaming joins the running run without a `before_agent_start`.
 The extension header owns how consumption is observed and why it only decides what a replacement replays.
-While one accepted follow-up is still unconsumed, a later ordinary actionable wake is folded into it rather than queueing a second message, so a catch-up burst costs one firstmate turn instead of one per cycle; `sendWake` in that extension owns the fold and why it retires no durable row, and the fold is bounded - a bounded number of folded cycles, or a run that settles with the context proving it idle and nothing queued (the point at which an unconsumed follow-up never will be consumed), delivers the next wake on its own so an unconsumed follow-up can never mute the captain; a settle that cannot prove both leaves folding armed rather than guessing.
-Each notification that is composed names how big the burst is - how many notifications a main drain would present at that moment, which `bin/fm-wake-lib.sh`'s `fm_wake_actor_presented_count` owns by counting rows the way the drain presents them rather than one per row - and a count that owner reports as uncountable, or that does not return inside the caller's bound, is left out of the message rather than delaying or dropping the wake it only decorates; the folded-cycle count a notification names is retired with the follow-up it rode, so a later notification never points the captain at cycles an intervening drain already cleared.
 
 ### omp session replacement
 
@@ -150,8 +148,6 @@ If the handoff confirmation fails, the adapter retries it once: Pi against that 
 A failed confirmation is a restoration failure: the adapter classifies the error and surfaces exactly one typed message.
 Pi retires the current successor only when the failed token names its exact watcher pid and generation and that pid is no longer alive, while omp and OpenCode retire the current successor whenever the restoration's watcher pid is no longer alive.
 On Pi a generation mismatch means a newer pipeline superseded this delivery mid-restore, so the wake routes like a confirmed delivery, with no failure appendix, and nothing is retired.
-The arm rejects a dead restoration pid before it compares generations, so the Pi extension also treats the rejection as superseded when the pid is provably gone (`ESRCH`) and `state/.watcher-down` holds a well-formed token whose minted epoch is strictly later than the restoration's generation.
-Any other case, such as a live or unprobeable pid, an unchanged, older, same-second or malformed marker, or a missing marker, still reports FAILED.
 An already-acknowledged episode confirms as a no-op when the confirmation names its generation, because the drain acknowledged it after the successor started but before the confirmation ran.
 The Pi extension diagnostic log is opt-in and off by default: only a positive FM_WATCH_EXTENSION_LOG_KEEP_LINES value appends restore attempts, readiness timeouts, and confirmation targets and results to state/.watch-extension.log, a bounded record that never changes supervision behavior.
 docs/configuration.md owns the knob's default and accepted values.
@@ -169,13 +165,6 @@ After the configured retry bound is exhausted, the adapter delivers the original
 This is deliberate Option B ordering.
 Whenever restoration succeeds, the fleet is protected before the model handles the wake.
 When restoration does not succeed, the model is never left blind.
-
-### Pi close-handler restoration
-
-On Pi that restoration is owned by the arm child's close handler rather than by the notification pipeline: it starts as soon as the child closes, so a successor is never held behind an in-flight wake delivery, and delivery only consumes the verdict the close handler attaches.
-Coupling the successor launch to delivery is what leaves real stretches with no watcher running, which is the hole this ordering closes; omp and OpenCode still start theirs from inside their delivery pipelines.
-Restoration is single-flight per Pi generation: an actionable close that lands while one is already in flight shares that verdict instead of racing a second loop for the same successor.
-A wake that crosses a Pi session replacement carries only the wake, never the retiring generation's restoration verdict, because that verdict names an arm child the replacement does not own; the replacement's own arm speaks for continuity, so an inherited wake is delivered without a fresh handling confirmation.
 
 ### Claude handling successor
 
@@ -241,8 +230,6 @@ The away return brief treats a still-open handling episode as a wake in progress
 ### Announcement
 
 An unacknowledged downtime generation is announced at most once.
-A pending downtime generation that reaches a non-successor arm with an empty durable queue is resolved to acknowledged without any announcement, so recovery never invents a wake for work that was never queued; `bin/fm-wake-lib.sh`'s `_fm_recovery_marker_arm_check` owns that transition.
-A watcher start that recovers a dead predecessor's singleton lock takes the same empty-queue check and announces only real queued work, unless the marker itself called for recovery; `resurface_after_downtime` in `bin/fm-watch.sh` owns that decision.
 The first recovery marks that generation announced, and later empty-queue arms leave it announced until durable work or interrupted handling makes recovery pending again.
 A non-successor watcher start checks the durable queue and recovery marker under their locks.
 If an announced-but-unacknowledged episode has an empty queue, the arm leaves that generation announced, making repeated empty-queue arms idempotent while a long-poll source is merely alive.
@@ -305,10 +292,7 @@ An ordinary presentation drain bounds both its initial queue-lock acquire and it
 | Initial queue lock | One PID-naming advisory, and the whole drain is skipped before any claim or mutation. |
 | Status-presentation lock | One such advisory after raw wake presentation, and status annotations, sections, and cursors are left retriable on the next drain. |
 
-An acknowledgement invocation bounds its queue-lock acquires and its inactive-outcome receipt lock at the same deadline.
-When a live holder outlasts it, the acknowledgement prints one `ACKNOWLEDGEMENT SKIPPED` line naming the holder, consumes nothing, and exits 1, so the same `--ack-through` command can be re-run and acknowledgement atomicity is unchanged.
-The RECORD DIVERGENCE backlog check runs after the status-presentation lock is released, so a slow backlog tool never extends the hold.
-Every other mutation-critical queue-lock acquire retains blocking semantics.
+Acknowledgement invocations and every other mutation-critical queue-lock acquire retain blocking semantics, so acknowledgement atomicity is unchanged.
 
 ### Guard counts for branch-held rows
 
@@ -379,7 +363,6 @@ Attended, a grant names no check row and each scan finds nothing.
 - A no-op stale acknowledgement names the current presented wake's exact command.
 - Live-holder presentation contention stays bounded and retriable.
 - Acknowledgement locking remains blocking.
-- The two counts answer an uncountable queue differently - the row count keeps its alarm while the presented count says so instead of naming a number nobody counted.
 
 The same suite pins the counted-equals-presentable invariant against `bin/fm-guard.sh` and `bin/fm-wake-drain.sh` together:
 
@@ -426,9 +409,6 @@ Each record includes:
 - Successor disposition.
 
 The file is size-capped through `FM_WATCH_CYCLE_LOG_MAX_BYTES` and `FM_WATCH_CYCLE_LOG_KEEP_LINES`.
-An owning arm captures the watcher's stderr and passes it through to its own stderr when the cycle ends.
-When the cycle exits nonzero, the arm also appends a header line with the watcher PID and exit code, plus the last 20 stderr lines, to `state/.watch-cycle-stderr.log`.
-That file is capped at `FM_WATCH_CYCLE_LOG_MAX_BYTES`.
 `state/.watch-triage.log` remains only the watcher's bounded absorbed-wake debug log and carries no lifecycle semantics.
 
 ### Grace, beacon, and stop signals
@@ -491,9 +471,7 @@ The same suite covers ordinary same-process session replacement for `/new`, `/re
 - Terminal quit still refusing late rearm.
 - A mid-restore marker advance that delivers the wake with no rejection appendix, offers it to an accepting supervision branch like a confirmed delivery, and records the attempt and the confirm result in the bounded extension log when opted in.
 - A failed confirmation for a stale successor that spares a newer arm started by a repair.
-- A repair and a scheduled retry over a dead-but-unclosed arm child that each start a fresh arm instead of stalling.
-
-It also drives the catch-up burst end to end against the real close handlers: a burst delivers one follow-up while every durable row stays queued, folding stops at its bound and at a settle that proves the run idle with nothing queued while a busy, queued-message, or predicate-less settle leaves it armed, a notification after an intervening drain claims no folded cycles, and a count that stalls, fails, or comes back uncountable still delivers the wake without a number.
+- A repair, a scheduled retry, and a deferred close over a dead-but-unclosed arm child that each start a fresh arm instead of stalling.
 
 The guard and session-start suites prove that active generation evidence tolerates a fresh-beacon handoff.
 They also prove that a legacy or handoff-phase watcher marker from an absent replacement extension still raises the outage diagnostic.

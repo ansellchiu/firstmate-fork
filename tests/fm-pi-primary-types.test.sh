@@ -25,9 +25,6 @@ TMP_ROOT="$DEPENDENCY_ROOT/sdk-$version"
 mkdir -p "$TMP_ROOT/lib"
 cp "$ROOT/.pi/extensions/fm-branch-supervision.ts" "$TMP_ROOT/fm-branch-supervision.ts"
 cp "$ROOT/.pi/extensions/fm-calm.ts" "$TMP_ROOT/fm-calm.ts"
-cp "$ROOT/.pi/extensions/fm-headroom.ts" "$TMP_ROOT/fm-headroom.ts"
-cp "$ROOT/.pi/extensions/fm-primary-growth.ts" "$TMP_ROOT/fm-primary-growth.ts"
-cp "$ROOT/.pi/extensions/fm-pi-auto-afk-observe.ts" "$TMP_ROOT/fm-pi-auto-afk-observe.ts"
 cp "$ROOT/.pi/extensions/fm-primary-pi-watch.ts" "$TMP_ROOT/fm-primary-pi-watch.ts"
 cp "$ROOT/.pi/extensions/fm-primary-turnend-guard.ts" "$TMP_ROOT/fm-primary-turnend-guard.ts"
 cp "$ROOT/.pi/extensions/fm-primary-read-repetition.ts" "$TMP_ROOT/fm-primary-read-repetition.ts"
@@ -36,7 +33,6 @@ cp "$ROOT/.pi/extensions/lib/fm-branch-dispatch.ts" "$TMP_ROOT/lib/fm-branch-dis
 cp "$ROOT/.pi/extensions/lib/fm-native-contract.ts" "$TMP_ROOT/lib/fm-native-contract.ts"
 cp "$ROOT/.pi/extensions/lib/fm-async-exec.ts" "$TMP_ROOT/lib/fm-async-exec.ts"
 cp "$ROOT/.pi/extensions/lib/fm-branch-model-picker.ts" "$TMP_ROOT/lib/fm-branch-model-picker.ts"
-cp "$ROOT/.pi/extensions/lib/fm-branch-rotation.ts" "$TMP_ROOT/lib/fm-branch-rotation.ts"
 cp "$ROOT/.pi/extensions/lib/fm-calm-assistant-layout.ts" "$TMP_ROOT/lib/fm-calm-assistant-layout.ts"
 cp "$ROOT/.pi/extensions/lib/fm-calm-preservation.ts" "$TMP_ROOT/lib/fm-calm-preservation.ts"
 cp "$ROOT/.pi/extensions/lib/fm-calm-operational-user-layout.ts" "$TMP_ROOT/lib/fm-calm-operational-user-layout.ts"
@@ -45,8 +41,6 @@ cp "$ROOT/.pi/extensions/lib/fm-calm-visibility.ts" "$TMP_ROOT/lib/fm-calm-visib
 cp "$ROOT/.pi/extensions/lib/fm-calm-working-ship.ts" "$TMP_ROOT/lib/fm-calm-working-ship.ts"
 cp "$ROOT/.pi/extensions/lib/fm-calm-working-ship-sprite.ts" "$TMP_ROOT/lib/fm-calm-working-ship-sprite.ts"
 cp "$ROOT/.pi/extensions/lib/fm-operational-input.ts" "$TMP_ROOT/lib/fm-operational-input.ts"
-cp "$ROOT/.pi/extensions/lib/fm-primary-growth.ts" "$TMP_ROOT/lib/fm-primary-growth.ts"
-cp "$ROOT/.pi/extensions/lib/fm-primary-session-lock.ts" "$TMP_ROOT/lib/fm-primary-session-lock.ts"
 node - "$TMP_ROOT" "$version" <<'JS'
 const { writeFileSync } = require("node:fs");
 // Each SDK's packages must stay on its own version. Their public ^ ranges

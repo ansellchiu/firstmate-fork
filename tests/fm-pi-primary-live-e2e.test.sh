@@ -29,8 +29,6 @@ WATCH_ONLY=${FM_PI_LIVE_WATCH_ONLY:-0}
 case "$WATCH_ONLY" in 0|1) ;; *) fail "FM_PI_LIVE_WATCH_ONLY must be 0 or 1" ;; esac
 # shellcheck source=/dev/null
 . "$ROOT/bin/fm-operational-input.sh"
-# shellcheck source=/dev/null
-. "$ROOT/bin/fm-composer-lib.sh"
 # shellcheck disable=SC2016 # Backticks are literal prompt markup.
 LEGACY_START='Run `bin/fm-session-start.sh` now, exactly once, before executing any other instructions.'
 LEGACY_AWAY=$'\xE2\x81\xA3Supervisor escalate (1 event(s)): done: legacy rollout'
@@ -44,42 +42,6 @@ ASCII_ONLY='FIRSTMATE_OP: v1 watcher: captain-authored text'
 
 capture() {
   "$TMUX" -L "$SOCKET" capture-pane -p -t "$SESSION" -S -600 2>/dev/null || true
-}
-
-# The VISIBLE pane with its styling - the window fm_tmux_composer_capture reads.
-capture_styled() {
-  "$TMUX" -L "$SOCKET" capture-pane -e -p -t "$SESSION" -S 0 -E - 2>/dev/null || true
-}
-
-# Pi >=0.85 draws its working indicator INTO the composer's top border, never as
-# a `Working...` transcript row, so that border is the shape Calm must clear.
-# Rows are prepared exactly as _fm_composer_scan_screen prepares them for this
-# predicate: left-stripped, then normalize-trimmed.
-pi_titled_working_border_present() {  # <styled-pane>
-  local row
-  while IFS= read -r row; do
-    row="${row#"${row%%[![:space:]]*}"}"
-    fm_composer_normalize_trim_var row
-    if _fm_composer_pi_titled_open_row "$row"; then
-      return 0
-    fi
-  done < <(printf '%s\n' "$1" | fm_composer_strip_ansi)
-  return 1
-}
-
-# The positive control for the Calm absence assertion: stock pi must still DRAW
-# the border shape this guard recognizes, or a pi that moves its working
-# indicator a third time simply turns the Calm check green again.
-wait_for_titled_working_border() {  # <attempts>
-  local attempts=$1 i=0
-  while [ "$i" -lt "$attempts" ]; do
-    if pi_titled_working_border_present "$(capture_styled)"; then
-      return 0
-    fi
-    sleep 0.05
-    i=$((i + 1))
-  done
-  return 1
 }
 
 wait_for_text() {
@@ -289,7 +251,6 @@ if [ "$WATCH_ONLY" -eq 0 ]; then
 fi
 mkdir -p "$PROJECT/.pi/extensions/lib"
 cp "$ROOT/.pi/extensions/fm-calm.ts" "$PROJECT/.pi/extensions/fm-calm.ts"
-cp "$ROOT/.pi/extensions/fm-primary-growth.ts" "$PROJECT/.pi/extensions/fm-primary-growth.ts"
 cp "$ROOT/.pi/extensions/fm-primary-pi-watch.ts" "$PROJECT/.pi/extensions/fm-primary-pi-watch.ts"
 cp "$ROOT/.pi/extensions/lib/fm-calm-assistant-layout.ts" "$PROJECT/.pi/extensions/lib/fm-calm-assistant-layout.ts"
 cp "$ROOT/.pi/extensions/lib/fm-calm-operational-user-layout.ts" "$PROJECT/.pi/extensions/lib/fm-calm-operational-user-layout.ts"
@@ -301,8 +262,6 @@ cp "$ROOT/.pi/extensions/lib/fm-branch-dispatch.ts" "$PROJECT/.pi/extensions/lib
 cp "$ROOT/.pi/extensions/lib/fm-native-contract.ts" "$PROJECT/.pi/extensions/lib/fm-native-contract.ts"
 cp "$ROOT/.pi/extensions/lib/fm-async-exec.ts" "$PROJECT/.pi/extensions/lib/fm-async-exec.ts"
 cp "$ROOT/.pi/extensions/lib/fm-operational-input.ts" "$PROJECT/.pi/extensions/lib/fm-operational-input.ts"
-cp "$ROOT/.pi/extensions/lib/fm-primary-growth.ts" "$PROJECT/.pi/extensions/lib/fm-primary-growth.ts"
-cp "$ROOT/.pi/extensions/lib/fm-primary-session-lock.ts" "$PROJECT/.pi/extensions/lib/fm-primary-session-lock.ts"
 cp "$ROOT/.pi/extensions/fm-primary-turnend-guard.ts" "$PROJECT/.pi/extensions/fm-primary-turnend-guard.ts"
 cp "$ROOT/bin/fm-watch-arm.sh" "$PROJECT/bin/fm-watch-arm.sh"
 cp "$ROOT/bin/fm-operational-input.sh" "$PROJECT/bin/fm-operational-input.sh"
@@ -330,8 +289,7 @@ if [ "$WATCH_ONLY" -eq 0 ]; then
   send_prompt "Reply exactly CALM_LIVE_WORKING_VISIBLE"
   i=0
   while [ "$i" -lt 240 ]; do
-    styled=$(capture_styled)
-    pane=$(printf '%s\n' "$styled" | fm_composer_strip_ansi)
+    pane=$(capture)
     if printf '%s\n' "$pane" | grep -Fq '╲▁▁▁╱'; then
       break
     fi
@@ -340,8 +298,8 @@ if [ "$WATCH_ONLY" -eq 0 ]; then
   done
   printf '%s\n' "$pane" | grep -Fq '╲▁▁▁╱' \
     || fail "Calm did not show the working ship on the credentialed provider path"
-  ! pi_titled_working_border_present "$styled" \
-    || fail "Calm left Pi's working indicator in the composer top border on the credentialed provider path"
+  printf '%s\n' "$pane" | grep -Fq "Working..." \
+    && fail "Calm left Pi's stock working row visible on the credentialed provider path"
   wait_for_exact_line "CALM_LIVE_WORKING_VISIBLE" 120 \
     || fail "Pi did not settle the Calm working-ship provider probe"
   pane=$(capture)
@@ -355,10 +313,6 @@ fi
 
 : > "$HOME_DIR/state/pi-e2e.meta"
 send_prompt "Start supervision with fm_watch_arm_pi and never use bash to arm supervision. Three watcher notifications will name LIVE_WAKE_1 through LIVE_WAKE_3. After each one, run bin/fm-wake-drain.sh, handle and acknowledge it, then reply exactly HANDLED_1, HANDLED_2, or HANDLED_3 to match that notification."
-if [ "$WATCH_ONLY" -eq 0 ]; then
-  wait_for_titled_working_border 600 \
-    || fail "stock Pi $PI_VERSION never drew the titled composer working border this guard recognizes; re-take tests/assets/pi-0.85-composer/ per docs/verification/pi-composer-shapes.md"
-fi
 i=0
 while [ "$i" -lt 120 ]; do
   pane=$(capture)

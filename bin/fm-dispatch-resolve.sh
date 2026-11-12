@@ -56,8 +56,7 @@
 #   candidate binds to one row through quota_row in
 #   bin/fm-quota-axi-lib.sh, so a Pi lane such as openai-codex-work/...
 #   reads its own account's row and an expanded provider with no row for the
-#   candidate is unmeasured, never blocked; the all_models bound follows
-#   fm_quota_scope_substitution_table in bin/fm-quota-axi-lib.sh), then the optional preferred_provider
+#   candidate is unmeasured, never blocked), then the optional preferred_provider
 #   family restriction before spendPriority ranks the remaining candidates.
 #   An eligible but wholly unrankable preferred family escalates rather than
 #   authorizing another family.
@@ -573,9 +572,8 @@ else
 fi
 
 # ---- resolution: declared gates + quota evidence + argmax, all in jq ------------
-SCOPE_SUBS=$(fm_quota_scope_substitution_json) || emit_error "cannot read the scope substitution table"
-RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg none_criterion "$DEFAULT_WHEN" --argjson pmap "$PMAP" --argjson sq "$SQ" --argjson scope_subs "$SCOPE_SUBS" \
-  --slurpfile resp "$RESP_FILE" --slurpfile rules "$RULES" --slurpfile quota "$QUOTA" "$FM_QUOTA_SCOPE_SUBSTITUTION_JQ$FM_QUOTA_ROW_JQ"'
+RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg none_criterion "$DEFAULT_WHEN" --argjson pmap "$PMAP" --argjson sq "$SQ" \
+  --slurpfile resp "$RESP_FILE" --slurpfile rules "$RULES" --slurpfile quota "$QUOTA" "$FM_QUOTA_ROW_JQ"'
   ($resp[0]) as $r | ($rules[0]) as $cfg | ($quota[0]) as $q | ($r.answers.rule) as $a |
   def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
   def prov($p; $lane): quota_row($q; $p; $lane);
@@ -587,9 +585,8 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
     (prov($p; $lane) != null and (["known", "partial"] | index(prov($p; $lane).quotaSemantics.status)) != null);
   def applicable($p; $lane; $m; $qs):
     (bare($m)) as $bare |
-    (scope_instead_of_all_models($p; $bare)) as $wide |
     [rows($p; $lane)[] | select(
-      .scope == $wide or .scope == "all_products" or
+      .scope == "all_models" or .scope == "all_products" or
       ($m != "" and (.scope == ("model:" + $bare) or .scope == ("product:" + $bare))) or
       ($qs != null and .scope == $qs)
     )];

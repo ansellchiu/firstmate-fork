@@ -586,10 +586,6 @@ test_wedge_cap_expires_after_horizon() {
   printf '%s' "$post_hash" > "$state/.hash-$key"
   printf '%s' "$post_hash" > "$state/.stale-$key"
   printf '%s\n' "$(( max - 1 ))" > "$state/.wedge-escalations-$key"
-  # The fork restarts the escalation count when the underlying-state signature
-  # changed since the last escalation (auto-standdown); drop the prior signature
-  # so the pre-seeded count is the one this poll advances.
-  rm -f "$state/.stale-sig-$key"
   printf '3\n' > "$state/.count-$key"
   echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
   : > "$out"
@@ -1684,12 +1680,7 @@ drive_first_sight_release() {  # <route>
   printf '%s' "$fresh_hash" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
   export FM_FAKE_CREW_STATE="$route_verdict"
-  # Away mode in the fork is the flag plus a live daemon lock
-  # (daemon-lock-liveness), so the away route seeds both.
-  if [ "$away_record" -eq 1 ]; then
-    date +%s > "$state/.afk"
-    seed_daemon_lock "$state"
-  fi
+  [ "$away_record" -eq 0 ] || date +%s > "$state/.afk"
   : > "$out"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
     FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
@@ -1709,7 +1700,6 @@ drive_first_sight_release() {  # <route>
   fi
   reap "$pid"
   rm -f "$state/.afk"
-  rm -rf "$state/.supervise-daemon.lock"
   ack_stopped_cycle "$state" || true
   [ ! -e "$state/.wedge-permanent-$key" ] \
     || fail "the $route first-sight route left the cap marker standing, so the next genuine wedge would answer with silence until the horizon"

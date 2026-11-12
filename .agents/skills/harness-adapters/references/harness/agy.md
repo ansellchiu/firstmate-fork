@@ -9,7 +9,6 @@ Verified as a full Firstmate harness (Primary, Secondmate, and Crewmate/Scout).
 | Fact | Value |
 |---|---|
 | Binary | Absolute `agy` from `PATH`, refused if absent; a Go-compiled single binary, so the live process name is exactly `agy` with `argv[0]=agy`. |
-| Authentication | agy picks its credential store per process: a session it detects as SSH uses a file-based token store, every other session uses the OS keyring, and firstmate's workers are always SSH-detected - so a desktop/Keychain sign-in is structurally invisible to them and an unauthenticated worker parks forever on an interactive OAuth prompt instead of failing. Every `fm-spawn.sh` agy launch is therefore gated on a bounded `agy models` preflight before any endpoint, worktree, or metadata exists (`../../../../../bin/fm-agy-lib.sh`, `tests/fm-agy-preflight.test.sh`); a refusal names the lane and the sign-in procedure and never falls back to another harness. Restore the lane with one interactive sign-in performed inside an SSH session, which fixes every future pane at once. |
 | Launch | `agy --prompt-interactive "<brief>" --model <id> --effort <level> --dangerously-skip-permissions`, with the resolved absolute binary; the brief auto-submits with no extra Enter. The spawn pre-registers the worktree in agy's trust store first, then waits for a busy turn (answering the folder-trust dialog if it renders anyway) before reporting success. |
 | Busy state | No hook or plugin writer, so nothing is armed and no record is seeded; on Herdr the native `working` status classifies busy, and everywhere else the `agy-regex` rendered-tail fallback in `../../../../../bin/fm-busy-lib.sh` does. |
 | Rendered tail | Busy status row carries `esc to cancel` on the left; the idle row shows `? for shortcuts` instead. The `Generating...` word beside the braille spinner is free-floating output and is not a signal. |
@@ -22,7 +21,7 @@ Verified as a full Firstmate harness (Primary, Secondmate, and Crewmate/Scout).
 | Resume | `--continue` and `--conversation` exist but carry no verified pane-resume contract; use deterministic relaunch. |
 | Model | `--model <id>` with the bare catalog id from `agy models` (for example `gemini-3.8-flash-high`); `bin/fm-spawn.sh` refuses a requested id a reachable listing omits. The listing is a remote fetch, so the probe runs stdin-detached under the shared hard bound and an unreachable or hung listing launches unvalidated with a notice. |
 | Effort | `--effort low\|medium\|high`; `xhigh` and `max` stay in task metadata under the record-and-omit contract. |
-| Composer | Borderless bare `>` row between full-width rules, which the shared classifier reads as `unknown` under the dead-shell rule, never `empty`; steering confirms delivery through native agent-state and the delivery footer instead, the cursor precedent. Only `fm-control` exit and relaunch opt in to an idle proof (`_fm_composer_agy_verdict` in `../../../../../bin/fm-composer-lib.sh`): with the recorded harness agy and the `? for shortcuts` row directly below the closing rule, a bare `>` reads `empty` and text after it `pending`. |
+| Composer | Borderless bare `>` row, which the shared classifier reads as `unknown` under the dead-shell rule, never `empty`; steering confirms delivery through native agent-state and the delivery footer instead, the cursor precedent. |
 
 ## Trust, and where the decision persists
 
@@ -35,7 +34,7 @@ Never steer into a pane still showing the dialog; a spawn that reported success 
 ## Credential precondition
 
 A verified agy worker ran under a signed-in Google account with no key export and no dialog.
-An unauthenticated worker parks on an interactive OAuth prompt rather than failing, so the Authentication row's preflight refuses the launch first; treat that refusal, or any auth prompt that renders anyway, as a credential blocker under `../../../../../AGENTS.md` section 9, fix the environment, and retire the endpoint rather than typing into it.
+The unauthenticated failure mode was not observed, so treat any auth prompt or refusal as a credential blocker under `../../../../../AGENTS.md` section 9, fix the environment, and retire the endpoint rather than typing into it.
 
 ## Detection
 

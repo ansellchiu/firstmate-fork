@@ -123,33 +123,6 @@ printf 'stale: fixture-win actionable\n'
 exit 0
 SH
       ;;
-    handling-actionable)
-      cat >> "$dir/bin/fm-watch-arm.sh" <<'SH'
-printf 'pending:handling:fixture-generation\n' > "$FM_HOME/state/.watcher-down"
-touch "$FM_HOME/state/.last-watcher-beat"
-printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
-printf 'stale: fixture-win actionable\n'
-exit 0
-SH
-      ;;
-    acked-actionable)
-      cat >> "$dir/bin/fm-watch-arm.sh" <<'SH'
-printf 'acked:downtime:fixture-generation\n' > "$FM_HOME/state/.watcher-down"
-touch "$FM_HOME/state/.last-watcher-beat"
-printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
-printf 'check: inactive-outcome\n'
-exit 0
-SH
-      ;;
-    markerless-actionable)
-      cat >> "$dir/bin/fm-watch-arm.sh" <<'SH'
-rm -f "$FM_HOME/state/.watcher-down"
-touch "$FM_HOME/state/.last-watcher-beat"
-printf 'watcher: started pid=%s (beacon fresh)\n' "$$"
-printf 'check: inactive-outcome\n'
-exit 0
-SH
-      ;;
     failed)
       cat >> "$dir/bin/fm-watch-arm.sh" <<'SH'
 printf 'watcher: FAILED - no live watcher with a fresh beacon\n'
@@ -489,41 +462,6 @@ test_actionable_close_rewakes_with_reason() {
   [ ! -e "$dir/state/.claude-autoarm.lock" ] || fail "owner lock must be released after the cycle"
   [ -e "$dir/state/arm-ran" ] || fail "hook never foregrounded the arm wrapper"
   pass "auto-arm: actionable close translates to exactly one exit-2 rewake with reason"
-}
-
-test_unacked_handling_wake_still_rewakes() {
-  local dir out status
-  dir=$(make_primary_dir "$TMP_ROOT/actionable-handling")
-  : > "$dir/state/task.meta"
-  write_arm_fixture "$dir" handling-actionable
-  out=$(run_autoarm "$dir" 2>/dev/null); status=$?
-  expect_code 2 "$status" "a re-presented unacked handling wake must still exit 2 so Claude rewakes"
-  assert_contains "$out" "firstmate watcher wake" "the handling rewake must carry the wake banner"
-  assert_contains "$out" "stale: fixture-win actionable" "the handling rewake must carry the arm's reason line"
-  [ "$(epoch_outcome "$dir")" = rewake ] || fail "handling marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
-  [ "$(epoch_field "$dir" recovery_generation)" = fixture-generation ] \
-    || fail "handling rewake epoch must bind the watcher recovery generation"
-  pass "auto-arm: an unacked handling-phase wake is still rewake-eligible"
-}
-
-test_queueless_wake_rewakes_unbound() {
-  local dir out status kind
-  for kind in acked-actionable markerless-actionable; do
-    dir=$(make_primary_dir "$TMP_ROOT/actionable-$kind")
-    : > "$dir/state/task.meta"
-    write_arm_fixture "$dir" "$kind"
-    out=$(run_autoarm "$dir" 2>/dev/null); status=$?
-    expect_code 2 "$status" "an actionable wake with a $kind marker must still exit 2 so Claude rewakes"
-    assert_contains "$out" "firstmate watcher wake" "the $kind rewake must carry the wake banner"
-    assert_contains "$out" "check: inactive-outcome" "the $kind rewake must carry the arm's reason line"
-    [ "$(epoch_outcome "$dir")" = rewake ] \
-      || fail "$kind marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
-    [ "$(epoch_field "$dir" session_pid)" = "$(cat "$dir/state/.lock")" ] \
-      || fail "the $kind rewake must still bind the lock-owning Claude session"
-    [ -z "$(epoch_field "$dir" recovery_generation)" ] \
-      || fail "a $kind marker publishes no recovery generation, so none may be recorded"
-  done
-  pass "auto-arm: a wake with no published recovery generation still rewakes, unbound"
 }
 
 # pi-code (Pi's Claude-hook compatibility extension) delivers a Claude-shaped
@@ -2157,10 +2095,10 @@ test_host_stand_down_is_silent() {
   pass "auto-arm: a host that stood down closes silently without a retry"
 }
 
-# Main already drained and acknowledged the wake. This home commits the
-# actionable rewake UNBOUND on an acknowledged marker rather than refusing into
-# a silent exit 0 that would discard the banner, and that is no failure episode.
-test_host_rewake_on_acknowledged_marker_opens_no_failure_episode() {
+# Main already drained and acknowledged the wake, so the rewake is refused on a
+# marker that is no longer downtime: that refusal stays silent and opens no
+# failure episode.
+test_host_benign_rewake_refusal_opens_no_failure_episode() {
   local dir out status
   dir=$(make_primary_dir "$TMP_ROOT/host-benign-refusal")
   mkdir -p "$dir/config"
@@ -2168,19 +2106,17 @@ test_host_rewake_on_acknowledged_marker_opens_no_failure_episode() {
   : > "$dir/state/task.meta"
   write_host_fixture "$dir" benign-refusal
   out=$(run_autoarm "$dir" 2>/dev/null); status=$?
-  expect_code 2 "$status" "a host rewake on an acknowledged marker must still continue main"
-  assert_contains "$out" "supervision-host: branch-outcome: fixture" "the unbound rewake must carry the host's lines"
-  assert_not_contains "$out" "auto-arm FAILED" "an acknowledged marker must not deliver a failure notice"
-  assert_absent "$dir/state/.claude-autoarm-failure-notified" "an acknowledged marker opened a failure episode"
-  [ "$(epoch_outcome "$dir")" = rewake ] || fail "an acknowledged marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
-  pass "auto-arm: a host rewake on an acknowledged marker continues main unbound and opens no failure episode"
+  expect_code 0 "$status" "a refused rewake on an acknowledged marker must stay silent"
+  assert_not_contains "$out" "auto-arm FAILED" "a benign refusal must not deliver a failure notice"
+  assert_absent "$dir/state/.claude-autoarm-failure-notified" "a benign refusal opened a failure episode"
+  [ "$(epoch_outcome "$dir")" != failed ] || fail "a benign refusal must not record outcome=failed"
+  pass "auto-arm: a host rewake refused on an acknowledged marker opens no failure episode"
 }
 
 # The host handed a wake back but left the marker in handling (pending or
-# announced) with no live successor. This home's rewake accepts a handling
-# marker, so the hand-back itself reaches main as the rewake on every
-# invocation and no failure episode opens.
-assert_host_handling_handback_rewakes_main() {
+# announced) with no live successor, so no rewake can commit: the hook delivers
+# the failure notice once per episode and keeps exiting 2 without repeating it.
+assert_host_lost_handback_notifies_once_per_episode() {
   local kind=$1 dir out status
   dir=$(make_primary_dir "$TMP_ROOT/host-$kind")
   mkdir -p "$dir/config"
@@ -2188,22 +2124,25 @@ assert_host_handling_handback_rewakes_main() {
   : > "$dir/state/task.meta"
   write_host_fixture "$dir" "$kind"
   out=$(run_autoarm "$dir" 2>/dev/null); status=$?
-  expect_code 2 "$status" "a hand-back on a handling marker must reach main"
-  assert_contains "$out" "supervision-host: watcher downtime could not be restored for the main hand-back" \
-    "the rewake must carry the host's hand-back lines"
-  assert_not_contains "$out" "auto-arm FAILED" "a rewake that committed must not deliver a failure notice"
-  assert_absent "$dir/state/.claude-autoarm-failure-notified" "a committed hand-back opened a failure episode"
-  [ "$(epoch_outcome "$dir")" = rewake ] || fail "a hand-back on a handling marker must record outcome=rewake, got: $(epoch_outcome "$dir")"
+  expect_code 2 "$status" "a lost hand-back must reach main"
+  assert_contains "$out" "auto-arm FAILED - the supervision host returned an actionable wake" "a lost hand-back must deliver the failure notice"
+  assert_present "$dir/state/.claude-autoarm-failure-notified" "a lost hand-back did not record its failure episode"
+  [ "$(epoch_outcome "$dir")" = failed ] || fail "a lost hand-back must record outcome=failed, got: $(epoch_outcome "$dir")"
+  out=$(run_autoarm "$dir" 2>/dev/null); status=$?
+  expect_code 2 "$status" "a repeated lost hand-back must still reach main"
+  assert_not_contains "$out" "auto-arm FAILED" "a repeated lost hand-back must not repeat the failure notice"
+  [ "$(epoch_outcome "$dir")" = failed-suppressed ] \
+    || fail "a repeated lost hand-back must record outcome=failed-suppressed, got: $(epoch_outcome "$dir")"
 }
 
-test_host_pending_handling_handback_rewakes_main() {
-  assert_host_handling_handback_rewakes_main lost-handback
-  pass "auto-arm: a host hand-back on a pending handling marker rewakes main"
+test_host_lost_handback_notifies_once_per_episode() {
+  assert_host_lost_handback_notifies_once_per_episode lost-handback
+  pass "auto-arm: a lost host hand-back notifies once per failure episode"
 }
 
-test_host_announced_handling_handback_rewakes_main() {
-  assert_host_handling_handback_rewakes_main lost-announced-handback
-  pass "auto-arm: a host hand-back on an announced handling marker rewakes main"
+test_host_lost_announced_handback_notifies_once_per_episode() {
+  assert_host_lost_handback_notifies_once_per_episode lost-announced-handback
+  pass "auto-arm: a lost host hand-back on an announced marker notifies once per failure episode"
 }
 
 test_host_crash_is_retried_then_reported() {
@@ -2286,8 +2225,6 @@ test_resolves_outermost_claude_pid_in_nested_bgspare_chain
 test_inert_when_fleet_idle
 test_actionable_close_rewakes_with_reason
 test_actionable_close_with_live_successor_rewakes_once
-test_unacked_handling_wake_still_rewakes
-test_queueless_wake_rewakes_unbound
 test_attached_cycle_end_starts_handling_successor
 test_unconfirmed_handling_successor_still_rewakes
 test_failed_close_rewakes_with_failure_banner
@@ -2339,9 +2276,9 @@ test_host_handback_beside_a_quiet_record_carries_no_away_note
 test_plain_arm_banner_keeps_its_wake_line_cap
 test_host_handback_carries_every_host_line
 test_host_stand_down_is_silent
-test_host_rewake_on_acknowledged_marker_opens_no_failure_episode
-test_host_pending_handling_handback_rewakes_main
-test_host_announced_handling_handback_rewakes_main
+test_host_benign_rewake_refusal_opens_no_failure_episode
+test_host_lost_handback_notifies_once_per_episode
+test_host_lost_announced_handback_notifies_once_per_episode
 test_host_crash_is_retried_then_reported
 test_arguments_never_arm
 test_fm_lock_status_still_works_with_shared_lib

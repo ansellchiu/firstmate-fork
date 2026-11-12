@@ -17,6 +17,10 @@
 #     entry's equivalence claim.
 #   - --refresh-reviewed records a review point, and that recorded point is what
 #     silences an entry until upstream moves again.
+#   - A parked entry is a resting state: it names the commit to restore from
+#     without raising attention, its removed paths are not stale, a parked
+#     entry needs a resolvable parkedAt, and it claims no contended path, so
+#     leftover drift on a parked path is still uncovered.
 #   - The inventory this repo actually ships is schema-valid.
 set -u
 
@@ -159,6 +163,56 @@ test_dispositions_are_surfaced() {
   assert_contains "$out" "inventory-entry: needs-a-look needs-review" "needs-review is surfaced"
   assert_contains "$out" "inventory-entry: on-its-way-out superseded: " "superseded is surfaced with its instruction"
   pass "T5 dispositions that need a human decision are surfaced"
+}
+
+# --- T5b: a parked entry rests without raising attention -------------------
+test_parked_entries_rest_and_claim_nothing() {
+  local repo out rc base sha parked
+  repo=$(new_repo t5b)
+  base=$(git -C "$repo" rev-parse HEAD)
+
+  git -C "$repo" checkout -q public
+  printf 'public shared\n' > "$repo/shared.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -qm public-change
+
+  git -C "$repo" checkout -q main
+  printf 'private shared\n' > "$repo/shared.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -qm private-change
+  sha=$(git -C "$repo" rev-parse HEAD)
+
+  parked='{"id":"gone-feature","area":"a","paths":["removed.txt"],"intent":"i","provenance":{"commits":["'"$sha"'"]},"upstreamEquivalent":"none","disposition":"parked","parkedAt":"'"$sha"'"}'
+  write_inventory "$repo" "$parked"
+  out=$(run_check "$repo")
+  rc=$?
+  expect_code 0 "$rc" "a parked inventory exits 0"
+  assert_contains "$out" "inventory: ok" "a parked entry raises no attention"
+  assert_contains "$out" "inventory-entry: gone-feature parked: restore from $sha" "the restore point is named"
+  assert_not_contains "$out" "stale-paths" "a parked entry's removed paths are not stale"
+
+  parked='{"id":"gone-feature","area":"a","paths":["shared.txt"],"intent":"i","provenance":{"commits":["'"$sha"'"]},"upstreamEquivalent":"none","disposition":"parked","parkedAt":"'"$sha"'"}'
+  write_inventory "$repo" "$parked"
+  out=$(run_check "$repo" --base "$base" --head main --upstream public)
+  assert_contains "$out" "inventory-uncovered: shared.txt" "leftover drift on a parked path is uncovered"
+  assert_contains "$out" "inventory: attention" "leftover drift raises attention"
+
+  write_inventory "$repo" "$(entry no-restore-point '["core.txt"]' "[\"$sha\"]" none parked)"
+  out=$(run_check "$repo")
+  expect_code 1 "$?" "a parked entry without parkedAt fails hard"
+  assert_contains "$out" "is parked but parkedAt is not a commit sha" "the missing restore point is named"
+
+  write_inventory "$repo" "$(entry still-here '["core.txt"]' "[\"$sha\"]" none retain | sed 's/}$/,"parkedAt":"'"$sha"'"}/')"
+  out=$(run_check "$repo")
+  expect_code 1 "$?" "parkedAt on an unparked entry fails hard"
+  assert_contains "$out" "has parkedAt but its disposition is not parked" "the stray restore point is named"
+
+  parked='{"id":"gone-feature","area":"a","paths":["core.txt"],"intent":"i","provenance":{"commits":["'"$sha"'"]},"upstreamEquivalent":"none","disposition":"parked","parkedAt":"0000000"}'
+  write_inventory "$repo" "$parked"
+  out=$(run_check "$repo")
+  assert_contains "$out" "inventory-entry: gone-feature unresolved-parked-at: 0000000" "an unresolvable restore point is reported"
+  assert_contains "$out" "inventory: attention" "an unresolvable restore point raises attention"
+  pass "T5b a parked entry rests, names its restore point, and claims no contended path"
 }
 
 # --- T6: uncovered drift is computed from git ------------------------------
@@ -333,6 +387,7 @@ test_schema_errors_fail_hard
 test_clean_inventory_is_ok
 test_stale_and_unresolved_are_reported
 test_dispositions_are_surfaced
+test_parked_entries_rest_and_claim_nothing
 test_uncovered_drift_comes_from_git
 test_upstream_review_point_gates_resurfacing
 test_unconfirmed_equivalence_is_challenged

@@ -96,7 +96,6 @@ Load `session-start-recovery` when the digest reports unfinished checks, actiona
 `docs/configuration.md` owns dispatch-profile and runtime-backend schemas, `bin/fm-harness.sh` owns static resolution, and `bin/fm-spawn.sh` owns launch flags and fail-closed validation.
 When dispatch profiles exist, consult them at every crewmate or scout intake and pass the resolved concrete profile required by `fm-spawn`.
 Routing precedence is an explicit per-task captain override, then the best-fit configured rule, then the configured default, then the static crewmate harness.
-A captain's model suggestion for a group is the lead option, not an order to move every worker: apply the per-lane concentration cap in `quota-array-dispatch`, state the split in one line, and put the critical-path worker on the best-proven eligible model.
 Firstmate alone resolves a matched profile array: begin with `quota-axi`'s default TOON at that intake, using the skill's narrow TOON-then-`--json` fallback only for genuine ambiguity, evaluate every configured candidate against that current output, and choose under the skill's `preferred_provider` procedure with inspectable `spendPriority` as the one quota-perspective ranker after its eligibility, reasoning-class, and runway-feasibility gates.
 Account for every candidate with the catalog evidence, provider relationship, applicable quota and authentication facts, remaining uncertainty, fit and reasoning class, and the spendPriority and runway evidence used in selection; never omit a candidate, guess, fall back silently, or call the result quota-informed without them.
 Establish model support and provider family from that harness's own authoritative catalog, then apply the [account and scope matching rules in `quota-array-dispatch`](.agents/skills/quota-array-dispatch/SKILL.md#1-eligibility).
@@ -133,9 +132,9 @@ A restart must be a non-event because durable state and live backend inventory, 
 
 ## 6. Project and knowledge management
 
-Load `project-management` before adding, creating, removing, or initializing a project, and before parking a project or moving the focus.
+Load `project-management` before adding, creating, removing, or initializing a project.
 Cloning or registering a project is add intake and uses the same trigger.
-That skill owns registry syntax, delivery-mode selection, portfolio focus and parking, outward-facing consent, clone and initialization procedure, safe rollback, and removal preflight.
+That skill owns registry syntax, delivery-mode selection, outward-facing consent, clone and initialization procedure, safe rollback, and removal preflight.
 Project creation never authorizes an unmentioned remote, and project removal never bypasses that preflight or unlanded-work checks; hard rule 1's concrete captain-approved project operation exception remains available when its exact conditions are met.
 
 Load `secondmate-provisioning` before creating, seeding, validating, launching, handing backlog to, recovering, pushing inherited local material into, or retiring a secondmate home, and before editing `data/secondmates.md`.
@@ -173,12 +172,6 @@ Resolve the project independently for every request.
 An explicit project wins, a clear follow-up inherits its referent, and otherwise match the request against the registry, work under way, and project code or README.
 Proceed on one confident match while naming the project in plain language; ask one concise question when multiple or no projects plausibly match.
 
-The captain carries one focus project and at most the configured number of projects consuming captain attention at once, which defaults to three.
-A project consumes attention while a durable record keeps a captain lane open on it - a task held for the captain, an open decision or blocker, or a ship or scout whose merge word or report lands on the captain from the moment it is dispatched - and stays quiet while it is only registered, parked, or being worked autonomously.
-`bin/fm-attention-lib.sh` owns that classification and the limit including its `config/attention-limit` setting, `bin/fm-attention.sh` is the operator and intake surface over it, `bin/fm-spawn.sh` enforces it for work that opens a new captain lane, and a project is parked or made the focus with a `+parked` or `+focus` registry annotation the `project-management` skill owns.
-When intake would push the attention-active count past that limit, stop and ask the captain to finish or explicitly park one of the projects already holding a slot first; only a current explicit captain instruction starts it anyway, and it never becomes standing permission.
-Before dispatching a batch, also stop and give the captain the one-line burn estimate and split when `quota-array-dispatch`'s batch stop-and-ask trigger holds.
-
 Route by the nature of the work against each registered secondmate scope, not by a non-exclusive clone list.
 Keep `local-only` work in the main home.
 Send in-scope work to the fitting secondmate unless it is blocked or the captain explicitly redirects it; do not read the secondmate's chat because marked routed replies return through its status or referenced document.
@@ -191,7 +184,6 @@ Classify the deliverable:
 
 - **Ship** is the default and produces a project change through the selected delivery mode; once implementation is authorized, dispatch a ship and keep any remaining bounded research inside it unless unresolved uncertainty could materially change whether or what to build.
 - **Scout** produces knowledge in `data/<id>/report.md`, never a PR, and is appropriate for investigation, diagnosis, planning, reproduction, or audit work when the captain explicitly requests a separate knowledge or design deliverable or unresolved uncertainty could materially change whether or what to build.
-  Every scout brief carries a standing, task-agnostic research contract - live web-search retrieval and an authoritative existence-surface check for every negative claim - that `bin/fm-brief.sh`'s scout scaffold owns in full; do not restate it here.
 
 - If established evidence already answers an informational question, relay it without a design-only scout; when implementation intent is unclear, answer and ask one concise implementation question when useful rather than dispatching speculative design work.
 - Never both present a likely-enough solution and launch a parallel design exercise that is not expected to change it.
@@ -207,12 +199,9 @@ For a ship task whose project is this firstmate repository, pass the project dir
 On a `no-mistakes-prod-only` project, classify the task's surface: internal-only tooling, automation, contributor or operator process, and release or submission work ships `direct-PR`, while product-facing, mixed, and uncertain work ships `no-mistakes`; never infer internal-only from file location or project name.
 An unregistered project or absent registry resolves to `no-mistakes` with yolo off, and the registration gap goes to the captain.
 Record the resulting mode, `yolo` merge posture, and the one-line reason for any deviation in the backlog item note.
-At the same intake, classify the task packet under the captain's recorded data policy with `fm-brief.sh --packet`: `ordinary` (default), `flagged` for a conflict-level packet, or `prohibited` for a packet under an explicit legal or contractual prohibition on where it may be processed.
-The brief is the smallest packet the worker will see, and `fm-spawn` enforces the recorded class at the boundary: flagged dispatches normally with a one-line China-usage warning in the task record and the next captain update, and prohibited is a hard stop that asks the captain once before any dispatch; the harness, model, and backend never influence the class.
 
 Treat file or subsystem overlap as a risk signal rather than an automatic reason to wait, and dispatch isolated work immediately with no concurrency cap when each change can be independently implemented and validated and the selected delivery path can reconcile ordinary rebases or conflicts.
 A project's declared machine capacity (`config/project-capacity`) still bounds that dispatch: a spawn beyond it exits 75 without launching, and its item stays queued rather than blocked.
-A batch of three or more workers follows the batch burn estimate in `quota-array-dispatch` before any spawn or relaunch.
 Serialize only for a true semantic dependency, shared mutable external state, incompatible concurrent migration, or another concrete condition that makes independent progress or reconciliation unsafe; same-file editing alone is insufficient, and genuine blockers remain durable.
 Write the task-specific brief under section 11 before spawning.
 Fill the task subsections according to section 11.
@@ -269,13 +258,6 @@ Load `ship-landing` when a ship reports a PR or ready branch, when deciding or m
 
 Load `scout-completion` when a scout reports completion, presents a visual artifact for iteration, or is being considered for promotion to implementation.
 
-### Incidental findings
-
-A ship worker that notices a concrete defect outside its task's scope records it through `bin/fm-findings.sh record` instead of fixing it, expanding the task, or spending a status line on it.
-Each entry lands in that task's `data/<id>/findings.md`, which survives cleanup like the brief and any scout report; `bin/fm-findings-lib.sh` owns the format, dedup, and pending rules.
-Pending findings surface at cleanup and in the session-start fleet digest until triaged.
-Triage is explicit: file the follow-up work or dismiss it with a reason, then close the entry with `bin/fm-findings.sh triage`; a recorded finding never authorizes changing a project by itself.
-
 ## 8. Supervision protocol
 
 Fleet supervision is an always-loaded operational contract; `docs/architecture.md`, `docs/turnend-guard.md`, the emitted session-start block, and script help own mechanisms and harness-specific recipes.
@@ -300,7 +282,7 @@ Handle actionable wakes as follows:
 
 1. For `signal:`, read the listed event lines first, then reconcile current state only where action depends on it.
 2. For `stale:`, inspect the recorded endpoint and load `stuck-crewmate-recovery` for a stopped, looping, confused, or unresponsive worker; a deep-inspection reason also requires current-state and validation-log inspection.
-3. For `check:`, act on the named poll result, including merges, contribution signals, Relay events, process-to-event source results, captain inbox notes, and a leaked-probe or machine-load alarm whose leaked CPU burners are steered back to their owning worker rather than killed; a handled inbox note is also acknowledged with `bin/fm-inbox.sh drain --ack <id>`, or it stays counted as still waiting for firstmate.
+3. For `check:`, act on the named poll result, including merges, contribution signals, Relay events, process-to-event source results, and captain inbox notes; a handled inbox note is also acknowledged with `bin/fm-inbox.sh drain --ack <id>`, or it stays counted as still waiting for firstmate.
    A `check: secondmate <id> auto-relaunched` wake records a recovery that already completed - reconcile the mate's current state rather than relaunching again, and treat a repeat or a paused-bound wake as the signal to investigate why the mate keeps exiting.
    When the note needs a durable answer the submitter can read, publish it with `bin/fm-inbox.sh reply <id>` (the script header owns the reply contract) rather than leaving the answer only in this transcript.
 4. For `heartbeat:`, review the whole fleet from the structured fleet view, reconcile suspicious tasks and PR state, update the backlog, and never report an unchanged fleet as progress.
@@ -334,7 +316,6 @@ For the full `stuck-crewmate-recovery` trigger, including a live worker claiming
 
 - **Talk in outcomes, not mechanics.**
 - Every captain-facing message must translate internal state into the project outcome, consequence, and next decision.
-- A captain-facing time renders in the captain's local zone from a local-labelled source, and a `Z`-suffixed UTC value is never relabeled as a local zone.
 - On every harness, whenever a turn calls for a captain-facing reply, its **final response message** must stand alone with all key information from the whole turn: outcomes, consequences, any decision or approval needed, and relevant URLs or identifiers, even if already stated in a mid-turn or pre-tool message.
 - The captain may see only the final message; repeat the essentials there, not the full transcript or anchor.
 - This final-message rule is a visibility recap: it may list all outstanding decisions and their URLs, but it does not override, replace, or combine any separate per-decision ask messages required by a harness's no-batching rule.
@@ -372,10 +353,6 @@ Reach the captain immediately for:
 - A real blocker or failure after the relevant playbook is exhausted.
 - Anything destructive, irreversible, or security-sensitive.
 - A needed credential or login.
-
-While this home has the Discord spike armed, mirror only these four of those reaches to the captain's channel with `bin/fm-discord-post.sh`: work ready for their review, a real blocker or failure, a finished investigation finding, and a landing receipt.
-Every destructive, irreversible, or security-sensitive reach and every needed-credential-or-login reach stays on the standing captain channels and never goes to Discord.
-Nothing else is posted there, and an unarmed home posts nothing; [`docs/discord-spike.md`](docs/discord-spike.md) owns the poster's refusals and the two-week exit.
 
 - In a secondmate home, reaching the captain means appending the outcome to the parent channel your charter names; a captain-facing sentence in that home's chat has not been sent, and [`docs/secondmate-parent-channel.md`](docs/secondmate-parent-channel.md) owns which outcomes the home's own scripts deliver there without you.
 - Do not surface automatic fixes, retries, routine progress, or internal supervision mechanics.

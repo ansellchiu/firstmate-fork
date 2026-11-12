@@ -289,7 +289,6 @@ case "${1:-}" in
     for a in "$@"; do
       case "$a" in
         *pane_current_command*)
-          [ -e "${FM_TMUX_CALL_LOG:?}.spawned" ] && { printf '%s\n' node; exit 0; }
           case "$mode" in
             missing) printf '%s\n' node; exit 0 ;;
             unreadable) exit 1 ;;
@@ -328,9 +327,9 @@ case "${1:-}" in
       done
       grep -Fqx -- "$name" "$windows" 2>/dev/null || printf '%s\n' "$name" >> "$windows"
     fi
-    [ "${1:-}" = kill-window ] && { : > "${FM_TMUX_CALL_LOG}.killed"; rm -f "${FM_TMUX_CALL_LOG}.spawned"; }
+    [ "${1:-}" = kill-window ] && : > "${FM_TMUX_CALL_LOG}.killed"
     [ "${FM_TEST_FAIL_NEW_WINDOW:-0}" = 1 ] && [ "${1:-}" = new-window ] && exit 1
-    [ "${1:-}" = new-window ] && { rm -f "${FM_TMUX_CALL_LOG}.killed"; : > "${FM_TMUX_CALL_LOG}.spawned"; }
+    [ "${1:-}" = new-window ] && rm -f "${FM_TMUX_CALL_LOG}.killed"
     exit 0
     ;;
   has-session) exit 0 ;;

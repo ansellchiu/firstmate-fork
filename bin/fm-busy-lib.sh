@@ -174,7 +174,6 @@ fm_busy_kimi_verified() {
   [ -n "$FM_BUSY_KIMI_VERIFIED_VERSIONS" ]
 }
 
-
 # fm_busy_codex_appserver_observable: capability/version negotiation for the
 # Codex app-server turn lifecycle. Returns 0 only when a pane worker's turns
 # are observable through the app-server protocol on the installed binary.
