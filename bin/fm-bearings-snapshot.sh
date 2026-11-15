@@ -147,8 +147,7 @@ Default collection performs bounded concurrent remote-ledger reads for registere
 remote homes under one shared snapshot budget and may refresh the parent-side cache.
 --include-prs additionally performs live GitHub discovery and checks.
 
-Default fields: schema, home, generated, generated_local, today_local, prs, attention,
-  portfolio{project,attention,why}, in_flight{id,kind,state,repo,name,doing},
+Default fields: schema, home, generated, prs, in_flight{id,kind,state,repo,name,doing},
   secondmates{id,state,doing,provenance,freshness,age_seconds,contradiction,reason},
   secondmate_reconcile{id,spawn_gen,host,kind,ids},
   decisions_open{id,key,verb,summary,question,owner}, landed{id,what,artifact,owner},
@@ -235,32 +234,7 @@ if [ "$GUARD_RC" -eq 4 ]; then
     '{pending:true,blockers:$blockers,reason:$reason}')
 fi
 
-# Same instant as generated, in the machine local zone. Prints
-# generated_local<TAB>today_local (RFC3339 with a colon in the offset, plus
-# YYYY-MM-DD). Fail closed so a UTC calendar date never silently stands in.
-bearings_local_fields() {  # <utc-rfc3339-Z>
-  local utc=$1 epoch raw local_ts today
-  epoch=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$utc" +%s 2>/dev/null \
-    || date -u -d "$utc" +%s 2>/dev/null) || return 1
-  raw=$(date -r "$epoch" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null \
-    || date -d "@$epoch" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null) || return 1
-  case "$raw" in
-    *[+-][0-9][0-9][0-9][0-9]) local_ts="${raw%??}:${raw#"${raw%??}"}" ;;
-    *) return 1 ;;
-  esac
-  today=${local_ts%%T*}
-  case "$today" in
-    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-    *) return 1 ;;
-  esac
-  printf '%s\t%s\n' "$local_ts" "$today"
-}
-
 NOW=${FM_BEARINGS_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
-LOCAL_FIELDS=$(bearings_local_fields "$NOW") \
-  || { echo "fm-bearings-snapshot: cannot render local clock from generated=$NOW" >&2; exit 1; }
-GENERATED_LOCAL=${LOCAL_FIELDS%%$'\t'*}
-TODAY_LOCAL=${LOCAL_FIELDS#*$'\t'}
 if [ "$ALL_LANDED" = 1 ] || [ "$ALL_SECONDMATES" = 1 ]; then
   if [ "$ALL_LANDED" = 1 ]; then
     SNAP=$(FM_SNAPSHOT_NOW="$NOW" FM_SNAPSHOT_SECONDMATES=0 FM_SNAPSHOT_SECONDMATE_LANDED_PER_HOME=0 "$FLEET" --json) || exit $?
@@ -376,11 +350,15 @@ EOF
 fi
 
 # --- projection: canonical snapshot -> fm-bearings.v1 model (JSON) ----------
+BEARINGS_TODAY=${NOW%%T*}
+case "$BEARINGS_TODAY" in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) : ;;
+  *) BEARINGS_TODAY=$(date -u +%Y-%m-%d) ;;
+esac
 MODEL=$(printf '%s' "$SNAP" | jq \
   --arg home "$HOME_LABEL" \
   --arg now "$NOW" \
-  --arg generated_local "$GENERATED_LOCAL" \
-  --arg today_local "$TODAY_LOCAL" \
+  --arg today "$BEARINGS_TODAY" \
   --arg prs "$PR_STATUS" \
   --arg fields "$FIELDS" \
   --argjson landed_n "$FM_BEARINGS_LANDED" \
@@ -414,18 +392,6 @@ MODEL=$(printf '%s' "$SNAP" | jq \
     | if $n <= 0 then ""
       elif length > $n then (if $n == 1 then "…" else (.[:($n - 1)] + "…") end)
       else . end;
-  def is_iso_date:
-    . as $d
-    | type == "string"
-    and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
-    and (if test("T")
-      then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
-      else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
-      end);
-  def as_iso_date_or_unknown:
-    if . == null then null
-    elif is_iso_date then .
-    else "unknown" end;
   def live_captain_call: .hold_bucket == "live";
   def projected_deferred_hold:
     .hold_bucket != null and .hold_bucket != "live";
@@ -446,7 +412,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
       end;
   def hold_note:
     if .hold_bucket == "blocked" then bounded_blocker_note(70)
-    elif .hold_bucket == "dated" then ("until " + ((.hold_until | as_iso_date_or_unknown) // "-"))
+    elif .hold_bucket == "dated" then ("until " + (.hold_until // "-"))
     elif .hold_bucket == "aged" and .hold_age_days != null then
       ("held " + (.hold_age_days | tostring) + "d")
     else null end;
@@ -469,7 +435,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
     {id, title:(.title | trunc(60)),
      blocked_by:((.unresolved_blocker_ids // []) | if length > 0 then join(",") else "-" end | trunc(120)),
      reason:(hold_gate_reason | trunc(40)), owner:$owner,
-     filed:((.since | as_iso_date_or_unknown) | trunc(40))};
+     filed:((.since // null) | trunc(40))};
   def round_robin_landed($n):
     . as $groups
     | [range(0; (($groups | map(length) | max) // 0)) as $i
@@ -647,8 +613,6 @@ MODEL=$(printf '%s' "$SNAP" | jq \
       schema: "fm-bearings.v1",
       home: $home,
       generated: $now,
-      generated_local: $generated_local,
-      today_local: $today_local,
       prs: $prs,
       contributions:(
         ([$snap.contributions + {owner:"(main)"}]
@@ -678,24 +642,6 @@ MODEL=$(printf '%s' "$SNAP" | jq \
            missing_verdicts:([$measured[].missing_verdicts] | add // 0),
            captain_omitted:([$measured[].captain_omitted] | add // 0),
            captain:[$measured[] as $h | $h.captain[]? | . + {owner:$h.owner}]}),
-      attention: (if .portfolio.available == false then
-                    "classification unavailable: \(.portfolio.reason // "the portfolio classification could not be computed")"
-                  else
-                    (if .portfolio.enforced == false then
-                       "\(.portfolio.counted) carried; limit disabled in config/attention-limit"
-                     else
-                       "\(.portfolio.counted)/\(.portfolio.limit)"
-                     end)
-                    + (if (.portfolio.focus // null) != null then " focus=\(.portfolio.focus)" else "" end)
-                    + (if .portfolio.over_limit then " OVER LIMIT"
-                       elif .portfolio.at_limit then " at limit"
-                       else "" end)
-                  end),
-      portfolio: [ (.portfolio.projects // [])[]
-                   | select(.counts)
-                   | {project:.name,
-                      attention:.class,
-                      why:(if (.reasons | length) > 0 then (.reasons | join(", ") | trunc(60)) else "-" end)} ],
       in_flight: (if $all_in_flight == 1 then $in_flight_all else $in_flight_all[:$in_flight_n] end),
       secondmates: (if $all_secondmates == 1 then $secondmates_all else $secondmates_all[:$secondmates_n] end),
       secondmate_reconcile: [ (.secondmate_current.records // [])[]
@@ -754,10 +700,6 @@ MODEL=$(printf '%s' "$SNAP" | jq \
         (if $all_unhealthy == 0 and ($unhealthy_all | length) > $unhealthy_n then {surface:("unhealthy_endpoints showing \($unhealthy_n) of \($unhealthy_all | length)"), reveal:"--all-unhealthy"} else empty end),
         (if $include_prs == 1 and $pr_repos_total > $pr_repos_shown then {surface:("PR repositories showing \($pr_repos_shown) of \($pr_repos_total)"), reveal:"--all-pr-repos"} else empty end),
         (if $include_prs == 1 and $pr_rows_capped > 0 then {surface:("candidate_prs showing \($candidate_prs | length) of at least \($pr_rows_min_total); capped in \($pr_rows_capped) repo(s)"), reveal:"raise FM_BEARINGS_PR_LIMIT"} else empty end),
-        (if $snap.portfolio.available == false then {surface:("portfolio classification unavailable: " + ($snap.portfolio.reason // "it could not be computed")), reveal:"bin/fm-attention.sh status"} else empty end),
-        (([ ($snap.portfolio.projects // [])[] | select(.counts | not) ] | length) as $n
-         | if $n > 0 then {surface:("projects not attention-active: \($n)"), reveal:"bin/fm-attention.sh status"} else empty end),
-        (if (($snap.portfolio.focus_conflict // []) | length) > 0 then {surface:("more than one project flagged +focus: " + (($snap.portfolio.focus_conflict // []) | join(", "))), reveal:"the captain has one focus project; correct data/projects.md"} else empty end),
         (if $include_prs == 1 then empty else {surface:"live PR discovery + checks", reveal:"--include-prs"} end) ]) }
 ') || { echo "fm-bearings-snapshot: projection failed" >&2; exit 1; }
 

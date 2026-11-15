@@ -73,15 +73,11 @@
 # HTTP 5xx, 429, secondary-rate-limit 403, connection, DNS and TLS failures are
 # retried once when that bound still has time. Other failures are reported
 # immediately, including a 404, which is how a lost login reads on a private
-# repository. A pull observation has four dependent waves: core, two
-# independent waves of at most three reads each, then the closing head read,
-# plus one more single-read wave for review threads when
-# FM_CONTRIBUTIONS_REPLY_AGE is set; an issue has two waves. One user token
-# never issues more than three concurrent forge reads, because GitHub asks for
-# per-user requests to stay serial enough to avoid a secondary rate limit,
-# whose failure would be recorded as a genuine outage rather than an unmeasured
-# read. Before starting a URL, poll reserves the smaller of the effective budget
-# and 15 seconds for those waves. URLs needing forge
+# repository. A pull observation has three
+# dependent waves: core, six independent reads (seven when FM_CONTRIBUTIONS_REPLY_AGE
+# is set), then the closing head read;
+# an issue has two waves. Before starting a URL, poll reserves the smaller of
+# the effective budget and 15 seconds for those waves. URLs needing forge
 # reads are sorted by URL and rotated by the current five-minute epoch bucket
 # modulo their count, without stored scheduling state or freshness-based
 # reordering. Terminal URLs settle separately before the forge budget starts
@@ -446,22 +442,21 @@ observe() { # canonical GitHub URL -> normalized JSON
     local reviews_pid=$!
     FORGE_ERR="$TMP/inline.err" forge api "$endpoint/comments?per_page=100" --paginate --slurp > "$TMP/inline.json" &
     local inline_pid=$!
-    wait_forges "$comments_pid" "$reviews_pid" "$inline_pid" || return 1
     FORGE_ERR="$TMP/checks.err" forge api "repos/$part/commits/$head/check-runs?filter=all&per_page=100" --paginate --slurp > "$TMP/checks.json" &
     local checks_pid=$!
     FORGE_ERR="$TMP/statuses.err" forge api "repos/$part/commits/$head/statuses?per_page=100" --paginate --slurp > "$TMP/statuses.json" &
     local statuses_pid=$!
     FORGE_ERR="$TMP/repo.err" forge api "repos/$part" > "$TMP/repo.json" &
     local repo_pid=$!
-    wait_forges "$checks_pid" "$statuses_pid" "$repo_pid" || return 1
+    local -a pids=("$comments_pid" "$reviews_pid" "$inline_pid" "$checks_pid" "$statuses_pid" "$repo_pid")
     printf '[]\n' > "$TMP/threads.json"
     if [ "$TRACK_THREADS" = true ]; then
       FORGE_ERR="$TMP/threads.err" forge api graphql --paginate --slurp -f owner="${part%/*}" -f name="${part#*/}" -F number="$number" \
         -f query='query($owner:String!,$name:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{isResolved comments(first:1){nodes{databaseId}}}pageInfo{hasNextPage endCursor}}}}}' \
         > "$TMP/threads.json" &
-      local threads_pid=$!
-      wait_forges "$threads_pid" || return 1
+      pids+=("$!")
     fi
+    wait_forges "${pids[@]}" || return 1
     jq -e 'type == "array" and all(.[]; type == "array")' "$TMP/comments.json" >/dev/null \
       || unobserved 'comment pages returned an unexpected shape' || return 1
     jq -e 'type == "array" and all(.[]; (.data.repository.pullRequest.reviewThreads.nodes | type) == "array")' "$TMP/threads.json" >/dev/null \

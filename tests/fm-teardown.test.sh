@@ -106,18 +106,13 @@ exit 0
 SH
   # Default gh-axi mock: no PR is associated with the branch, and viewing any PR
   # number fails. This keeps the landed-work check hermetic (never reaching the real
-  # gh-axi) and represents the common "no GitHub PR" baseline. The authenticated
-  # login and the assignment edit answer too, so a registration's captain
-  # assignment stays inside the fixture rather than reaching a real repository.
-  # Tests that need a merged PR or a lookup error override this file with the
-  # helpers below.
+  # gh-axi) and represents the common "no GitHub PR" baseline. Tests that need a
+  # merged PR or a lookup error override this file with the helpers below.
   cat > "$fakebin/gh-axi" <<'SH'
 #!/usr/bin/env bash
 case "${1:-} ${2:-}" in
   "pr list") printf '%s\n' "count: 0 (showing first 0)" "pull_requests[]: []" ; exit 0 ;;
   "pr view") echo "error: pull request not found" >&2 ; exit 1 ;;
-  "api user") printf 'api_response:\n  body: ansellchiu\n  truncated: false\n' ; exit 0 ;;
-  "pr edit") exit 0 ;;
 esac
 exit 0
 SH
@@ -226,24 +221,6 @@ write_meta() {
     "kind=$kind" \
     "mode=$mode" \
     "spawn_gen=teardown-test-task-x1"
-  # Every ship fixture here represents a landed task, and a landed ship task
-  # carries the landing receipt the registration/merge path wrote
-  # (fm-receipt.v1). Refuse-path fixtures are unaffected: their refusals fire
-  # before the receipt gate.
-  if [ "$kind" = ship ]; then
-    seed_receipt "$case_dir"
-  fi
-}
-
-# Write a valid landing receipt for the case's task-x1 (fixture-shaped
-# anchors, exactly what production writers record).
-seed_receipt() {
-  local case_dir=$1
-  FM_HOME="$case_dir" FM_STATE_OVERRIDE="$case_dir/state" \
-    "$ROOT/bin/fm-receipt.sh" write-landing --task task-x1 \
-      --project-fallback project \
-      --commit-sha 1111111111111111111111111111111111111111 \
-      --sha-source 'fixture commit' >/dev/null
 }
 
 # Commit something on the worktree's task branch. Args: case_dir [message]
@@ -301,8 +278,6 @@ case "${1:-} ${2:-}" in
     printf '%s\n' "count: 1 (showing first 1)" "pull_requests[1]{number,state}:" "  7,merged" ; exit 0 ;;
   "pr view")
     printf '%s\n' "pull_request:" "  number: 7" "  state: merged" '  merged: "2026-06-26T00:00:00Z"' ; exit 0 ;;
-  "api user") printf 'api_response:\n  body: ansellchiu\n  truncated: false\n' ; exit 0 ;;
-  "pr edit") exit 0 ;;
 esac
 exit 0
 SH
@@ -703,22 +678,8 @@ backlog_row_state() {
 make_path_without_lsof() {  # <case-dir>
   local case_dir=$1 path_dir="$1/path-without-lsof" cmd resolved
   mkdir -p "$path_dir"
-  for cmd in awk bash basename cat chmod cp cut date dirname env find git grep head hostname id jq ln \
-    mkdir mktemp mv perl ps readlink realpath rm sed sh sleep sort stat tail timeout tr uname wc xargs; do
-    resolved=$(command -v "$cmd" 2>/dev/null) || continue
-    case "$resolved" in /*) ln -sf "$resolved" "$path_dir/$cmd" ;; esac
-  done
-  printf '%s\n' "$path_dir"
-}
-
-# Build the teardown test's executable search path without jq, so a case can
-# exercise a host where typed receipts are unavailable at all.
-make_path_without_jq() {  # <case-dir>
-  local case_dir=$1 path_dir="$1/path-without-jq" cmd resolved
-  mkdir -p "$path_dir"
   for cmd in awk bash basename cat chmod cp cut date dirname env find git grep head hostname id ln \
-    lsof mkdir mktemp mv node perl ps readlink realpath rm sed sh sleep sort stat tail tasks-axi timeout \
-    tr uname wc xargs; do
+    mkdir mktemp mv perl ps readlink realpath rm sed sh sleep sort stat tail timeout tr uname wc xargs; do
     resolved=$(command -v "$cmd" 2>/dev/null) || continue
     case "$resolved" in /*) ln -sf "$resolved" "$path_dir/$cmd" ;; esac
   done
@@ -734,11 +695,6 @@ test_local_only_fork_remote_allows() {
   # The supervision branch's bounded per-task outcome cache is a footprint of
   # the retired task, not a record anything reads after it is gone.
   printf 'fm-branch-outcome-index-v1\t5\t0\t-\n' > "$case_dir/state/.task-x1.branch-outcome-index"
-  # The same footprint rule covers the repeat-suppression window: a later task
-  # reusing this id must have its first outcome delivered, not collapsed into
-  # the retired task's standing fact.
-  printf 'fm-branch-outcome-dedupe-v1\ntask-x1\t%s\t3\tdeadbeefdeadbeefdeadbeefdeadbeef\ntask-other\t%s\t0\tfeedfacefeedfacefeedfacefeedface\n' \
-    "$(date +%s)" "$(date +%s)" > "$case_dir/state/.branch-outcome-dedupe"
 
   set +e
   run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
@@ -747,16 +703,8 @@ test_local_only_fork_remote_allows() {
 
   expect_code 0 "$rc" "fork-allow: teardown should succeed when HEAD is on a fork remote"
   ! grep -q REFUSED "$case_dir/stderr" || fail "fork-allow: teardown printed a REFUSED line"
-  [ ! -e "$case_dir/state/task-x1.receipt" ] \
-    || fail "fork-allow: teardown left the per-task receipt behind"
-  grep -q '"task":"task-x1"' "$case_dir/state/receipts.jsonl" \
-    || fail "fork-allow: teardown did not archive the task's receipt into the index"
   [ ! -e "$case_dir/state/.task-x1.branch-outcome-index" ] \
     || fail "fork-allow: teardown left the task's branch outcome index behind"
-  ! grep -q '^task-x1	' "$case_dir/state/.branch-outcome-dedupe" \
-    || fail "fork-allow: teardown left the retired task's repeat-suppression window behind"
-  grep -q '^task-other	' "$case_dir/state/.branch-outcome-dedupe" \
-    || fail "fork-allow: teardown dropped a live task's repeat-suppression window"
   # The supervision branch reports the teardown it just performed AFTER the
   # task's records are gone (bin/fm-branch-prompt.sh); that report must be
   # stored, must publish its ready sequence, and must not recreate the index.
@@ -2128,10 +2076,6 @@ write_windowless_legacy_meta() {
     "kind=$kind" \
     "mode=$mode" \
     "harness=codex"
-  # A landed ship leftover carries its landing receipt, exactly as write_meta.
-  if [ "$kind" = ship ]; then
-    seed_receipt "$case_dir"
-  fi
 }
 
 test_windowless_legacy_record_with_gone_worktree_tears_down() {
@@ -2294,7 +2238,6 @@ test_legacy_record_teardown_completes_when_landed_and_endpoint_dead() {
   local case_dir out
   case_dir=$(make_case legacy-allow)
   write_legacy_meta "$case_dir" no-mistakes ship
-  seed_receipt "$case_dir"
   seed_backlog_in_flight "$case_dir"
   wt_commit "$case_dir" "landed legacy work"
   add_fork_with_pushed_branch "$case_dir"
@@ -2370,7 +2313,6 @@ test_legacy_record_rolls_the_stamp_back_when_the_marker_write_fails() {
   case_dir=$(make_case legacy-stamp-rollback)
   write_legacy_meta "$case_dir" no-mistakes ship
   printf '%s\n' 'pr=not-a-valid-url' >> "$case_dir/state/task-x1.meta"
-  seed_receipt "$case_dir"
   seed_backlog_in_flight "$case_dir"
   wt_commit "$case_dir" "landed legacy work"
   add_fork_with_pushed_branch "$case_dir"
@@ -2424,7 +2366,6 @@ test_retained_legacy_stamp_still_faces_the_endpoint_gate() {
   case_dir=$(make_case legacy-stamp-retained)
   write_legacy_meta "$case_dir" no-mistakes ship
   printf '%s\n' 'pr=not-a-valid-url' >> "$case_dir/state/task-x1.meta"
-  seed_receipt "$case_dir"
   seed_backlog_in_flight "$case_dir"
   wt_commit "$case_dir" "landed legacy work"
   add_fork_with_pushed_branch "$case_dir"
@@ -3773,112 +3714,6 @@ SH
   pass "forced secondmate teardown holds every descendant lifecycle and metadata lock"
 }
 
-# The class this change enables: the shared treehouse pool is keyed on repo
-# identity, so a secondmate home holding its OWN clone of a project is handed a
-# slot that is a linked worktree of ANOTHER clone of the same origin. The child
-# record then names the home's clone as its project while its worktree is
-# registered only in the clone that owns it.
-configure_secondmate_with_cross_clone_child() {  # <case-dir>
-  local case_dir=$1 home="$1/secondmate-home" child=child-pool child_wt
-  mkdir -p "$home/state" "$home/data" "$home/config" "$home/projects"
-  printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
-  printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
-  git clone -q "$case_dir/origin.git" "$home/projects/project"
-  child_wt="$case_dir/$child-wt"
-  git -C "$case_dir/project" worktree add -q -b "fm/$child" "$child_wt" main
-  fm_write_meta "$home/state/$child.meta" \
-    "window=firstmate:fm-$child" \
-    "endpoint_task_id=$child" \
-    "worktree=$child_wt" \
-    "project=$home/projects/project" \
-    "kind=ship" \
-    "mode=local-only"
-  : > "$home/state/$child.status"
-}
-
-test_secondmate_teardown_accepts_a_cross_clone_child_worktree() {
-  local case_dir home child_wt rc
-  case_dir=$(make_case cross-clone-child)
-  write_meta "$case_dir" local-only secondmate
-  configure_secondmate_with_cross_clone_child "$case_dir"
-  home="$case_dir/secondmate-home"
-  child_wt="$case_dir/child-pool-wt"
-  [ "$(git -C "$child_wt" rev-parse --path-format=absolute --git-common-dir)" \
-    != "$(git -C "$home/projects/project" rev-parse --path-format=absolute --git-common-dir)" ] \
-    || fail "cross-clone-child: the fixture's child worktree and recorded project share one repository"
-  : > "$case_dir/treehouse.log"
-  cat > "$case_dir/fakebin/treehouse" <<SH
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
-exit 0
-SH
-  chmod +x "$case_dir/fakebin/treehouse"
-
-  rc=0
-  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-  expect_code 0 "$rc" "cross-clone-child: teardown refused a child worktree of a same-origin clone"$'\n'"$(cat "$case_dir/stderr")"
-  ! grep -q "is not a git worktree for" "$case_dir/stderr" \
-    || fail "cross-clone-child: teardown reported the child as unregistered: $(cat "$case_dir/stderr")"
-  [ ! -d "$home" ] || fail "cross-clone-child: the secondmate home survived its own teardown"
-  [ ! -e "$case_dir/state/task-x1.meta" ] \
-    || fail "cross-clone-child: teardown retained the parent record"
-  grep -Fq "$child_wt" "$case_dir/treehouse.log" \
-    || fail "cross-clone-child: the child's pool slot was never returned: $(cat "$case_dir/treehouse.log")"
-  pass "secondmate teardown removes a child worktree owned by a same-origin clone of its project"
-}
-
-# The widened question is still a registration question: a path no repository
-# lists as a worktree is never removed, and --force - which is what lets a home
-# teardown proceed past its own in-flight children at all - does not override it.
-test_secondmate_teardown_still_refuses_an_unregistered_child_worktree() {
-  local case_dir home child_wt rc
-  case_dir=$(make_case unregistered-child)
-  write_meta "$case_dir" local-only secondmate
-  configure_secondmate_with_cross_clone_child "$case_dir"
-  home="$case_dir/secondmate-home"
-  child_wt="$case_dir/child-pool-wt"
-  # The same recorded path, but a plain directory no repository registers.
-  git -C "$case_dir/project" worktree remove --force "$child_wt"
-  mkdir -p "$child_wt"
-  : > "$child_wt/not-a-worktree"
-
-  rc=0
-  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-  [ "$rc" -ne 0 ] \
-    || fail "unregistered-child: forced teardown accepted a child worktree no repository registers"
-  assert_grep "is not a git worktree for" "$case_dir/stderr" \
-    "unregistered-child: refusal did not name the registration failure: $(cat "$case_dir/stderr")"
-  [ -d "$home" ] || fail "unregistered-child: refusal removed the secondmate home"
-  [ -e "$child_wt/not-a-worktree" ] || fail "unregistered-child: refusal removed the unregistered directory"
-  pass "secondmate teardown still refuses a child worktree no repository registers, even forced"
-}
-
-# A same-origin clone's own PRIMARY CHECKOUT is registered in its own repository,
-# but it is another home's whole checkout rather than a pool slot, so the
-# cross-clone arm must keep refusing it.
-test_secondmate_teardown_still_refuses_a_same_origin_clone_root() {
-  local case_dir home child_wt rc
-  case_dir=$(make_case clone-root-child)
-  write_meta "$case_dir" local-only secondmate
-  configure_secondmate_with_cross_clone_child "$case_dir"
-  home="$case_dir/secondmate-home"
-  child_wt="$case_dir/child-pool-wt"
-  git -C "$case_dir/project" worktree remove --force "$child_wt"
-  git clone -q "$case_dir/origin.git" "$child_wt"
-  : > "$child_wt/sibling-home-marker"
-
-  rc=0
-  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-  [ "$rc" -ne 0 ] \
-    || fail "clone-root-child: forced teardown accepted a same-origin clone's primary checkout"
-  assert_grep "is not a git worktree for" "$case_dir/stderr" \
-    "clone-root-child: refusal did not name the registration failure: $(cat "$case_dir/stderr")"
-  [ -d "$home" ] || fail "clone-root-child: refusal removed the secondmate home"
-  [ -e "$child_wt/sibling-home-marker" ] \
-    || fail "clone-root-child: refusal removed the sibling clone's checkout"
-  pass "secondmate teardown still refuses a same-origin clone's own primary checkout"
-}
-
 test_forced_secondmate_herdr_child_retains_records_when_close_unconfirmed() {
   local case_dir home log closed rc
   case_dir=$(make_case herdr-child-unconfirmed-close)
@@ -4455,375 +4290,6 @@ land_shippable_commit() {
   wt_commit "$case_dir" "shippable work"
   git -C "$case_dir/wt" push -q origin fm/task-x1
   git -C "$case_dir/project" fetch -q origin
-}
-
-# rc=3 from fm-receipt.sh is "this host has no jq, so receipts are unavailable"
-# - an inability to verify, never evidence of unlanded work. The merge path
-# already delivers under it; the cleanup gate must not refuse under it, or
-# every ship cleanup on a jq-less host needs --force.
-test_ship_teardown_without_jq_warns_and_proceeds() {
-  local case_dir rc path_without_jq
-  case_dir=$(make_case ship-receipt-no-jq)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "fix the thing"
-  add_fork_with_pushed_branch "$case_dir"
-  # A host that never had jq never wrote the receipt either.
-  rm -f "$case_dir/state/task-x1.receipt"
-  path_without_jq=$(make_path_without_jq "$case_dir")
-  PATH="$path_without_jq" command -v jq >/dev/null 2>&1 \
-    && fail "ship-receipt-no-jq: fixture path unexpectedly exposes jq"
-
-  set +e
-  FM_TEARDOWN_TEST_PATH="$path_without_jq" \
-    run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 0 "$rc" "ship-receipt-no-jq: teardown should proceed when receipts are unavailable"
-  assert_no_grep 'REFUSED' "$case_dir/stderr" \
-    "ship-receipt-no-jq: teardown refused on a host that simply cannot read receipts"
-  assert_grep 'jq is not installed' "$case_dir/stderr" \
-    "ship-receipt-no-jq: teardown did not warn that receipts are unavailable"
-  assert_absent "$case_dir/state/task-x1.meta" \
-    "ship-receipt-no-jq: teardown kept the task record it should have retired"
-  pass "a host without jq warns that receipts are unavailable instead of refusing cleanup"
-}
-
-# The same rc=3 ruling covers the two sibling receipt steps: a host that loses
-# jq after a receipt was written must not have every later cleanup blocked at
-# the archive step, and a scout's report receipt is equally unwritable there.
-test_receipt_steps_without_jq_warn_and_proceed() {
-  local case_dir rc path_without_jq
-  case_dir=$(make_case receipt-steps-no-jq)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "fix the thing"
-  add_fork_with_pushed_branch "$case_dir"
-  # The receipt was written while jq was present; only the host changed.
-  assert_present "$case_dir/state/task-x1.receipt" \
-    "receipt-steps-no-jq: the ship fixture did not seed a receipt to archive"
-  path_without_jq=$(make_path_without_jq "$case_dir")
-
-  set +e
-  FM_TEARDOWN_TEST_PATH="$path_without_jq" \
-    run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 0 "$rc" "receipt-steps-no-jq: the archive step blocked cleanup on a jq-less host"
-  assert_no_grep 'retaining every durable task record' "$case_dir/stderr" \
-    "receipt-steps-no-jq: the archive step refused instead of warning"
-  assert_grep 'jq is not installed' "$case_dir/stderr" \
-    "receipt-steps-no-jq: the archive step did not warn that receipts are unavailable"
-  assert_absent "$case_dir/state/task-x1.meta" \
-    "receipt-steps-no-jq: teardown kept the task record it should have retired"
-
-  # Same for a scout's report receipt, written at cleanup rather than archived.
-  local scout_dir
-  scout_dir=$(make_case scout-receipt-no-jq)
-  write_meta "$scout_dir" local-only scout
-  wt_commit "$scout_dir" "survey the thing"
-  add_fork_with_pushed_branch "$scout_dir"
-  mkdir -p "$scout_dir/data/task-x1"
-  printf '# Report\nfindings\n' > "$scout_dir/data/task-x1/report.md"
-  # The scout completion gate ahead of the receipt step reads this from the
-  # task record (bin/fm-captain-hold.sh verify).
-  printf 'decisions_reviewed=1\n' >> "$scout_dir/state/task-x1.meta"
-  path_without_jq=$(make_path_without_jq "$scout_dir")
-
-  set +e
-  FM_TEARDOWN_TEST_PATH="$path_without_jq" \
-    run_teardown "$scout_dir" > "$scout_dir/stdout" 2> "$scout_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 0 "$rc" "scout-receipt-no-jq: the report-receipt step blocked cleanup on a jq-less host"
-  assert_no_grep 'retaining every durable task record' "$scout_dir/stderr" \
-    "scout-receipt-no-jq: the report-receipt step refused instead of warning"
-  assert_grep 'jq is not installed' "$scout_dir/stderr" \
-    "scout-receipt-no-jq: the report-receipt step did not warn that receipts are unavailable"
-  assert_absent "$scout_dir/state/task-x1.meta" \
-    "scout-receipt-no-jq: teardown kept the task record it should have retired"
-  pass "the archive and report-receipt steps warn instead of refusing when jq is unavailable"
-}
-
-# A receipt that is present but unreadable is not a missing one: reporting a
-# record that is sitting right there as absent sends the operator to a repair
-# that refuses ("existing receipt is not a landing") instead of to the record.
-test_ship_teardown_with_unreadable_receipt_refuses_distinctly() {
-  local case_dir rc
-  case_dir=$(make_case ship-receipt-unreadable)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "fix the thing"
-  add_fork_with_pushed_branch "$case_dir"
-  # What an older or broken writer leaves behind: present, non-empty, and no
-  # longer an fm-receipt.v1 record.
-  seed_receipt "$case_dir"
-  jq -c 'del(.digest)' "$case_dir/state/task-x1.receipt" \
-    > "$case_dir/state/task-x1.receipt.tmp"
-  mv "$case_dir/state/task-x1.receipt.tmp" "$case_dir/state/task-x1.receipt"
-
-  set +e
-  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "ship-receipt-unreadable: teardown should refuse on an unreadable receipt"
-  assert_no_grep 'has no completion receipt' "$case_dir/stderr" \
-    "ship-receipt-unreadable: a receipt that is present was reported missing"
-  assert_grep 'is present but does not read as a valid fm-receipt.v1 record' "$case_dir/stderr" \
-    "ship-receipt-unreadable: the refusal did not name the unreadable record"
-  assert_grep 'remove state/task-x1.receipt' "$case_dir/stderr" \
-    "ship-receipt-unreadable: the refusal did not name replacing the record"
-  assert_present "$case_dir/state/task-x1.receipt" \
-    "ship-receipt-unreadable: the refusal removed the record it refused to read"
-  assert_present "$case_dir/state/task-x1.meta" \
-    "ship-receipt-unreadable: the refusal removed the task record"
-  assert_absent "$case_dir/state/receipts.jsonl" \
-    "ship-receipt-unreadable: the refusal archived the invalid record"
-
-  # Following the named repair clears it.
-  rm -f "$case_dir/state/task-x1.receipt"
-  seed_receipt "$case_dir"
-  set +e
-  run_teardown "$case_dir" > "$case_dir/stdout2" 2> "$case_dir/stderr2"
-  rc=$?
-  set -e
-  expect_code 0 "$rc" "ship-receipt-unreadable: teardown should succeed after the record is rewritten"
-  grep -q '"task":"task-x1"' "$case_dir/state/receipts.jsonl" \
-    || fail "ship-receipt-unreadable: teardown did not archive the rewritten receipt"
-  pass "an unreadable ship receipt refuses teardown as unreadable, not as missing"
-}
-
-test_ship_teardown_without_receipt_refuses() {
-  local case_dir rc
-  case_dir=$(make_case ship-receipt-refusal)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "fix the thing"
-  add_fork_with_pushed_branch "$case_dir"
-  # write_meta seeds the receipt for landed ship fixtures; this case removes
-  # it to prove the refusal.
-  rm -f "$case_dir/state/task-x1.receipt"
-
-  set +e
-  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "ship-receipt-refusal: teardown should refuse without a receipt"
-  assert_grep 'REFUSED: ship task task-x1 has no completion receipt' "$case_dir/stderr" \
-    "ship-receipt-refusal: the refusal did not name the missing receipt"
-  # The work already landed, so the named repair must record a LANDING: the
-  # registration writer would mint an unverified "PR ready" receipt instead.
-  assert_grep 'fm-receipt.sh upgrade-landing --task task-x1' "$case_dir/stderr" \
-    "ship-receipt-refusal: the refusal did not name a repair that records the landing"
-  assert_no_grep 'fm-pr-check.sh' "$case_dir/stderr" \
-    "ship-receipt-refusal: the refusal still names a repair that records an unverified PR-ready receipt"
-  assert_present "$case_dir/state/task-x1.meta" \
-    "ship-receipt-refusal: the refusal removed the task record"
-  assert_absent "$case_dir/state/task-x1.backlog-close" \
-    "ship-receipt-refusal: the refusal recorded a pending close"
-  assert_absent "$case_dir/state/receipts.jsonl" \
-    "ship-receipt-refusal: the refusal archived nothing"
-  # Recovery: re-recording the receipt (what re-running fm-pr-check.sh or
-  # fm-merge-local.sh does) lets the same teardown proceed.
-  seed_receipt "$case_dir"
-  set +e
-  run_teardown "$case_dir" > "$case_dir/stdout2" 2> "$case_dir/stderr2"
-  rc=$?
-  set -e
-  expect_code 0 "$rc" "ship-receipt-refusal: teardown should succeed after the receipt is recorded"
-  assert_absent "$case_dir/state/task-x1.receipt" \
-    "ship-receipt-refusal: teardown left the per-task receipt behind"
-  grep -q '"task":"task-x1"' "$case_dir/state/receipts.jsonl" \
-    || fail "ship-receipt-refusal: teardown did not archive the receipt into the index"
-  pass "a ship task with no completion receipt refuses teardown until one is recorded"
-}
-
-test_ship_teardown_without_receipt_completes_under_force() {
-  local case_dir rc
-  case_dir=$(make_case ship-receipt-force)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "fix the thing"
-  add_fork_with_pushed_branch "$case_dir"
-  # The same fixture the refusal case uses: a landed ship task with no receipt.
-  rm -f "$case_dir/state/task-x1.receipt"
-
-  set +e
-  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 0 "$rc" "ship-receipt-force: --force did not lift the no-receipt refusal: $(cat "$case_dir/stderr")"
-  assert_absent "$case_dir/state/task-x1.meta" \
-    "ship-receipt-force: teardown left the task record behind"
-  # --force lifts the refusal; it never fabricates the receipt it lifted.
-  assert_absent "$case_dir/state/task-x1.receipt" \
-    "ship-receipt-force: --force fabricated a per-task receipt"
-  assert_absent "$case_dir/state/receipts.jsonl" \
-    "ship-receipt-force: --force fabricated a durable index row"
-  pass "--force lifts the no-receipt refusal without fabricating a receipt"
-}
-
-# --standdown lifts ONLY the receipt gate, and only for a task teardown itself
-# confirms never started. Each case removes the receipt write_meta seeds for
-# landed ship fixtures, so the gate is the one thing --standdown could lift.
-standdown_case() {  # <name>
-  local case_dir
-  case_dir=$(make_case "$1")
-  write_meta "$case_dir" local-only ship
-  printf 'dispatch_base=%s\n' "$(git -C "$case_dir/wt" rev-parse HEAD)" >> "$case_dir/state/task-x1.meta"
-  rm -f "$case_dir/state/task-x1.receipt"
-  printf '%s\n' "$case_dir"
-}
-
-# Commit on the task branch and fast-forward origin's main to it: landed work.
-standdown_land_commit() {  # <case-dir>
-  wt_commit "$1" "fix the thing"
-  git -C "$1/wt" push -q origin HEAD:main
-  git -C "$1/project" fetch -q origin
-}
-
-test_standdown_never_started_task_completes() {
-  local case_dir rc
-  case_dir=$(standdown_case standdown-never-started)
-
-  set +e
-  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 0 "$rc" "standdown-never-started: a clean, commit-free, receipt-less dispatch did not stand down: $(cat "$case_dir/stderr")"
-  assert_absent "$case_dir/state/task-x1.meta" \
-    "standdown-never-started: teardown left the task record behind"
-  assert_absent "$case_dir/state/receipts.jsonl" \
-    "standdown-never-started: --standdown fabricated a durable index row"
-  pass "--standdown stands down a never-started dispatch with no receipt"
-}
-
-test_standdown_dirty_worktree_refuses() {
-  local case_dir rc
-  case_dir=$(standdown_case standdown-dirty)
-  printf '%s\n' "uncommitted edit" > "$case_dir/wt/feature.txt"
-
-  set +e
-  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "standdown-dirty: --standdown tore down a dirty worktree"
-  assert_grep 'REFUSED' "$case_dir/stderr" "standdown-dirty: no REFUSED line in stderr"
-  assert_present "$case_dir/wt/feature.txt" "standdown-dirty: the uncommitted edit was discarded"
-  assert_present "$case_dir/state/task-x1.meta" "standdown-dirty: the refusal removed the task record"
-  pass "--standdown still refuses a dirty worktree"
-}
-
-test_standdown_commits_beyond_base_refuse() {
-  local case_dir rc
-  case_dir=$(standdown_case standdown-commits)
-  wt_commit "$case_dir" "unlanded work"
-
-  set +e
-  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "standdown-commits: --standdown tore down a worktree with commits beyond its base"
-  assert_grep 'REFUSED' "$case_dir/stderr" "standdown-commits: no REFUSED line in stderr"
-  assert_present "$case_dir/state/task-x1.meta" "standdown-commits: the refusal removed the task record"
-  pass "--standdown still refuses a worktree with commits beyond its base"
-}
-
-test_standdown_landed_ship_without_receipt_refuses() {
-  local case_dir rc
-  case_dir=$(standdown_case standdown-landed)
-  standdown_land_commit "$case_dir"
-
-  set +e
-  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "standdown-landed: --standdown lifted the receipt gate for a landed ship"
-  assert_grep 'REFUSED: ship task task-x1 has no completion receipt' "$case_dir/stderr" \
-    "standdown-landed: the refusal did not name the missing receipt"
-  assert_present "$case_dir/state/task-x1.meta" "standdown-landed: the refusal removed the task record"
-  pass "--standdown does not lift the receipt gate for a landed ship"
-}
-
-test_standdown_landed_ship_with_launch_only_status_refuses() {
-  local case_dir rc
-  case_dir=$(standdown_case standdown-landed-launch-status)
-  standdown_land_commit "$case_dir"
-  printf '%s\n' "spawned: task-x1" > "$case_dir/state/task-x1.status"
-
-  set +e
-  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "standdown-landed-launch-status: --standdown lifted the receipt gate for landed work"
-  assert_grep 'REFUSED: ship task task-x1 has no completion receipt' "$case_dir/stderr" \
-    "standdown-landed-launch-status: the refusal did not name the missing receipt"
-  assert_present "$case_dir/state/task-x1.meta" "standdown-landed-launch-status: the refusal removed the task record"
-  pass "--standdown counts commits landed on main as commits beyond the dispatch base"
-}
-
-test_standdown_without_dispatch_base_refuses() {
-  local case_dir rc
-  case_dir=$(make_case standdown-no-base)
-  write_meta "$case_dir" local-only ship
-  rm -f "$case_dir/state/task-x1.receipt"
-
-  set +e
-  run_teardown "$case_dir" --standdown > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 1 "$rc" "standdown-no-base: --standdown stood down a task with no recorded dispatch base"
-  assert_grep 'REFUSED: --standdown cannot prove task task-x1 never started' "$case_dir/stderr" \
-    "standdown-no-base: the refusal did not say the dispatch base is unknown"
-  assert_present "$case_dir/state/task-x1.meta" "standdown-no-base: the refusal removed the task record"
-  pass "--standdown fails closed when the record carries no dispatch base"
-}
-
-# The merge poll can prove a merge while cleanup is still running, between the
-# archive and the discard of the per-task record. The index must not answer
-# "what landed" with the unverified state the record had already outgrown when
-# it was dropped.
-test_receipt_verified_during_teardown_still_reaches_the_index() {
-  local case_dir rc last rows
-  case_dir=$(make_case ship-receipt-late-upgrade)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "fix the thing"
-  add_fork_with_pushed_branch "$case_dir"
-  # treehouse runs after the archive and before the discard, so this stub
-  # stands in for the merge poll proving the merge inside that window.
-  cat > "$case_dir/fakebin/treehouse" <<SH
-#!/usr/bin/env bash
-FM_HOME="$case_dir" FM_STATE_OVERRIDE="$case_dir/state" \\
-  "$ROOT/bin/fm-receipt.sh" upgrade-landing --task task-x1 \\
-    --commit-sha 1111111111111111111111111111111111111111 \\
-    --sha-source 'git rev-parse main' >/dev/null 2>&1 || true
-exit 0
-SH
-  chmod +x "$case_dir/fakebin/treehouse"
-
-  set +e
-  run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
-  rc=$?
-  set -e
-
-  expect_code 0 "$rc" "ship-receipt-late-upgrade: teardown failed: $(cat "$case_dir/stderr")"
-  assert_absent "$case_dir/state/task-x1.receipt" \
-    "ship-receipt-late-upgrade: teardown left the per-task receipt behind"
-  rows=$(wc -l < "$case_dir/state/receipts.jsonl" | tr -d ' ')
-  [ "$rows" = "2" ] \
-    || fail "ship-receipt-late-upgrade: the index holds $rows rows, not the unverified row and its superseding one"
-  last=$(jq -rs '[.[] | select(.id == "task-x1#1")] | last | .verification' \
-    "$case_dir/state/receipts.jsonl")
-  [ "$last" = "verified" ] \
-    || fail "ship-receipt-late-upgrade: the newest indexed row still answers $last"
-  pass "a merge proved during cleanup reaches the index before the record is discarded"
 }
 
 # Cleanup keeps the task's no-mistakes pipeline spend in this home's records
@@ -5940,77 +5406,6 @@ EOF
   pass "the run abort and the leaked-process reap both complete before the destructive worktree return"
 }
 
-test_teardown_erases_status_log_and_cleans_timers() {
-  local case_dir state status_file seen_marker hb_marker key signals timer
-  case_dir=$(make_case teardown-seen-markers)
-  state="$case_dir/state"
-  status_file="$state/task-x1.status"
-  seen_marker="$state/.seen-task-x1_status"
-  hb_marker="$state/.hb-surfaced-task-x1"
-  key="firstmate_fm-task-x1"
-
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "work done"
-  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
-
-  # Create status file with an unmarked final status append (e.g. done: ready in branch)
-  printf 'working: starting task\n' > "$status_file"
-  printf 'done: ready in branch fm/task-x1\n' >> "$status_file"
-
-  # Seed wedge / stale timers
-  : > "$state/.stale-$key"
-  : > "$state/.stale-since-$key"
-  : > "$state/.wedge-escalations-$key"
-  : > "$state/.stale-sig-$key"
-  : > "$state/.paused-$key"
-
-  # Run teardown
-  run_teardown "$case_dir" >/dev/null 2>&1 || fail "teardown failed"
-
-  # 1. Status file is erased with its presentation markers
-  [ ! -e "$status_file" ] || fail "teardown left the status file behind"
-  [ ! -e "$seen_marker" ] || fail "teardown left the seen marker behind"
-  [ ! -e "$hb_marker" ] || fail "teardown left the heartbeat surfaced marker behind"
-
-  # 2. Stale / wedge timers must be removed
-  for timer in \
-    "$state/.stale-$key" "$state/.stale-since-$key" \
-    "$state/.wedge-escalations-$key" "$state/.stale-sig-$key" \
-    "$state/.paused-$key"; do
-    [ ! -e "$timer" ] || fail "teardown left timer marker $timer"
-  done
-
-  # 3. Next scan_signals pass must not echo the retired log
-  signals=$(FM_STATE_OVERRIDE="$state" bash -c '
-    . "$1/bin/fm-wake-lib.sh"
-    . "$1/bin/fm-classify-lib.sh"
-    . "$1/bin/fm-watch.sh"
-    scan_signals
-  ' _ "$ROOT")
-  [ -z "$signals" ] || fail "scan_signals reported unacknowledged signal after teardown: $signals"
-
-  pass "teardown erases the status log and stale timers, so no echo wakes follow"
-}
-
-test_teardown_open_decision_does_not_resurface_in_drain() {
-  local case_dir state out
-  case_dir=$(make_case teardown-open-decision)
-  state="$case_dir/state"
-
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "work done"
-  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
-  printf 'needs-decision [key=left-open]: pick A or B\n' > "$state/task-x1.status"
-
-  run_teardown "$case_dir" >/dev/null 2>&1 || fail "teardown failed"
-
-  out=$(FM_STATE_OVERRIDE="$state" bash "$ROOT/bin/fm-wake-drain.sh" 2>&1 || true)
-  if printf '%s' "$out" | grep -F 'OPEN DECISIONS' >/dev/null; then
-    fail "a decision open at cleanup resurfaced in the wake drain: $out"
-  fi
-  pass "a decision left open at cleanup does not resurface in the wake drain"
-}
-
 # Copy the public teardown script tree, then drop or blank one required file.
 # Symlinks keep the copy cheap; an unreadable case replaces one link with a
 # real mode-000 file so the probe is of the file itself.
@@ -6183,173 +5578,6 @@ test_retained_sources_still_reach_the_ordinary_refusal() {
   assert_grep "invalid teardown request" "$case_dir/stderr" \
     "retained-sources: the ordinary refusal was replaced"
   pass "present required sources still reach the ordinary teardown refusal"
-}
-
-test_teardown_returns_held_lease_and_preserves_live_task_lease() {
-  local case_dir held_slot other_slot used_held_slot unlanded_slot rc status_json own_slot
-  for own_slot in present missing; do
-    case_dir=$(make_case "teardown-held-leases-$own_slot")
-    write_meta "$case_dir" local-only ship
-    wt_commit "$case_dir" "work landed"
-    git -C "$case_dir/project" merge -q --ff-only fm/task-x1
-
-    mkdir -p "$case_dir/pool/1" "$case_dir/pool/2" "$case_dir/pool/3" "$case_dir/pool/4"
-    held_slot="$case_dir/pool/1/repo"
-    other_slot="$case_dir/pool/2/repo"
-    used_held_slot="$case_dir/pool/3/repo"
-    unlanded_slot="$case_dir/pool/4/repo"
-    git init -q "$held_slot"
-    git init -q "$other_slot"
-    git init -q "$used_held_slot"
-    git init -q "$unlanded_slot"
-    echo "dirty" > "$unlanded_slot/dirty.txt"
-
-    # Seed a stale slot-owner claim for the held slot naming a missing task
-    printf 'task=stale-holder\nhome=%s\n' "$case_dir" > "$case_dir/pool/1/.fm-slot-owner"
-
-    # other-slot is in use by a different live task record (other-task)
-    fm_write_meta "$case_dir/state/other-task.meta" \
-      "window=firstmate:fm-other-task" \
-      "endpoint_task_id=other-task" \
-      "worktree=$other_slot" \
-      "project=$case_dir/project" \
-      "kind=ship" \
-      "mode=local-only"
-
-    # used_held_slot is in use by live-user despite held lease naming task-x1
-    fm_write_meta "$case_dir/state/live-user.meta" \
-      "window=firstmate:fm-live-user" \
-      "endpoint_task_id=live-user" \
-      "worktree=$used_held_slot" \
-      "project=$case_dir/project" \
-      "kind=ship" \
-      "mode=local-only"
-
-    status_json=$(printf '[{"name":"1","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"},{"name":"2","path":"%s","status":"leased","lease_holder":"fm-held:other-task"},{"name":"3","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"},{"name":"4","path":"%s","status":"leased","lease_holder":"fm-held:task-x1"}]' "$held_slot" "$other_slot" "$used_held_slot" "$unlanded_slot")
-
-    cat > "$case_dir/fakebin/treehouse" <<SH
-#!/usr/bin/env bash
-case "\$*" in
-  "status --json")
-    printf '%s\n' '$status_json'
-    exit 0
-    ;;
-  *)
-    printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
-    exit 0
-    ;;
-esac
-SH
-    chmod +x "$case_dir/fakebin/treehouse"
-    : > "$case_dir/treehouse.log"
-
-    if [ "$own_slot" = missing ]; then
-      git -C "$case_dir/project" worktree remove "$case_dir/wt"
-    fi
-
-    rc=0
-    FM_HOME="$case_dir" run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-    expect_code 0 "$rc" "teardown should succeed and return held leases"
-
-    assert_grep "return --force $held_slot" "$case_dir/treehouse.log" \
-      "held-leases: the held lease naming the torn-down task was not returned"
-    assert_no_grep "$other_slot" "$case_dir/treehouse.log" \
-      "held-leases: the held lease naming a different live task was returned"
-    assert_no_grep "$used_held_slot" "$case_dir/treehouse.log" \
-      "held-leases: the held lease naming task-x1 that another live task uses was returned"
-    assert_no_grep "$unlanded_slot" "$case_dir/treehouse.log" \
-      "held-leases: the held lease naming task-x1 with unlanded work was returned"
-
-    pass "teardown returns held lease and preserves live leases with $own_slot own slot"
-  done
-}
-
-
-test_teardown_held_lease_ignores_unrelated_project() {
-  local case_dir foreign_slot rc
-  case_dir=$(make_case held-foreign-project)
-  write_meta "$case_dir" local-only ship
-  wt_commit "$case_dir" "work landed"
-  git -C "$case_dir/project" merge -q --ff-only fm/task-x1
-  mkdir -p "$case_dir/projects/other" "$case_dir/pool/9"
-  foreign_slot="$case_dir/pool/9/repo"
-  git init -q "$foreign_slot"
-  cat > "$case_dir/fakebin/treehouse" <<SH
-#!/usr/bin/env bash
-if [ "\$*" = "status --json" ]; then
-  [ "\$(pwd -P)" = "\$(cd "$case_dir/projects/other" && pwd -P)" ] || { echo '[]'; exit 0; }
-  printf '[{"path":"%s","lease_holder":"fm-held:task-x1"}]\n' '$foreign_slot'
-else
-  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
-fi
-SH
-  : > "$case_dir/treehouse.log"
-  rc=0
-  FM_HOME="$case_dir" run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-  expect_code 0 "$rc" "held-foreign-project: teardown should succeed"
-  assert_no_grep "$foreign_slot" "$case_dir/treehouse.log" \
-    "held-foreign-project: held lease in an unrelated project was returned"
-  pass "held lease cleanup leaves unrelated projects alone"
-}
-
-test_teardown_held_lease_guard_failures() {
-  local scenario case_dir slot owner_home owner_id field rc branch
-  for scenario in claim-home same-id home-field registry-same-id malformed unsafe unavailable; do
-    case_dir=$(make_case "held-guard-$scenario")
-    write_meta "$case_dir" local-only ship
-    wt_commit "$case_dir" "work landed"
-    git -C "$case_dir/project" merge -q --ff-only fm/task-x1
-    slot="$case_dir/pool/1/repo"
-    mkdir -p "$case_dir/pool/1"
-    git clone -q "$case_dir/project" "$slot"
-    git -C "$slot" checkout -q -b held-worker
-    mkdir -p "$slot/.claude"
-    printf '{}\n' > "$slot/.claude/settings.local.json"
-    owner_home="$case_dir/unregistered"
-    owner_id="live-user"
-    field=worktree
-    case "$scenario" in
-      same-id|registry-same-id) owner_id=task-x1 ;;
-      home-field) field=home ;;
-    esac
-    mkdir -p "$owner_home/state"
-    fm_write_meta "$owner_home/state/$owner_id.meta" "$field=$slot" "kind=secondmate"
-    printf 'task=%s\nhome=%s\n' "$owner_id" "$owner_home" > "$case_dir/pool/1/.fm-slot-owner"
-    case "$scenario" in
-      registry-same-id)
-        printf -- '- worker - fixture (home: %s; scope: fixture; projects: repo; added 2026-10-06)\n' "$owner_home" > "$case_dir/data/secondmates.md"
-        rm "$case_dir/pool/1/.fm-slot-owner"
-        ;;
-      malformed) printf -- '- malformed\n' > "$case_dir/data/secondmates.md" ;;
-      unsafe) ln -s "$case_dir/registry" "$case_dir/data/secondmates.md" ;;
-      unavailable) printf -- '- worker - fixture (home: %s; scope: fixture; projects: repo; added 2026-10-06)\n' "$case_dir/missing" > "$case_dir/data/secondmates.md" ;;
-    esac
-    cat > "$case_dir/fakebin/treehouse" <<SH
-#!/usr/bin/env bash
-if [ "\$*" = "status --json" ]; then
-  printf '[{"path":"%s","lease_holder":"fm-held:task-x1"}]\n' '$slot'
-else
-  printf '%s\n' "\$*" >> "$case_dir/treehouse.log"
-fi
-SH
-    : > "$case_dir/treehouse.log"
-    rc=0
-    FM_HOME="$case_dir" run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-    expect_code 0 "$rc" "held-guard-$scenario: task cleanup should finish"
-    assert_no_grep "$slot" "$case_dir/treehouse.log" "held-guard-$scenario: protected slot returned"
-    branch=$(git -C "$slot" symbolic-ref --short HEAD)
-    [ "$branch" = held-worker ] || fail "held-guard-$scenario: protected branch detached"
-    [ -f "$slot/.claude/settings.local.json" ] || fail "held-guard-$scenario: protected hook removed"
-    [ -f "$owner_home/state/$owner_id.meta" ] || fail "held-guard-$scenario: claimant record removed"
-    case "$scenario" in
-      malformed|unsafe|unavailable)
-        assert_grep 'leaving its lease intact' "$case_dir/stderr" "held-guard-$scenario: scan failure did not warn"
-        ;;
-      registry-same-id) ;;
-      *) [ -f "$case_dir/pool/1/.fm-slot-owner" ] || fail "held-guard-$scenario: claim removed" ;;
-    esac
-    pass "held lease guard preserves slot on $scenario"
-  done
 }
 
 test_teardown_preserves_opencode_busy_plugin_on_pool_return
@@ -6979,8 +6207,6 @@ test_secondmate_pr_ready_line_waits_for_green_when_opted_in
 test_secondmate_pr_ready_line_follows_green_report_with_trailing_text
 test_secondmate_home_teardown_delivers_final_line_or_refuses
 test_teardown_missing_busy_sidecar_completes
-test_teardown_erases_status_log_and_cleans_timers
-test_teardown_open_decision_does_not_resurface_in_drain
 test_teardown_retires_polytoken_wiring_on_pool_return
 test_teardown_preserves_tracked_polytoken_layer
 test_teardown_preserves_ignored_project_polytoken_layer
@@ -6992,9 +6218,6 @@ test_herdr_flat_teardown_preflight_refuses_before_changes
 test_herdr_teardown_presentation_lock_namespace_is_per_account
 test_forced_secondmate_herdr_child_preflight_refuses_before_changes
 test_forced_secondmate_teardown_holds_descendant_lifecycle_locks
-test_secondmate_teardown_accepts_a_cross_clone_child_worktree
-test_secondmate_teardown_still_refuses_an_unregistered_child_worktree
-test_secondmate_teardown_still_refuses_a_same_origin_clone_root
 test_forced_secondmate_herdr_child_retains_records_when_close_unconfirmed
 test_forced_teardown_retains_nested_secondmate_home_when_grandchild_close_unconfirmed
 test_herdr_projection_teardown_retires_journal_only_after_confirmed_close
@@ -7066,18 +6289,6 @@ test_parked_run_in_a_resolved_workspace_home_is_aborted
 test_parked_own_run_concludes_on_passed_with_override_after_abort
 test_parked_own_run_concludes_on_passed_with_skips_after_abort
 test_parked_run_advanced_past_unfetched_head_is_still_aborted
-test_ship_teardown_without_receipt_refuses
-test_ship_teardown_with_unreadable_receipt_refuses_distinctly
-test_ship_teardown_without_jq_warns_and_proceeds
-test_receipt_steps_without_jq_warn_and_proceed
-test_ship_teardown_without_receipt_completes_under_force
-test_standdown_never_started_task_completes
-test_standdown_dirty_worktree_refuses
-test_standdown_commits_beyond_base_refuse
-test_standdown_landed_ship_without_receipt_refuses
-test_standdown_landed_ship_with_launch_only_status_refuses
-test_standdown_without_dispatch_base_refuses
-test_receipt_verified_during_teardown_still_reaches_the_index
 test_parked_run_with_mismatched_ledger_head_is_never_aborted
 test_parked_run_with_malformed_ledger_row_is_never_aborted
 test_parked_run_with_impossible_ledger_date_is_never_aborted
@@ -7106,7 +6317,3 @@ test_process_spawned_during_grace_is_reaped_on_later_pass
 test_persistent_scan_refuses_after_bounded_retries
 test_process_exit_during_identity_lookup_does_not_refuse
 test_run_abort_precedes_process_reap_precedes_worktree_removal
-test_teardown_returns_held_lease_and_preserves_live_task_lease
-
-test_teardown_held_lease_ignores_unrelated_project
-test_teardown_held_lease_guard_failures

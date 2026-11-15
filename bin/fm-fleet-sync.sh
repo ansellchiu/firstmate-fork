@@ -6,20 +6,15 @@
 # Self-heals the one unambiguously safe drift: a clean, detached HEAD that holds
 # no unique commits (it is an ancestor of origin/<default>) and whose <default>
 # branch is free to check out is re-attached and then fast-forwarded ("recovered:").
-# A clone whose default branch is unborn (made while the remote was empty) and
-# clean is likewise advanced to origin/<default> once origin has commits
-# ("recovered:"); an empty origin stays a quiet skip.
 # Every other off-default state - a non-default named branch, a detached HEAD with
 # unique commits, a dirty tree, or a diverged default - may hold real work, so it
 # is left untouched and reported as a quantified, loud "STUCK: ... N commits behind
 # ... - needs attention" warning rather than a quiet drift. Nothing is ever forced,
 # stashed, or discarded.
 # Still skips (benignly) local-only/no-origin projects, missing remotes/branches,
-# and fetch failures.
-# A project whose registered delivery posture cannot be read (a mistyped
-# +annotation, an unreadable registry) is never synced on a guessed posture: it
-# is reported as a "STUCK:" refusal naming the registry line to fix, and the run
-# exits non-zero - in both the single-project and whole-fleet forms.
+# and fetch failures. A project whose registry entry bin/fm-project-mode.sh
+# refuses is skipped too, naming that command so its refusal is readable, rather
+# than synced under a guessed posture.
 # A candidate under projects/ must be the root of its own work tree: git discovery
 # walks up, so a plain nested directory would otherwise resolve to the enclosing
 # repository (the firstmate checkout) and be synced under that directory's label.
@@ -123,16 +118,14 @@ resolve_project_arg() {
 }
 
 default_branch() {
-  local ref branch head_ref
+  local ref branch
   ref=$(git -C "$PROJ" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
   if [ -n "$ref" ]; then
     echo "${ref#origin/}"
     return 0
   fi
-  head_ref=$(git -C "$PROJ" symbolic-ref --quiet HEAD 2>/dev/null || true)
   for branch in main master; do
-    if git -C "$PROJ" show-ref --verify --quiet "refs/heads/$branch" \
-        || [ "$head_ref" = "refs/heads/$branch" ]; then
+    if git -C "$PROJ" show-ref --verify --quiet "refs/heads/$branch"; then
       echo "$branch"
       return 0
     fi
@@ -335,26 +328,9 @@ sync_project() {
     echo "$label: skipped: not a clone root (git would act on $proj_top)"
     return 0
   fi
-  # A delivery-posture read that exits non-zero - a mistyped +annotation, say -
-  # must refuse the sync, never guess: defaulting here would silently void the
-  # local-only guard and pull a project the captain registered as private. The
-  # STUCK shape keeps the refusal on the session-start FLEET_SYNC relay, which
-  # relays only lines carrying the STUCK marker - so every reader-error detail
-  # line repeats the marker and reaches the captain with the offending
-  # annotation, instead of leaving a headline ending in a bare colon.
-  mode_err=$(mktemp "${TMPDIR:-/tmp}/fm-fleet-sync-pmode.XXXXXX")
-  if mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$label" 2>"$mode_err") && [ -n "$mode_line" ]; then
-    rm -f "$mode_err"
-  else
-    {
-      echo "$label: STUCK: cannot read the registered delivery posture from ${FM_DATA_OVERRIDE:-$FM_HOME/data}/projects.md; sync refused until the registry line is fixed:"
-      while IFS= read -r detail; do
-        [ -n "$detail" ] || continue
-        echo "$label: STUCK:   $detail"
-      done < "$mode_err"
-    }
-    rm -f "$mode_err"
-    return 1
+  if ! mode_line=$("$FM_ROOT/bin/fm-project-mode.sh" "$label" 2>/dev/null); then
+    echo "$label: skipped: registry entry does not resolve to a delivery posture (run bin/fm-project-mode.sh $label for the refusal)"
+    return 0
   fi
   mode=${mode_line%% *}
   if [ "$mode" = "local-only" ]; then
@@ -422,41 +398,6 @@ sync_project() {
   fi
 
   if ! git -C "$PROJ" rev-parse --verify --quiet "$DEFAULT^{commit}" >/dev/null; then
-    # A clone made while the remote was empty sits on an unborn $DEFAULT: HEAD
-    # names it but no commit exists. Once origin has commits this is a
-    # fast-forward from nothing - create the branch at origin's tip and check it
-    # out. Only the clean case qualifies (HEAD unborn on $DEFAULT, no tracked or
-    # untracked changes, both verified above), and no path of origin's tree may
-    # already exist, ignored files included, so nothing is ever overwritten.
-    if [ "$cur" = "$DEFAULT" ] && ! git -C "$PROJ" rev-parse --verify --quiet HEAD >/dev/null; then
-      # Git silently overwrites an IGNORED file in the way, which status does not
-      # show; refuse when any path the checkout would write already exists.
-      while IFS= read -r -d '' unborn_entry; do
-        unborn_path=${unborn_entry#*$'\t'}
-        unborn_type=${unborn_entry#* }
-        unborn_type=${unborn_type%% *}
-        if [ "$unborn_type" = tree ]; then
-          if [ -L "$PROJ/$unborn_path" ] || { [ -e "$PROJ/$unborn_path" ] && [ ! -d "$PROJ/$unborn_path" ]; }; then
-            echo "$label: skipped: cannot fast-forward unborn $DEFAULT: $unborn_path already exists in the work tree"
-            return 0
-          fi
-        elif [ -e "$PROJ/$unborn_path" ] || [ -L "$PROJ/$unborn_path" ]; then
-          echo "$label: skipped: cannot fast-forward unborn $DEFAULT: $unborn_path already exists in the work tree"
-          return 0
-        fi
-      done < <(git -C "$PROJ" ls-tree -r -t -z "$BASE" 2>/dev/null)
-      if ! unborn_output=$(git -C "$PROJ" checkout --quiet --track -b "$DEFAULT" "$BASE" 2>&1); then
-        reason="cannot fast-forward unborn $DEFAULT"
-        if [ -n "$unborn_output" ]; then
-          reason="$reason: $(first_line "$unborn_output")"
-        fi
-        echo "$label: skipped: $reason"
-        return 0
-      fi
-      after=$(git -C "$PROJ" rev-parse --short "$DEFAULT") || after="?"
-      echo "$label: recovered: created $DEFAULT from $BASE (was unborn), synced to $after"
-      return 0
-    fi
     echo "$label: skipped: local $DEFAULT does not exist"
     return 0
   fi
@@ -507,15 +448,11 @@ sync_project() {
 }
 
 if [ $# -eq 1 ]; then
-  sync_project "$(resolve_project_arg "$1")" || exit 1
+  sync_project "$(resolve_project_arg "$1")"
   exit 0
 fi
 
 [ -d "$PROJECTS" ] || exit 0
-# One project's unreadable posture refuses that project's sync but must not
-# stop refreshing every other clone; the run still exits non-zero so a scripted
-# caller sees the failure and the STUCK lines name each refused project.
-SYNC_FAILED=0
 for proj in "$PROJECTS"/*; do
   [ -e "$proj" ] || continue
   [ -d "$proj" ] || continue
@@ -523,7 +460,6 @@ for proj in "$PROJECTS"/*; do
   # the time instead of only its total. Recording is a no-op unless the deferred
   # network stage asked for it.
   __fm_timing_stamp=$(fm_timing_now_ms)
-  sync_project "$proj" || SYNC_FAILED=1
+  sync_project "$proj"
   fm_timing_record clone sync "$__fm_timing_stamp" "$(basename "$proj")"
 done
-[ "$SYNC_FAILED" -eq 0 ] || exit 1

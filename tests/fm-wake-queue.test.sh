@@ -1699,22 +1699,15 @@ test_branch_ack_commits_secondmate_stall_receipts() {
 # that could only print nothing - no row, no acknowledgement command - on every
 # guarded command, for as long as the branch held the grant.
 test_main_is_never_told_to_drain_rows_only_the_branch_owns() {
-  local dir state out err sequence generation held
+  local dir state out err sequence generation
   dir=$(make_case main-not-told-to-drain-branch-rows)
   state="$dir/state"
   printf 'window=test:fm-x\nkind=ship\n' > "$state/x.meta"
 
   append_wake "$state" stale "fleet:w2:p3" "stale: fleet:w2:p3 (paused, awaiting external)" \
     || fail "stale append failed"
-  # Two further rows for the SAME task and kind - the catch-up shape a drain
-  # presents as one notification. The notice names rows, so its number must
-  # agree with the sequence list printed beside it.
-  append_wake "$state" stale "fleet:w2:p3" "stale: fleet:w2:p3 (paused, awaiting external)" \
-    || fail "second stale append failed"
-  append_wake "$state" stale "fleet:w2:p3" "stale: fleet:w2:p3 (paused, awaiting external)" \
-    || fail "third stale append failed"
   FM_STATE_OVERRIDE="$state" "$GRANT" activate "$$" held-by-branch || fail "branch owner activation failed"
-  FM_STATE_OVERRIDE="$state" "$GRANT" publish held-by-branch 1 2 3 || fail "branch grant publication failed"
+  FM_STATE_OVERRIDE="$state" "$GRANT" publish held-by-branch 1 || fail "branch grant publication failed"
 
   out="$dir/main-drain.out"
   err="$dir/main-drain.err"
@@ -1722,9 +1715,6 @@ test_main_is_never_told_to_drain_rows_only_the_branch_owns() {
   ! grep -Fq "$(printf '\tstale\tfleet:w2:p3\t')" "$out" || fail "main drain presented a branch-granted row"
   grep -Fq 'WAKE ROWS HELD BY SUPERVISION BRANCH' "$out" \
     || fail "main drain went silent instead of naming who holds the queued rows"
-  held=$(sed -n 's/^WAKE ROWS HELD BY SUPERVISION BRANCH: \([0-9][0-9]*\) queued row(s) (\([0-9,]*\)).*/\1 \2/p' "$out")
-  [ "$held" = "3 1,2,3" ] \
-    || fail "the held notice's row count disagrees with the rows it lists: '$held'"
   ! grep -Fq 'WAKE_ACK_REQUIRED' "$err" || fail "main drain offered an acknowledgement for a row it never presented"
   ! grep -Fq 'queued wakes pending' "$err" \
     || fail "main was told to drain rows only the branch can present"
@@ -1759,64 +1749,6 @@ test_main_is_never_told_to_drain_rows_only_the_branch_owns() {
   [ ! -s "$state/.wake-queue" ] || fail "the acknowledged row stayed queued"
 
   pass "a branch-held row raises no queued-wake warning for main, and the same row is presented and acknowledged once the grant clears"
-}
-
-# --- a presented count is shown to a person; every number it prints was counted
-# The two counters answer the same queue for different consumers. The row count
-# drives an alarm, so an uncountable queue must still read as "something is
-# waiting". The presented count is rendered into a message a human reads, so an
-# uncountable queue must read as "no number", never as the row count's alarm
-# sentinel - otherwise a queue nobody could count is reported as exactly one
-# waiting notification.
-presented_count() {  # <state>
-  FM_STATE_OVERRIDE="$1" bash -c '. "$1"; fm_wake_actor_presented_count main' _ \
-    "$ROOT/bin/fm-wake-lib.sh"
-}
-
-pending_count() {  # <state>
-  FM_STATE_OVERRIDE="$1" bash -c '. "$1"; fm_wake_actor_pending_count main' _ \
-    "$ROOT/bin/fm-wake-lib.sh"
-}
-
-test_presented_count_never_invents_a_number() {
-  local dir state
-  dir=$(make_case presented-count-contract)
-  state="$dir/state"
-
-  [ "$(presented_count "$state")" = 0 ] || fail "an absent queue is not zero notifications"
-
-  append_wake "$state" signal only.status "signal: $state/only.status" \
-    || fail "single row append failed"
-  [ "$(presented_count "$state")" = 1 ] \
-    || fail "one presented row must report 1, got '$(presented_count "$state")'"
-
-  # The catch-up shape: the same task's status changed three more times, and one
-  # drain presents that task once.
-  append_wake "$state" signal only.status "signal: $state/only.status" || fail "repeat append failed"
-  append_wake "$state" signal only.status "signal: $state/only.status" || fail "repeat append failed"
-  append_wake "$state" heartbeat heartbeat heartbeat || fail "heartbeat append failed"
-  append_wake "$state" heartbeat heartbeat heartbeat || fail "heartbeat append failed"
-  [ "$(presented_count "$state")" = 2 ] \
-    || fail "the presented count did not collapse what the drain collapses: '$(presented_count "$state")'"
-  [ "$(pending_count "$state")" = 5 ] \
-    || fail "the row count must still count rows: '$(pending_count "$state")'"
-
-  # A queue that is present but cannot be read at all.
-  chmod 000 "$state/.wake-queue" || fail "could not make the queue unreadable"
-  if [ -r "$state/.wake-queue" ]; then
-    chmod 600 "$state/.wake-queue"
-    pass "presented and row counts answer an uncountable queue differently (unreadable-file case skipped: running with read override)"
-    return
-  fi
-  case "$(presented_count "$state")" in
-    ''|*[!0-9]*) ;;
-    *) chmod 600 "$state/.wake-queue"
-       fail "an uncountable queue was reported to a human as a counted number" ;;
-  esac
-  [ "$(pending_count "$state")" = 1 ] \
-    || fail "the row count stopped raising its alarm on an uncountable queue"
-  chmod 600 "$state/.wake-queue"
-  pass "a presented count reports only numbers it counted, while the row count keeps its alarm"
 }
 
 # The pending-warning condition must also survive a queue nobody could read: a
@@ -3021,9 +2953,9 @@ SH
 # A live-but-stuck presentation lock must not strand the executable drain. The
 # presentation remains retriable on the next pass, while the separate queue
 # mutation lock keeps its blocking all-or-nothing acknowledgement contract.
-test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking() {
+test_live_presentation_holder_is_deadlined_without_weakening_ack() {
   local dir state status queue_out queue_err first_out first_err second_out second_err replay_out replay_err
-  local queue_holder presentation_holder ack_holder i start elapsed rc advisory_count ack_through ack_generation
+  local queue_holder presentation_holder ack_holder i start elapsed rc advisory_count
   dir=$(make_case presentation-lock-deadline)
   state="$dir/state"
   status="$state/task.status"
@@ -3140,20 +3072,17 @@ test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking()
   [ -s "$dir/ack.ready" ] \
     || { kill "$ack_holder" 2>/dev/null || true; fail "acknowledgement holder never acquired the queue lock"; }
 
-  ack_through=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$second_err")
-  ack_generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$second_err")
   rc=0
-  start=$(date +%s)
-  FM_STATE_OVERRIDE="$state" FM_STATUS_PRESENTATION_LOCK_TIMEOUT=1 \
-    "$DRAIN" --ack-through "$ack_through" --recovery-generation "$ack_generation" \
+  FM_STATE_OVERRIDE="$state" bash -c '
+    . "$1"
+    shift
+    fm_run_timed 1 "$@"
+  ' _ "$ROOT/bin/fm-timeout-lib.sh" "$DRAIN" \
+    --ack-through "$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) --recovery-generation [A-Za-z0-9._-][A-Za-z0-9._-]*$/\1/p' "$second_err")" \
+    --recovery-generation "$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through [0-9][0-9]* --recovery-generation \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' "$second_err")" \
     > "$dir/ack-held.out" 2> "$dir/ack-held.err" || rc=$?
-  elapsed=$(( $(date +%s) - start ))
-  [ "$rc" -eq 1 ] \
-    || { kill "$ack_holder" 2>/dev/null || true; fail "held acknowledgement lock did not refuse (rc=$rc)"; }
-  [ "$elapsed" -le 4 ] \
-    || { kill "$ack_holder" 2>/dev/null || true; fail "held queue lock delayed the acknowledgement for ${elapsed}s"; }
-  grep -F "ACKNOWLEDGEMENT SKIPPED: queue lock remains held by live pid $ack_holder" "$dir/ack-held.err" >/dev/null \
-    || { kill "$ack_holder" 2>/dev/null || true; fail "bounded acknowledgement did not name the live holder"; }
+  [ "$rc" -eq 124 ] \
+    || { kill "$ack_holder" 2>/dev/null || true; fail "held acknowledgement lock did not retain blocking semantics (rc=$rc)"; }
 
   kill "$ack_holder" 2>/dev/null || true
   wait "$ack_holder" 2>/dev/null || true
@@ -3164,114 +3093,7 @@ test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking()
   ack_drain_err "$state" "$replay_err" \
     || fail "the intact wake could not be acknowledged after contention cleared"
   [ ! -s "$state/.wake-queue" ] || fail "acknowledged presentation fixture remained queued"
-  pass "presentation and acknowledgement lock waits are bounded, retriable, and consume nothing when skipped"
-}
-
-test_inactive_receipt_lock_timeout_is_reported_and_retriable() {
-  local mode prefix dir state record holder i direct_rc drain_rc start elapsed
-  for mode in acknowledge acknowledge-notice; do
-    case "$mode" in
-      acknowledge) prefix=inactive-outcome ;;
-      acknowledge-notice) prefix=inactive-reconcile ;;
-    esac
-    dir=$(make_case "receipt-lock-$mode")
-    state="$dir/state"
-    mkdir -p "$state/terminal-outcomes"
-    record="$state/terminal-outcomes/abcdef.pending"
-    printf 'phase=presentation\nnotice_emitted=0\n' > "$record"
-    cp "$record" "$dir/receipt.before"
-    append_wake "$state" check "$prefix:abcdef" 'check: receipt fixture' \
-      || fail "could not seed the receipt wake"
-    FM_STATE_OVERRIDE="$state" "$DRAIN" > "$dir/drain.out" 2> "$dir/drain.err" \
-      || fail "receipt wake could not be presented"
-    cp "$state/.wake-queue" "$dir/queue.before"
-
-    FM_STATE_OVERRIDE="$state" bash -c '
-      . "$1"
-      fm_lock_acquire_wait "$2"
-      printf "ready\n" > "$3"
-      exec sleep 30
-    ' _ "$ROOT/bin/fm-wake-lib.sh" "$state/.inactive-outcome-reconcile.lock" "$dir/ready" &
-    holder=$!
-    i=0
-    while [ "$i" -lt 100 ] && [ ! -s "$dir/ready" ]; do
-      sleep 0.05
-      i=$((i + 1))
-    done
-    [ -s "$dir/ready" ] \
-      || { kill "$holder" 2>/dev/null || true; fail "receipt holder never acquired its lock"; }
-
-    direct_rc=0
-    FM_STATE_OVERRIDE="$state" FM_INACTIVE_ACK_LOCK_TIMEOUT=1 \
-      "$ROOT/bin/fm-inactive-reconcile.sh" "$mode" abcdef \
-      > "$dir/direct.out" 2> "$dir/direct.err" || direct_rc=$?
-    drain_rc=0
-    start=$(date +%s)
-    FM_STATUS_PRESENTATION_LOCK_TIMEOUT=1 ack_drain_err "$state" "$dir/drain.err" \
-      > "$dir/ack.out" 2> "$dir/ack.err" || drain_rc=$?
-    elapsed=$(( $(date +%s) - start ))
-    kill "$holder" 2>/dev/null || true
-    wait "$holder" 2>/dev/null || true
-
-    [ "$direct_rc" -eq 124 ] || fail "$mode lost the receipt timeout status ($direct_rc)"
-    [ "$drain_rc" -eq 1 ] || fail "$mode drain did not refuse receipt contention ($drain_rc)"
-    [ "$elapsed" -le 4 ] || fail "$mode receipt contention delayed the drain for ${elapsed}s"
-    for prefix in direct ack; do
-      [ "$(wc -l < "$dir/$prefix.err" | tr -d ' ')" -eq 1 ] \
-        || fail "$mode $prefix did not emit exactly one advisory"
-      grep -F "ACKNOWLEDGEMENT SKIPPED: inactive-outcome receipt lock remains held by live pid $holder after 1s" "$dir/$prefix.err" >/dev/null \
-        || fail "$mode $prefix did not name the receipt lock holder"
-      grep -F 're-run the same --ack-through command' "$dir/$prefix.err" >/dev/null \
-        || fail "$mode $prefix omitted the retry instruction"
-    done
-    cmp -s "$dir/queue.before" "$state/.wake-queue" || fail "$mode timeout consumed queue rows"
-    cmp -s "$dir/receipt.before" "$record" || fail "$mode timeout changed the receipt"
-    ack_drain_err "$state" "$dir/drain.err" || fail "$mode retry failed after contention cleared"
-    [ ! -s "$state/.wake-queue" ] || fail "$mode retry left the wake queued"
-    case "$mode" in
-      acknowledge)
-        [ -f "$state/terminal-outcomes/abcdef.presented" ] && [ ! -e "$record" ] \
-          || fail "receipt retry did not commit presentation"
-        ;;
-      acknowledge-notice)
-        grep -qxF 'notice_emitted=1' "$record" || fail "receipt retry did not commit the notice"
-        ;;
-    esac
-    ack_drain_err "$state" "$dir/drain.err" || fail "$mode repeated retry was not idempotent"
-  done
-  pass "both receipt acknowledgement modes preserve holder advisories and retriable wakes"
-}
-
-# The backlog tool behind RECORD DIVERGENCE can take seconds under load; it must
-# run after the status-presentation lock is released so it never holds up the
-# other drain (conversation vs supervision branch) contending for that lock.
-test_record_divergence_runs_outside_the_presentation_lock() {
-  local dir state status bin f
-  dir=$(make_case divergence-outside-lock)
-  state="$dir/state"
-  status="$state/task.status"
-  bin="$dir/bin"
-  mkdir -p "$bin"
-  for f in "$ROOT"/bin/*; do ln -s "$f" "$bin/${f##*/}"; done
-  rm -f "$bin/fm-captain-hold.sh"
-  cat > "$bin/fm-captain-hold.sh" <<'STUB'
-#!/usr/bin/env bash
-if [ -e "$FM_STATE_OVERRIDE/.status-presentation-lock" ]; then
-  echo held > "$FM_STATE_OVERRIDE/divergence.lock-state"
-else
-  echo free > "$FM_STATE_OVERRIDE/divergence.lock-state"
-fi
-STUB
-  chmod +x "$bin/fm-captain-hold.sh"
-
-  printf 'needs-decision [key=fixture]: divergence check\n' > "$status"
-  append_wake "$state" signal task.status "signal: $status" \
-    || fail "could not seed the divergence wake"
-  FM_STATE_OVERRIDE="$state" "$bin/fm-wake-drain.sh" > "$dir/out" 2> "$dir/err" \
-    || fail "drain with stubbed divergence check failed"
-  [ "$(cat "$state/divergence.lock-state" 2>/dev/null)" = free ] \
-    || fail "the divergence check ran while the status-presentation lock was held"
-  pass "record divergence runs outside the status-presentation lock"
+  pass "presentation lock waits are bounded and retriable without weakening acknowledgement atomicity"
 }
 
 test_malformed_presentation_lock_reports_acquire_failure() {
@@ -3391,66 +3213,6 @@ test_historical_annotation_skips_announced_status() {
   grep -F 'scout.status: done: scout finished' "$out" >/dev/null \
     || fail "a direct status row lost its annotation"
   pass "historical annotations replay nothing already announced and keep everything new"
-}
-
-# The unchanged-stale-repeat record must be recorded only by an acknowledgement,
-# scoped to stale wakes, bounded by its horizon, and fail open on every damaged
-# read. Those five properties are what keep it a noise filter rather than a way to
-# lose a notification, so each is asserted through the public library interface.
-test_stale_repeat_record_is_ack_scoped_bounded_and_fails_open() {
-  local dir state sequence generation err
-  dir=$(make_case stale-repeat-record); state="$dir/state"; err="$dir/drain.err"
-
-  suppressed() {  # <key> <payload>
-    FM_STATE_OVERRIDE="$state" bash -c '
-      # shellcheck disable=SC1090,SC1091
-      . "$1"
-      if fm_wake_stale_repeat_suppressed "$2" "$3"; then echo yes; else echo no; fi
-    ' _ "$ROOT/bin/fm-wake-lib.sh" "$1" "$2"
-  }
-
-  append_wake "$state" stale "test:fm-w" "stale: test:fm-w" || fail "stale append failed"
-  # PRESENTED but not yet acknowledged: the wake must stay durable and repeatable.
-  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null 2> "$err" || fail "drain failed"
-  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
-    || fail "a presented-but-unacknowledged wake was already treated as handled"
-
-  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) .*$/\1/p' "$err")
-  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-]*\)$/\1/p' "$err")
-  [ -n "$sequence" ] && [ -n "$generation" ] || fail "drain printed no acknowledgement command"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$sequence" --recovery-generation "$generation" >/dev/null \
-    || fail "acknowledgement failed"
-
-  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = yes ] \
-    || fail "an acknowledged stale notification did not suppress its byte-identical repeat"
-  [ "$(suppressed "test:fm-w" "stale: test:fm-w (idle 500s, possible wedge, escalation 1)")" = no ] \
-    || fail "a materially changed reason was suppressed"
-  [ "$(suppressed "test:fm-other" "stale: test:fm-w")" = no ] \
-    || fail "a different window was suppressed by an unrelated record"
-
-  # Bounded: a zero horizon suppresses nothing, so no condition is silenced forever.
-  [ "$(FM_WAKE_REPEAT_SUPPRESS_SECS=0 suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
-    || fail "the suppression horizon did not bound the record"
-
-  # Scoped: signal wakes repeat with an identical payload whenever their status
-  # file gains NEW content, so they must never be suppressed.
-  append_wake "$state" signal "$state/w.status" "signal: $state/w.status" || fail "signal append failed"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" >/dev/null 2> "$err" || fail "second drain failed"
-  sequence=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--ack-through \([0-9][0-9]*\) .*$/\1/p' "$err")
-  generation=$(sed -n 's/^WAKE_ACK_REQUIRED:.*--recovery-generation \([A-Za-z0-9._-]*\)$/\1/p' "$err")
-  FM_STATE_OVERRIDE="$state" "$DRAIN" --ack-through "$sequence" --recovery-generation "$generation" >/dev/null \
-    || fail "second acknowledgement failed"
-  [ "$(suppressed "$state/w.status" "signal: $state/w.status")" = no ] \
-    || fail "a signal wake was recorded as a suppressible stale repeat"
-
-  # Fails open: a damaged record can only cost an extra notification.
-  printf 'not\va\vrecord\n' > "$state/.wake-presented"
-  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
-    || fail "a malformed record suppressed a notification"
-  rm -f "$state/.wake-presented"
-  [ "$(suppressed "test:fm-w" "stale: test:fm-w")" = no ] \
-    || fail "a missing record suppressed a notification"
-  pass "the stale-repeat record is written only by acknowledgement, stale-scoped, horizon-bounded, and fails open"
 }
 
 test_wake_queue_prune_task() {
@@ -4022,9 +3784,7 @@ test_self_held_lock_reclaims_instead_of_deadlocking
 test_lock_wait_returns_when_its_directory_is_removed
 test_subshell_lock_ownership_without_bashpid
 test_bounded_lock_handoff_after_contention
-test_live_presentation_holder_is_deadlined_and_ack_refuses_instead_of_blocking
-test_inactive_receipt_lock_timeout_is_reported_and_retriable
-test_record_divergence_runs_outside_the_presentation_lock
+test_live_presentation_holder_is_deadlined_without_weakening_ack
 test_malformed_presentation_lock_reports_acquire_failure
 test_secondmate_foreign_queue_stall_tracks_progress_and_alerts_once
 test_secondmate_declared_pause_rows_do_not_feed_stall_escalation
@@ -4061,7 +3821,6 @@ test_branch_actor_scoped_ack_never_swallows_a_main_owned_row
 test_main_drain_excludes_rows_already_granted_to_branch
 test_branch_ack_commits_secondmate_stall_receipts
 test_main_is_never_told_to_drain_rows_only_the_branch_owns
-test_presented_count_never_invents_a_number
 test_uncountable_queue_still_raises_the_pending_alarm
 test_unconsumable_rows_are_retired_instead_of_wedging_the_queue
 test_branch_grant_refuses_rows_already_claimed_by_main
@@ -4080,7 +3839,6 @@ test_stale_ack_that_consumes_nothing_names_the_current_wake
 test_branch_stale_ack_that_consumes_nothing_names_its_granted_wake
 test_recovery_ack_failure_is_reported
 test_interruption_before_and_after_raw_commit
-test_stale_repeat_record_is_ack_scoped_bounded_and_fails_open
 test_wake_queue_prune_task
 test_drain_rotates_orphaned_scratch
 test_secondmate_liveness_tick_relaunches_dead_endpoint_once

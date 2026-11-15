@@ -419,12 +419,6 @@ PRIMARY_HARNESS=$("$SCRIPT_DIR/fm-harness.sh" 2>/dev/null || printf unknown)
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-line-cap-lib.sh
 . "$SCRIPT_DIR/fm-line-cap-lib.sh"
-# Incidental findings surfacing: pending entries live in per-task
-# data/<id>/findings.md (contract: bin/fm-findings-lib.sh) and must reach
-# firstmate at every natural checkpoint until triaged; this read-only scan is
-# the durable recurrence beside teardown's one-time surface.
-# shellcheck source=bin/fm-findings-lib.sh
-. "$SCRIPT_DIR/fm-findings-lib.sh"
 # shellcheck source=bin/fm-hold-reason-lib.sh
 . "$SCRIPT_DIR/fm-hold-reason-lib.sh"
 
@@ -1349,18 +1343,6 @@ section "FLEET STATE"
 print_backlog_compact "$DATA/backlog.md" "data/backlog.md"
 print_work_under_way
 print_orphan_status_summary
-
-# Pending incidental findings (bin/fm-findings-lib.sh). A ship worker's
-# out-of-scope observation must stay visible until it is triaged; teardown
-# surfaces it once at cleanup, and this bounded subsection is the durable
-# recurrence. Read-only, and silent when nothing is pending.
-if FINDINGS_BLOCK=$(fm_findings_pending_lines "$DATA" all 8); then
-  subsection "Pending incidental findings (data/*/findings.md)"
-  printf '%s\n' "$FINDINGS_BLOCK"
-  printf 'Each line is one out-of-scope observation a ship worker recorded for later triage; its evidence sits in that findings.md file.\n'
-  printf 'Triage each explicitly - file the follow-up work or dismiss it with a reason - then close it with %s/bin/fm-findings.sh triage <task-id> <slug> --note "...".\n' "$FM_ROOT"
-  printf 'A recorded finding never expands its task or authorizes a change by itself.\n'
-fi
 
 subsection "AFK"
 # The away posture is the record (bin/fm-afk-contract.sh); the legacy flag

@@ -9,9 +9,7 @@
 # bin/fm-quota-axi-lib.sh owns schema compatibility and the shared row join.
 # For each --candidate in order, it maps <harness> to its primary provider
 # family, then applies the matched row's provider-wide scopes and exact model
-# or product scopes for <model>. The all_models bound follows
-# fm_quota_scope_substitution_table in bin/fm-quota-axi-lib.sh.
-# A candidate is eligible only when no
+# or product scopes for <model>. A candidate is eligible only when no
 # applicable runway is `exhausted_now` and its known
 # effective percent remaining is greater than zero. The first eligible
 # candidate is printed as "<harness> <model>" and the script exits 0.
@@ -333,18 +331,16 @@ provider_for_harness() {
 # Print the most constraining applicable quota evidence for the provider/model
 # tuple, including provider-wide and exact model or product scopes. The row is
 # bound through quota_row from bin/fm-quota-axi-lib.sh, so <lane> matters only
-# on a schema 6 snapshot. all_models follows fm_quota_scope_substitution_table.
+# on a schema 6 snapshot.
 effective_for_provider_model() {
-  local provider=$1 model=${2:-default} lane=${3:-} subs
-  subs=$(fm_quota_scope_substitution_json) || die "cannot read the scope substitution table"
-  printf '%s\n' "$QUOTA_JSON" | jq -c --arg provider "$provider" --arg model "$model" --arg lane "$lane" --argjson scope_subs "$subs" "$FM_QUOTA_SCOPE_SUBSTITUTION_JQ$FM_QUOTA_ROW_JQ"'
+  local provider=$1 model=${2:-default} lane=${3:-}
+  printf '%s\n' "$QUOTA_JSON" | jq -c --arg provider "$provider" --arg model "$model" --arg lane "$lane" "$FM_QUOTA_ROW_JQ"'
     ($model | sub("^model:"; "")) as $model_token |
-    (scope_instead_of_all_models($provider; $model_token)) as $wide |
     quota_row(.; $provider; $lane) as $p |
     if ($p // null) == null then {status: "unknown"}
     else ($p.quotaSemantics.effectiveAvailability // []) |
     map(select(.scope as $scope |
-      $scope == $wide or $scope == "all_products" or
+      $scope == "all_models" or $scope == "all_products" or
       ($model_token != "" and $model_token != "default" and
        (($scope | startswith("model:")) or ($scope | startswith("product:"))) and
        ($model_token == ($scope | sub("^(model|product):"; ""))))

@@ -185,52 +185,6 @@ test_stale_watch_lock_reclaimed() {
   pass "killed watcher stale lock is reclaimed"
 }
 
-test_dead_lock_recovery_with_empty_queue_emits_no_wake() {
-  # A watcher that reclaims a dead predecessor's lock while the durable queue
-  # is empty has nothing to resurface and must stay live without a synthetic
-  # recovery wake.
-  local dir state fakebin out pid i
-  dir=$(make_case dead-lock-empty-queue)
-  state="$dir/state"
-  fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  mkdir "$state/.watch.lock"
-  printf '%s\n' "$(dead_pid)" > "$state/.watch.lock/pid"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=5 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2>&1 &
-  pid=$!
-  i=0
-  while [ "$i" -lt 30 ]; do
-    is_live_non_zombie "$pid" || break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  is_live_non_zombie "$pid" || fail "dead-lock recovery on an empty queue exited: $(cat "$out")"
-  ! grep -F 'check: rearm-resurface' "$out" >/dev/null \
-    || fail "dead-lock recovery on an empty queue emitted a synthetic wake: $(cat "$out")"
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-  pass "dead-lock recovery with an empty queue emits no synthetic wake"
-}
-
-test_dead_lock_recovery_with_queued_work_announces() {
-  local dir state fakebin out pid status=0
-  dir=$(make_case dead-lock-queued-work)
-  state="$dir/state"
-  fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  mkdir "$state/.watch.lock"
-  printf '%s\n' "$(dead_pid)" > "$state/.watch.lock/pid"
-  append_wake "$state" check startup-network 'check: queued before recovery' \
-    || fail "could not queue a durable wake"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=5 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2>&1 &
-  pid=$!
-  wait_for_exit "$pid" 100 || status=$?
-  [ "$status" -ne 124 ] || fail "dead-lock recovery with queued work never announced: $(cat "$out")"
-  grep -F 'check: rearm-resurface' "$out" >/dev/null \
-    || fail "dead-lock recovery with queued work did not announce: $(cat "$out")"
-  pass "dead-lock recovery with queued work still announces"
-}
-
 test_stale_watch_reclaim_rejects_unwritable_downtime_marker() {
   # Public contract: an unpublishable downtime marker is a typed startup
   # failure, not lock contention. A directory deterministically rejects the
@@ -335,18 +289,9 @@ test_live_stalled_watch_lock_is_replaced_past_hard_bound() {
 # Stop <pid> at a moment it holds no state lock but the watch lock, so a
 # successor never waits on a lock the stopped holder cannot release.
 stop_outside_state_locks() {  # <pid> <state>
-  local pid=$1 state=$2 i=0 j lock held
+  local pid=$1 state=$2 i=0 lock held
   while [ "$i" -lt 100 ]; do
     kill -STOP "$pid" 2>/dev/null || return 1
-    # SIGSTOP is delivered asynchronously: until the process is actually
-    # stopped it can still take a state lock after the scan below, which would
-    # strand any later lock-waiting step behind a stopped holder.
-    j=0
-    until case "$(ps -p "$pid" -o stat= 2>/dev/null)" in *T*) true ;; *) false ;; esac; do
-      [ "$j" -lt 100 ] || return 1
-      sleep 0.01
-      j=$((j + 1))
-    done
     held=0
     for lock in "$state"/.*.lock "$state"/.*.lock.steal "$state"/*.lock; do
       [ "$lock" != "$state/.watch.lock" ] || continue
@@ -402,11 +347,6 @@ run_legacy_identity_takeover() {  # <case> <successor-first>
   if [ "$successor_first" -eq 1 ]; then
     stop_outside_state_locks "$old" "$state" \
       || fail "could not pause the old holder outside its state locks: $(cat "$old_out")"
-  fi
-  if [ "$successor_first" -eq 1 ]; then
-    # A recovering successor announces only real queued work.
-    append_wake "$state" check startup-network 'check: queued before takeover' \
-      || fail "could not queue a durable wake for the successor"
   fi
   PATH="$fakebin:$PATH" FM_PROC_ROOT_OVERRIDE="$no_proc" TZ=America/Los_Angeles FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_GUARD_GRACE=1 FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$new_out" 2>&1 &
   new=$!
@@ -1397,25 +1337,18 @@ test_watch_restart_rejects_reused_pid() {
   PATH="$fakebin:$PATH" FM_HOME="$dir" FM_POLL=5 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH_ARM" --restart > "$out" &
   pid=$!
   i=0
-  while [ "$i" -lt 80 ]; do
-    grep -q '^watcher: started ' "$out" 2>/dev/null && break
-    is_live_non_zombie "$pid" || break
-    sleep 0.05
+  while [ "$i" -lt 80 ] && is_live_non_zombie "$pid"; do
+    sleep 0.1
     i=$((i + 1))
   done
   is_live_non_zombie "$pid" \
-    || fail "restart on empty queue exited instead of staying live: $(cat "$out")"
-  ! grep -F 'check: rearm-resurface' "$out" >/dev/null \
-    || fail "restart replaced reused-pid lock with unexpected recovery wake on empty queue: $(cat "$out")"
-  case "$(cat "$state/.watcher-down" 2>/dev/null || true)" in
-    acked:downtime:*) ;;
-    *) fail "restart did not resolve downtime recovery marker: $(cat "$state/.watcher-down")" ;;
-  esac
+    && fail "restart did not surface recovery after replacing a reused-pid lock"
+  wait "$pid" 2>/dev/null || true
+  grep -F 'check: rearm-resurface' "$out" >/dev/null \
+    || fail "restart replaced reused-pid lock without surfacing recovery: $(cat "$out")"
   is_live_non_zombie "$live" || fail "restart killed a reused unrelated pid"
   kill "$live" 2>/dev/null || true
   wait "$live" 2>/dev/null || true
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
   pass "watch restart preserves recovery without signaling a reused pid"
 }
 
@@ -1761,9 +1694,6 @@ test_arm_starts_and_self_heals() {
       printf '%s\n' "$WATCH" > "$state/.watch.lock/watcher-path"
       printf '%s\n' "dead watcher identity" > "$state/.watch.lock/pid-identity"
       touch "$state/.last-watcher-beat"
-      # Recovery announces only real queued work.
-      append_wake "$state" check startup-network 'check: queued before dead-pid recovery' \
-        || fail "could not queue a durable wake for the recovery"
     fi
     PATH="$fakebin:$PATH" FM_HOME="$dir" FM_POLL=5 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH_ARM" > "$armout" &
     armpid=$!
@@ -2516,8 +2446,6 @@ test_pid_identity_is_terminal_width_invariant
 test_proc_pid_identity_ignores_wall_clock_and_detects_pid_reuse
 test_msys_pid_identity_uses_proc
 test_stale_watch_lock_reclaimed
-test_dead_lock_recovery_with_empty_queue_emits_no_wake
-test_dead_lock_recovery_with_queued_work_announces
 test_stale_watch_reclaim_rejects_unwritable_downtime_marker
 test_stale_watch_reclaim_publishes_before_clear
 test_live_stale_watch_lock_is_actionable

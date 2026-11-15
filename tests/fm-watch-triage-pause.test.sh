@@ -15,17 +15,6 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/watch-triage-helpers.sh"
 
 TMP_ROOT=$(fm_test_tmproot fm-watch-triage-pause-tests)
-
-# Wait up to <limit> 0.1s ticks while <pid> stays alive; 0 if still alive, 1 if it died.
-wait_live() {
-  local pid=$1 limit=${2:-30} i=0
-  while [ "$i" -lt "$limit" ]; do
-    kill -0 "$pid" 2>/dev/null || return 1
-    sleep 0.1
-    i=$((i + 1))
-  done
-  return 0
-}
 mkdir -p "$TMP_ROOT/crew-state-bin"
 FM_CREW_STATE_BIN=$(make_fake_crew_state "$TMP_ROOT/crew-state-bin")
 export FM_CREW_STATE_BIN
@@ -344,201 +333,6 @@ test_exited_declared_pause_is_bounded_but_live_gate_surfaces() {
   pass "exited declared-pause and captain-held panes use bounded pause cadence while a live decision gate still surfaces once"
 }
 
-# --- a declared external wait on a CHURNY pane stays on the bounded cadence ---
-# The 2026-08-22 case: a worker deliberately idling on a declared external wait,
-# confirmed paused by authoritative crew state, was re-flagged as waiting too long
-# three times in about thirteen minutes. Its pane was not byte-stable - an idle
-# harness footer (a clock, a token counter) produced a brand-new hash every poll -
-# so every poll re-entered the watcher's first-sight branch, and the first-sight
-# branch surfaced any declared wait whose agent was still alive. The away-mode
-# daemon never had this fault because its pause marker is create-if-absent and so
-# hash-immune (pause_marker_record); normal mode must reach the same outcome.
-# FM_WAKE_REPEAT_SUPPRESS_SECS=0 disables unchanged-repeat suppression here on
-# purpose, so this proves the CLASSIFICATION fix alone rather than being masked by
-# the notification-level suppressor covered in its own test below.
-test_declared_pause_churny_pane_stays_bounded_across_hashes() {
-  local dir state fakebin out capture_file statusf window key sig pid round wakes bare
-  dir=$(make_case declared-pause-churny); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/held.status"
-  window="test:fm-churny-held"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/held.meta"
-  printf 'paused: awaiting the captain decision on the upstream route\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  export FM_FAKE_CREW_STATE='state: paused · source: status-log · awaiting the captain decision'
-
-  round=1
-  while [ "$round" -le 4 ]; do
-    # A brand-new pane hash every round: the incident's masking condition.
-    printf 'idle at the gate  (context %d%%)\n' "$round" > "$capture_file"
-    printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=grok \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-      FM_WAKE_REPEAT_SUPPRESS_SECS=0 FM_PAUSE_RESURFACE_SECS=3600 FM_STALE_ESCALATE_SECS=240 \
-      FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-    pid=$!
-    if wait_live "$pid" 20; then reap "$pid"; else wait "$pid" || true; fi
-    # Whatever surfaced, firstmate handled and acknowledged it before re-arming.
-    ack_stopped_cycle "$state" >/dev/null 2>&1 || true
-    round=$((round + 1))
-  done
-
-  # grep -c prints 0 and exits 1 on no match, so default only an empty count.
-  wakes=$(grep -c "stale: $window" "$out" 2>/dev/null) || true
-  bare=$(grep -cFx "stale: $window" "$out" 2>/dev/null) || true
-  [ "${wakes:-0}" -le 1 ] \
-    || fail "a declared external wait on a churny pane was re-flagged $wakes times: $(cat "$out")"
-  [ "${bare:-0}" -le 1 ] \
-    || fail "a declared external wait produced $bare undecorated stale escalations: $(cat "$out")"
-  grep -F "possible wedge" "$out" >/dev/null \
-    && fail "a declared external wait was escalated as a possible wedge: $(cat "$out")"
-  [ -e "$state/.paused-$key" ] || fail "the declared wait lost its bounded-cadence episode across pane hashes"
-  [ ! -e "$state/.stale-since-$key" ] || fail "a declared external wait started the wedge timer"
-
-  # Leaving the declared wait restores ordinary stopped-responding detection, on a
-  # brand-new hash - the same churny-pane condition that hid the fault above.
-  printf 'done: upstream route chosen, work finished\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-held_status"
-  FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell'
-  printf 'idle at the gate  (context 9%%)\n' > "$capture_file"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_WAKE_REPEAT_SUPPRESS_SECS=0 FM_PAUSE_RESURFACE_SECS=3600 FM_STALE_ESCALATE_SECS=240 \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 60 || { reap "$pid"; fail "leaving the declared wait did not restore ordinary detection: $(cat "$out")"; }
-  grep -F "$window" "$out" >/dev/null || fail "leaving the declared wait surfaced nothing: $(cat "$out")"
-  [ ! -e "$state/.paused-$key" ] || fail "leaving the declared wait kept the bounded pause cadence"
-  unset FM_FAKE_CREW_STATE
-  pass "a declared external wait stays on the bounded cadence across changing pane hashes, and leaving it restores ordinary detection"
-}
-
-# --- an unchanged notification already handled is not re-presented as new -----
-# Repeated byte-identical stale notifications each cost a full-context firstmate
-# turn while carrying nothing it did not just act on. Once one has been HANDLED
-# and acknowledged, an identical repeat for the same window is absorbed until the
-# horizon passes - but a materially changed reason (here, the wedge escalation
-# that names an age and an escalation count) still surfaces immediately.
-test_unchanged_stale_repeat_absorbed_but_changed_reason_surfaces() {
-  local dir state fakebin out capture_file statusf window key sig pid round wakes
-  dir=$(make_case unchanged-stale-repeat); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"; statusf="$state/quiet.status"
-  window="test:fm-quiet"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/quiet.meta"
-  printf 'working: still going\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-quiet_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  export FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell'
-
-  round=1
-  while [ "$round" -le 4 ]; do
-    printf 'quiet pane (tick %d)\n' "$round" > "$capture_file"
-    printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-      FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-      FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-      FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" &
-    pid=$!
-    if wait_live "$pid" 20; then reap "$pid"; else wait "$pid" || true; fi
-    ack_stopped_cycle "$state" >/dev/null 2>&1 || true
-    round=$((round + 1))
-  done
-  wakes=$(grep -cFx "stale: $window" "$out" 2>/dev/null || echo 0)
-  [ "$wakes" -eq 1 ] \
-    || fail "four identical stale notifications produced $wakes full-context wakes (expected exactly 1): $(cat "$out")"
-
-  # A materially changed reason must still reach firstmate immediately.
-  # Retire the routine batch the four absorbed rounds above left pending: its
-  # window has expired by now, so it would flush as a heartbeat and end the
-  # cycle before the stale escalation below is ever evaluated. That is carry-over
-  # from the previous sub-case, not the behaviour under test here.
-  rm -f "$state/.wake-batch" "$state/.wake-batch-opened" "$state/.wake-record-manifest"
-  printf 'quiet pane (tick 9)\n' > "$capture_file"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.stale-$key"
-  printf '1\n' > "$state/.count-$key"
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_STALE_ESCALATE_SECS=240 FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 60 || { reap "$pid"; fail "a materially changed stale reason was suppressed: $(cat "$out")"; }
-  # The absorbed repeat above surfaces the bare "stale: <window>" line, so the
-  # escalation's own idle detail is what distinguishes a surfaced changed reason
-  # from another absorbed repeat. This pane is deliberately a bare shell with a
-  # stopped crew, which the escalation classifies as agent-dead rather than a
-  # wedge; either way it must reach firstmate instead of being absorbed.
-  grep -F "stale: $window (idle" "$out" >/dev/null \
-    || fail "the changed stale escalation reason did not surface: $(cat "$out")"
-  unset FM_FAKE_CREW_STATE
-  pass "an unchanged stale notification already handled is absorbed, while a materially changed reason still surfaces"
-}
-
-# Regression for unchanged terminal stale repeat: under set -u, mark_surfaced
-# requires the captured endpoint and identity arguments. An unchanged repeat of
-# an already-handled terminal stale wake must absorb without aborting the cycle
-# on an unbound variable error.
-test_unchanged_terminal_stale_repeat_absorbed_without_unbound_variable() {
-  local dir state fakebin out err capture_file statusf window key sig pid wakes
-  dir=$(make_case terminal-stale-repeat); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; err="$dir/watch.err"; capture_file="$dir/pane.txt"; statusf="$state/term.status"
-  window="test:fm-term"
-  printf 'window=%s\nkind=ship\nharness=grok\nbackend=tmux\n' "$window" > "$state/term.meta"
-  printf 'done: completed and ready\n' > "$statusf"
-  sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-term_status"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  export FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell'
-
-  # Round 1: first sight surfaces stale
-  printf 'done pane (tick 1)\n' > "$capture_file"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2> "$err" &
-  pid=$!
-  if wait_live "$pid" 20; then reap "$pid"; else wait "$pid" || true; fi
-  ack_stopped_cycle "$state" || fail "could not acknowledge initial terminal stale surface"
-  grep -cFx "stale: $window" "$out" >/dev/null || fail "initial terminal stale was not surfaced: $(cat "$out")"
-
-  # Round 2: tick 2 (new hash), unchanged terminal status, repeat suppressed
-  printf 'done pane (tick 2)\n' > "$capture_file"
-  printf '%s' "$(hash_text "$(cat "$capture_file")")" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  : > "$out"
-  : > "$err"
-
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
-    FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" \
-    FM_POLL=0.2 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" 2> "$err" &
-  pid=$!
-  if wait_live "$pid" 20; then
-    reap "$pid"
-  else
-    wait "$pid" || true
-    fail "watcher exited on an unchanged terminal stale repeat instead of absorbing: $(cat "$err") $(cat "$out")"
-  fi
-  grep -F "unbound variable" "$err" && fail "watcher cycle failed with unbound variable: $(cat "$err")"
-  [ ! -s "$out" ] || fail "unchanged terminal stale repeat emitted a wake during absorb: $(cat "$out")"
-  grep -F "absorbed unchanged terminal stale repeat" "$state/.watch-triage.log" >/dev/null \
-    || fail "triage log did not record absorbed unchanged terminal stale repeat"
-
-  unset FM_FAKE_CREW_STATE
-  pass "unchanged terminal stale repeat is absorbed and does not exit on an unbound variable"
-}
-
 # A dead worker reaches handle_paused_stale rather than the live fallback above.
 # When one declared wait directly replaces another, the existing
 # throttle belongs to the old declaration and must not suppress the new wait's
@@ -836,8 +630,7 @@ hold_watch_launch() {  # <dir> <out> <capture>
     FM_WATCH_HANDLING_SUCCESSOR=1 \
     FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_CONFIG_OVERRIDE="$dir/config" \
     FM_STATE_OVERRIDE="$dir/state" FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" \
-    FM_PAUSE_RESURFACE_SECS="${FM_HOLD_PAUSE_RESURFACE_SECS:-999}" \
-    FM_WAKE_REPEAT_SUPPRESS_SECS="${FM_HOLD_WAKE_REPEAT_SUPPRESS_SECS:-}" FM_POLL=1 FM_SIGNAL_GRACE=1 \
+    FM_PAUSE_RESURFACE_SECS="${FM_HOLD_PAUSE_RESURFACE_SECS:-999}" FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" >> "$out" 2>&1 &
   HOLD_WATCH_PID=$!
 }
@@ -931,15 +724,6 @@ test_stale_churn_without_a_captain_call_still_alarms() {
   local spec name line dir state out capture round wakes
   command -v tasks-axi >/dev/null 2>&1 \
     || fail "tasks-axi is required (unheld stale alarm)"
-  # This is the CLASSIFICATION half of the bound: with no open captain call,
-  # every new hash must reach the classifier as actionable. The notification-level
-  # unchanged-repeat suppressor is disabled here for the same reason it is in
-  # test_declared_pause_churny_pane_stays_bounded_across_hashes - each round
-  # acknowledges its wake, so an enabled suppressor would absorb the byte-identical
-  # payload and mask what this test exists to prove. The held cases above keep it
-  # enabled, which is where the two bounds' interaction is actually exercised.
-  local FM_HOLD_WAKE_REPEAT_SUPPRESS_SECS=0
-  export FM_HOLD_WAKE_REPEAT_SUPPRESS_SECS
   for spec in \
     'unheld-delivery|done: PR https://example.invalid/pull/1 checks green' \
     'unheld-blocker|blocked: cannot reach the release host' \
@@ -1408,7 +1192,6 @@ test_captain_held_rechecked_under_a_quiet_record() {
   key=$(printf '%s' "$window" | tr '.:/' '___')
   printf 'quiet\n' > "$state/.afk"
   write_quiet_record "$state"
-  seed_daemon_lock "$state"   # the watcher defers to the daemon only while its lock is live
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
     FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
     FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
@@ -1479,7 +1262,6 @@ test_afk_one_shot_never_hands_off_captain_held_under_away_record() {
   key=$(printf '%s' "$window" | tr '.:/' '___')
   date '+%s' > "$state/.afk"
   write_away_record "$state"
-  seed_daemon_lock "$state"   # the watcher defers to the daemon only while its lock is live
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
     FM_FAKE_TMUX_CURRENT_COMMAND=zsh \
     FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
@@ -1691,9 +1473,6 @@ fm_test_run \
   test_nonterminal_stale_not_working_surfaced \
   test_nonterminal_stale_paused_absorbed_then_resurfaced \
   test_exited_declared_pause_is_bounded_but_live_gate_surfaces \
-  test_declared_pause_churny_pane_stays_bounded_across_hashes \
-  test_unchanged_stale_repeat_absorbed_but_changed_reason_surfaces \
-  test_unchanged_terminal_stale_repeat_absorbed_without_unbound_variable \
   test_own_work_wait_keeps_first_alert_then_long_cadence \
   test_absorbed_replacement_wait_does_not_inherit_the_old_throttle \
   test_live_declared_wait_churn_honors_the_resurface_throttle \

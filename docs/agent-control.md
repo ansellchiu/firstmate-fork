@@ -84,9 +84,6 @@ A relaunch does take one session reference when the endpoint's own runtime recor
    Under a declared [Claude account list](configuration.md#several-claude-accounts-configclaude-accounts), a Claude ship or scout keeps its recorded account, and `--account <entry>` moves it to another declared one after the same check.
    An omp secondmate replacement likewise passes its [per-secondmate omp profile](configuration.md#per-secondmate-omp-profile) file check before the old agent stops.
    Ship and scout replacements also pass the [worker tool exclusion checks](configuration.md#worker-tool-exclusions-configcrew-exclude-tools) at this step.
-   When a relaunch moves a task to a different harness or model, preflight prints the target lane's quota windows from `quota-axi` (including unresolved raw windows) and refuses the relaunch if it would put more than two live workers of this home on one lane, unless `--accept-concentration` is passed.
-   When `quota-axi` is missing, times out, fails, or has no provider for the lane, preflight prints one line saying so and continues.
-   Secondmates are not counted and are not refused, and the count reads published task records, so concurrent relaunches are not caught; run relaunches one at a time.
 2. **Safe checkpoint.**
    The recorded worktree must exist and be a worktree root; its head and dirty state are recorded.
    For a `kind=secondmate` task, the home's identity marker must match and its child records must be readable, so a relaunch can never strand child work behind an unreadable home.
@@ -198,10 +195,6 @@ The worktree and the task's records are unaffected either way.
 - An ambiguous or unreadable endpoint state refuses.
   Only a positively classified state acts; a Rex `unreadable` acts only once the absence proof above settles it.
 - `exit`'s composer-empty check, above, is itself a fail-closed boundary that `relaunch` inherits by stopping the old agent through `exit`.
-- An agent that exited without clearing its Herdr registration is an exception in the other direction, and only because it is proven.
-  Herdr keeps a pane's agent registration until something clears it, so a harness that dies without releasing its lifecycle authority used to read as a running agent forever and strand the task: `exit` waited for a stop that had already happened, and `relaunch` then aborted with the old agent reported still running.
-  Herdr's recovery-grade classifier now reads such a pane as stopped, but only from positive evidence that the registered agent's process is gone, so `exit` reports it already stopped and `relaunch` proceeds.
-  Any pane whose evidence is unreadable, incomplete, or merely quiet still reads as running and still refuses.
 - `fm-spawn --relaunch` independently refuses unless the endpoint is positively agent-free - either a `dead` endpoint that survives, or a Herdr or Rex endpoint proven gone by the absence proof above - so a replacement can never join a live agent.
   An `alive`, `ambiguous`, or `unreadable` verdict all refuse (a Rex `unreadable` after the absence proof cannot settle it), and so does any endpoint whose absence is not provable, which on tmux is every `missing`; absence is claimed only from positive evidence of it.
   For a ship or scout it also refuses, by name, a recorded worktree that is the home, the code root, or a repository's primary checkout (its git dir equals its git common dir), so a worker only ever comes back in its own task worktree.
@@ -231,6 +224,5 @@ The empirical basis for each adapter's value is the `harness-adapters` skill's v
 - `tests/fm-control.test.sh` - the adapter contract for its verified-harness lane (adapters outside the lane pin their control mechanics in their own harness suites), the backend capability matrix, exact-id scoping, the closed verb list, the busy, idle, dead, and idempotent lifecycle cases, and marker non-regression, all against a stubbed session provider.
 - `tests/fm-control-relaunch.test.sh` - the relaunch transaction: identity preservation, harness switching, the progress note, checkpoint refusals, rollback after a failed launch, and the endpoint-absence proof both verbs share - the Herdr reclaim of a destroyed endpoint, and tmux refusing one it cannot prove absent.
 - `tests/fm-control-herdr-smoke.test.sh` - the second state-verified backend against the real herdr binary, on an isolated throwaway lab session.
-- `tests/fm-backend-herdr-exited-agent-e2e.test.sh` - the exited-but-still-registered agent against the real herdr binary, in both directions: a registered agent whose process is running still reads alive, and only its exit flips the verdict.
 - `tests/fm-backend-rex.test.sh` and `tests/fm-backend-rex-smoke.test.sh` - the Rex classifier and absence proof against a stateful fake CLI and a private test server; [`docs/verification/runtime-backends.md`](verification/runtime-backends.md#rex) records the live `interrupt`, `exit`, endpoint-gone, and reclaim runs.
 - `tests/fm-backend-t3code.test.sh` - the t3code exit and relaunch refusals and the native interrupt against a fake T3 server.

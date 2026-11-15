@@ -15,9 +15,7 @@
 # found while taking that lock was left by a drain that died mid-write; each
 # locked drain rotates such leftovers away before doing anything else.
 # FM_STATUS_PRESENTATION_LOCK_TIMEOUT sets the positive whole-second wait for
-# presentation-path and acknowledgement locks (default 10).
-# An acknowledgement that cannot take a lock in time consumes nothing and exits
-# 1 with an ACKNOWLEDGEMENT SKIPPED line, so the same command can be re-run.
+# presentation-path locks (default 10); queue mutation locks remain blocking.
 set -u
 
 SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)"
@@ -37,7 +35,6 @@ SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd
 . "$SCRIPT_DIR/fm-afk-contract.sh"
 
 DRAIN_TMP=
-ACK_RETIRED=
 DRAIN_VIEW_TMP=
 DRAIN_LOCK_HELD=false
 RAW_ROWS=
@@ -277,8 +274,7 @@ acknowledge_inactive_outcomes() { # <mode> <newline-separated-fingerprints>
   local mode=$1 fingerprints=$2 fingerprint
   while IFS= read -r fingerprint; do
     [ -n "$fingerprint" ] || continue
-    FM_INACTIVE_ACK_LOCK_TIMEOUT=$PRESENTATION_LOCK_TIMEOUT \
-      "$SCRIPT_DIR/fm-inactive-reconcile.sh" "$mode" "$fingerprint" || return $?
+    "$SCRIPT_DIR/fm-inactive-reconcile.sh" "$mode" "$fingerprint" || return 1
   done <<< "$fingerprints"
 }
 
@@ -630,8 +626,7 @@ EOF
 #     then acknowledge every presented outcome, settled and open alike.
 #   - Visible routine outcomes are listed once, for awareness, the way the Pi
 #     branch's routine notes reach main's transcript without a turn; silent
-#     routine outcomes and repeats the store suppressed (`present:false`)
-#     never appear. The newest visible rows that fit a byte
+#     routine outcomes never appear. The newest visible rows that fit a byte
 #     cap are listed, and older visible rows collapse into a count, since
 #     bin/fm-branch-outcome.sh list keeps them all.
 # Once the section is printed, the store's read cursor advances through every
@@ -669,7 +664,7 @@ print_branch_outcomes_section() {
           .count[$r.task] += 1
           | .lines += ["\($r.seq)\t\($r.task)\t[seq \($r.seq)\(if .count[$r.task] > 1 then ", newest of \(.count[$r.task]) for this task" else "" end), recorded \($r.recordedAgo) ago] \($r.task): \($r.summary | gsub("[\t\n\r]"; " "))"])
       | .lines[]' 2>/dev/null) \
-    || ! routine=$(printf '%s\n' "$rows" | jq -rs 'map(select(.unread and .verdict == "routine" and .silent != true and .present != false)) | sort_by(.seq) | reverse | .[]
+    || ! routine=$(printf '%s\n' "$rows" | jq -rs 'map(select(.unread and .verdict == "routine" and .silent != true)) | sort_by(.seq) | reverse | .[]
       | "[seq \(.seq)] \(.task): \(.summary | gsub("[\t\n\r]"; " "))"' 2>/dev/null) \
     || case "$through" in ''|*[!0-9]*) true ;; *) false ;; esac; then
     printf 'BRANCH OUTCOMES SKIPPED: the outcome store could not be projected safely; nothing was marked read, so these outcomes are presented again on the next drain.\n' >&2
@@ -788,7 +783,8 @@ print_status_sections() {
   if ! {
     print_unread_status_section "$snapshot" \
       && print_status_outcome_backstop_section "$snapshot" \
-      && print_open_decisions_section "$snapshot"
+      && print_open_decisions_section "$snapshot" \
+      && print_record_divergence_section
   } > "$prepared"; then
     rm -f -- "$prepared"
     return 1
@@ -836,10 +832,6 @@ print_status_presentation() {  # [<deduped-raw-rows>]
   fi
   if [ "$rc" -eq 0 ] && [ -n "$snapshot" ]; then print_status_sections "$snapshot" "$fully_presented" || rc=1; fi
   fm_lock_release "$lock"
-  # Outside the lock: it asks the backlog tool (up to FM_DIVERGENCE_TIMEOUT) and
-  # touches no cursor, so holding the lock across it only made every other
-  # drain wait behind a slow backlog.
-  if [ "$rc" -eq 0 ] && [ -n "$snapshot" ]; then print_record_divergence_section || rc=1; fi
   return "$rc"
 }
 
@@ -847,7 +839,6 @@ print_status_presentation() {  # [<deduped-raw-rows>]
 cleanup() {
   local status=$?
   [ -z "$DRAIN_TMP" ] || rm -f -- "$DRAIN_TMP" 2>/dev/null || true
-  [ -z "$ACK_RETIRED" ] || rm -f -- "$ACK_RETIRED" 2>/dev/null || true
   [ -z "$DRAIN_VIEW_TMP" ] || rm -f -- "$DRAIN_VIEW_TMP" 2>/dev/null || true
   if [ "$DRAIN_LOCK_HELD" = true ]; then
     fm_lock_release "$FM_WAKE_QUEUE_LOCK"
@@ -855,25 +846,17 @@ cleanup() {
   exit "$status"
 }
 
-# An acknowledgement refuses rather than waits behind a live holder: nothing
-# was consumed, so the rows stay durable and the same command can be re-run.
-ack_lock_skipped() {
-  printf 'wake drain: ACKNOWLEDGEMENT SKIPPED: queue lock remains held by live pid %s after %ss; nothing was consumed, re-run the same --ack-through command.\n' \
-    "${FM_LOCK_HELD_PID:-unknown}" "$PRESENTATION_LOCK_TIMEOUT" >&2
-  exit 1
-}
-
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT"; then
+if [ -n "$ACK_THROUGH" ]; then
+  fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
+elif fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT"; then
   :
 else
   lock_rc=$?
-  if [ "$lock_rc" -eq 124 ] && [ -n "$ACK_THROUGH" ]; then
-    ack_lock_skipped
-  elif [ "$lock_rc" -eq 124 ]; then
+  if [ "$lock_rc" -eq 124 ]; then
     printf 'WAKE DRAIN SKIPPED: queue lock remains held by live pid %s after %ss; retry on the next drain.\n' \
       "${FM_LOCK_HELD_PID:-unknown}" "$PRESENTATION_LOCK_TIMEOUT"
     exit 0
@@ -925,33 +908,15 @@ if [ -n "$ACK_THROUGH" ]; then
   fi
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
   DRAIN_LOCK_HELD=false
-  { acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
-    && acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS"; } || {
-    [ "$?" -ne 124 ] || exit 1
+  if ! acknowledge_inactive_outcomes acknowledge "$ACK_FINGERPRINTS" \
+    || ! acknowledge_inactive_outcomes acknowledge-notice "$ACK_NOTICE_FINGERPRINTS"; then
     echo "wake drain: inactive outcome receipt could not be recorded safely" >&2
     exit 1
-  }
-  fm_lock_acquire_wait_bounded "$FM_WAKE_QUEUE_LOCK" "$PRESENTATION_LOCK_TIMEOUT" || {
-    [ "$?" -ne 124 ] || ack_lock_skipped
-    echo "wake drain: queue lock could not be acquired safely" >&2
-    exit 1
-  }
+  fi
+  fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK"
   DRAIN_LOCK_HELD=true
   DRAIN_TMP=$(mktemp "$STATE/.wake-queue.ack.XXXXXX") || exit 1
   chmod 0600 "$DRAIN_TMP" || exit 1
-  # Record what this acknowledgement retires BEFORE consuming it, so an unchanged
-  # stale notification firstmate has now handled is not re-presented as new work
-  # (bin/fm-wake-lib.sh owns the horizon and the fail-open rules). Recording at
-  # acknowledgement rather than presentation is what keeps a presented-but-
-  # interrupted wake durable and re-presentable.
-  ACK_RETIRED=$(mktemp "$STATE/.wake-queue.retired.XXXXXX") || exit 1
-  chmod 0600 "$ACK_RETIRED" || exit 1
-  awk -F '\t' -v cutoff="$ACK_THROUGH" '
-    NF >= 5 && $2 ~ /^[0-9]+$/ && $2 <= cutoff { print }
-  ' "$FM_WAKE_QUEUE" > "$ACK_RETIRED" || exit 1
-  fm_wake_record_presented "$ACK_RETIRED" || true
-  rm -f -- "$ACK_RETIRED"
-  ACK_RETIRED=
   if [ "$ACTOR" = branch ]; then
     require_branch_eligible_rows || exit 1
     # Delete a row only when its sequence is <= cutoff AND it is named in the

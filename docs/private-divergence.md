@@ -8,7 +8,8 @@ This page is its human view; it deliberately restates no entry, because a second
 
 ## What an entry records
 
-Each entry carries the affected core area and its paths, the private intent or invariant it protects, provenance sufficient to trace the introducing change, whether upstream now carries an equivalent, and its reconciliation disposition (`retain`, `superseded`, or `needs-review`).
+Each entry carries the affected core area and its paths, the private intent or invariant it protects, provenance sufficient to trace the introducing change, whether upstream now carries an equivalent, and its reconciliation disposition (`retain`, `superseded`, `needs-review`, or `parked`).
+A `parked` entry is private behavior deliberately removed in favor of upstream; its `parkedAt` names the last commit that carried it, so restoring it is a cherry-pick from there.
 `bin/fm-private-divergence.sh` owns that schema and the checks that keep it honest; read its header for the exact fields, output lines, and exit codes.
 
 ## Why it cannot quietly rot

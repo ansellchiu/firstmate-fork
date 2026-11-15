@@ -191,38 +191,9 @@ pass "real herdr $HERDR_VERSION: a gone session reads recoverable while a live p
 
 FAKEBIN="$SCRATCH/fakebin"
 mkdir -p "$FAKEBIN"
-# The replacement harness has to be a real live agent for the relaunch's launch
-# postcondition to accept it, and it has to keep its registration until the test
-# has finished asserting the relaunch - releasing on a timer instead would race
-# that read. So it stays in the foreground under its own registration (its
-# argv[0] basename is the harness name the classifier reads) and releases only
-# when the test says so, which is what keeps the release assertion below about
-# the harness rather than about the test.
-# Herdr counts a registration only while an agent-named process runs in the
-# pane (issue #4115), so the script hands its registry work to a bounded
-# background helper and then becomes a stand-in whose argv[0] is `codex`; the
-# helper stops it once the identity is released.
-CODEX_STANDIN_DIR="$SCRATCH/codex-standin"
-mkdir -p "$CODEX_STANDIN_DIR"
-ln -s "$STANDIN_BIN" "$CODEX_STANDIN_DIR/codex"
 cat > "$FAKEBIN/codex" <<EOF
 #!/usr/bin/env bash
-set -e
 : > "$SCRATCH/codex-launched"
-"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane report-agent "$PANE_ID" \
-  --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch --state idle >/dev/null 2>&1
-agent_pid=\$\$
-(
-  for _ in \$(seq 1 900); do
-    if [ -e "$SCRATCH/codex-release-now" ]; then break; fi
-    sleep 0.1
-  done
-  "$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane release-agent "$PANE_ID" \
-    --source fm-control-smoke-relaunch --agent fm-control-smoke-relaunch >/dev/null 2>&1
-  : > "$SCRATCH/codex-released"
-  kill "\$agent_pid" 2>/dev/null || true
-) </dev/null >/dev/null 2>&1 &
-exec "$CODEX_STANDIN_DIR/codex"
 EOF
 chmod +x "$FAKEBIN/codex"
 printf -v FAKEBIN_Q '%q' "$FAKEBIN"
@@ -238,20 +209,14 @@ done
 [ "$(fm_backend_herdr_current_path "$SESSION:$PANE_ID" 2>/dev/null || true)" = "$PROJ_REAL" ] \
   || fail "the real Herdr pane did not drift out of its recorded worktree"
 
-# The launch postcondition must actually wait for these relaunches: the pane's
-# foreground is still the shell on an immediate read, and only the stand-in
-# process proves the agent (tests/lib.sh exports a zero wait for fixtures).
-OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 FM_SPAWN_LAUNCH_WAIT=20 \
+OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a drifted, agent-free Herdr pane should be re-homed and relaunched: $OUT"
-[ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched"
-: > "$SCRATCH/codex-release-now"
-for _ in $(seq 1 200); do
-  [ ! -e "$SCRATCH/codex-released" ] || break
+for _ in $(seq 1 20); do
+  [ ! -e "$SCRATCH/codex-launched" ] || break
   sleep 0.1
 done
-[ -e "$SCRATCH/codex-released" ] \
-  || fail "the replacement harness did not release its temporary registry identity"
+[ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched"
 [ "$(fm_backend_herdr_current_path "$SESSION:$PANE_ID" 2>/dev/null || true)" = "$WT_REAL" ] \
   || fail "the relaunched Herdr shell did not end up in its recorded worktree"
 [ "$(sed -n 's/^window=//p' "$HOME_DIR/state/hsmoke.meta" | tail -1)" = "$SESSION:$PANE_ID" ] \
@@ -329,26 +294,10 @@ pass "real herdr: no control verb removed the endpoint or the task's local copy"
 # keeps the registration, which is exactly the shape a Pi crew leaves behind
 # when it exits under a nested shell. Before the fix this read `alive` forever:
 # exit waited out its timeout and refused, and relaunch was refused for good.
-# Select the agent-named process itself rather than whatever sits at index 0, so
-# the kill below can never land on the pane's own shell and take the endpoint
-# with it. Herdr reports argv0 as a path, so compare on its basename.
 AGENT_PID=$(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>/dev/null \
-  | jq -r '.result.process_info.foreground_processes[]?
-      | select(((.argv0 // "") | split("/") | last) == "claude" or .name == "claude")
-      | .pid')
-case "$AGENT_PID" in
-  '') fail "could not read the agent-named process pid from pane process-info" ;;
-  *[!0-9]*) fail "more than one agent-named process is in the task pane: $AGENT_PID" ;;
-esac
+  | jq -r '.result.process_info.foreground_processes[0].pid // empty')
+[ -n "$AGENT_PID" ] || fail "could not read the agent-named process pid from pane process-info"
 kill "$AGENT_PID" 2>/dev/null || fail "could not stop the agent-named process"
-for _ in $(seq 1 150); do
-  kill -0 "$AGENT_PID" 2>/dev/null || break
-  sleep 0.1
-done
-kill -0 "$AGENT_PID" 2>/dev/null \
-  && fail "the agent-named process did not exit after being stopped"
-"$ROOT/bin/fm-herdr-lab.sh" run "$SESSION" pane run "$PANE_ID" ":" >/dev/null 2>&1 \
-  || fail "could not synchronize the pane after the agent process exited"
 wait_process_state shell 50 \
   || version_fail "after the agent process exited the pane reads '$(fm_backend_herdr_pane_process_state "$SESSION" "$PANE_ID")' rather than 'shell' through pane process-info. Raw process-info: $(herdr pane process-info --pane "$PANE_ID" --session "$SESSION" 2>&1 | tr -d '\n')"
 
@@ -366,23 +315,6 @@ STATE=$(fm_backend_agent_state herdr "$SESSION:$PANE_ID")
   || version_fail "a registration over a shell-only pane recovers as '$STATE' rather than 'dead'; every relaunch would be refused"
 pass "real herdr $HERDR_VERSION: a registration Herdr keeps after its agent exits reads stale-agent and recovers as dead"
 
-# Herdr's process view can flicker for an instant right after the agent process
-# is reaped (seen once in CI on 0.7.4: exit read the pane live although this
-# script had just read it dead). Exit's single read is the product contract
-# under test, so settle the fixture first: require a run of consecutive dead
-# reads, and keep the exit assertion below exactly as strict.
-settled=0
-for _ in $(seq 1 100); do
-  if [ "$(fm_backend_agent_state herdr "$SESSION:$PANE_ID")" = dead ]; then
-    settled=$((settled + 1))
-    [ "$settled" -lt 5 ] || break
-  else
-    settled=0
-  fi
-  sleep 0.1
-done
-[ "$settled" -ge 5 ] || version_fail "the stale-registration pane never settled to a stable 'dead' read before exit"
-
 OUT=$(run_control hsmoke exit) || fail "exit against a stale-registration pane should be idempotent success: $OUT"
 case "$OUT" in
   "already-stopped hsmoke"*) : ;;
@@ -390,8 +322,8 @@ case "$OUT" in
 esac
 pass "real herdr: exit on a pane with a stale registration is idempotent success"
 
-rm -f "$SCRATCH/codex-launched" "$SCRATCH/codex-release-now" "$SCRATCH/codex-released"
-OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 FM_SPAWN_LAUNCH_WAIT=20 \
+rm -f "$SCRATCH/codex-launched"
+OUT=$(env FM_HOME="$HOME_DIR" HERDR_SESSION="$SESSION" FM_SPAWN_NO_GUARD=1 \
   "$ROOT/bin/fm-spawn.sh" hsmoke --relaunch --harness codex) \
   || fail "a stale-registration Herdr pane should be relaunched: $OUT"
 for _ in $(seq 1 20); do
@@ -399,15 +331,6 @@ for _ in $(seq 1 20); do
   sleep 0.1
 done
 [ -e "$SCRATCH/codex-launched" ] || fail "the replacement harness was not launched after the stale registration"
-: > "$SCRATCH/codex-release-now"
-for _ in $(seq 1 200); do
-  [ ! -e "$SCRATCH/codex-released" ] || break
-  sleep 0.1
-done
-[ -e "$SCRATCH/codex-released" ] \
-  || fail "the stale-registration replacement did not release its temporary registry identity"
-wait_process_state shell 50 \
-  || version_fail "the stale-registration replacement did not return to its shell"
 [ "$(sed -n 's/^window=//p' "$HOME_DIR/state/hsmoke.meta" | tail -1)" = "$SESSION:$PANE_ID" ] \
   || fail "the relaunch replaced its endpoint instead of reusing it"
 herdr pane get "$PANE_ID" --session "$SESSION" >/dev/null 2>&1 \

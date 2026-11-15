@@ -74,17 +74,6 @@ run_teardown() {  # <home> <id>
     FM_CONFIG_OVERRIDE="$home/config" "$TEARDOWN" "$id"
 }
 
-# A fixture that stamps a merged or merge-ready ship task by hand never goes
-# through the merge path that records its landing receipt, and cleanup refuses
-# a landed ship task without one (bin/fm-receipt.sh, bin/fm-teardown.sh's
-# receipt gate). Record the receipt that path would have written.
-seed_landing_receipt() {  # <home> <id> <pr-url>
-  FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$1" FM_STATE_OVERRIDE="$1/state" \
-    FM_DATA_OVERRIDE="$1/data" "$ROOT/bin/fm-receipt.sh" upgrade-landing \
-    --task "$2" --pr-url "$3" >/dev/null \
-    || fail "could not record the landing receipt for $2"
-}
-
 tasks_in() {  # <home> <tasks-axi args...>
   local home=$1
   shift
@@ -101,12 +90,11 @@ run_captain() {  # <home> <command args...>
 
 # Completes <id>'s captain-call inventory through a separate held task, because
 # the origin task is never accepted as its own inventory entry.
-complete_through_sibling() {  # <home> <origin-id> [complete-args...]
+complete_through_sibling() {  # <home> <origin-id>
   local home=$1 id=$2
-  shift 2
   run_captain "$home" hold "$id-call" --title "Sibling captain call for $id" \
     --reason "captain must decide the sibling call" --repo sample --origin "$id" >/dev/null \
-    && run_captain "$home" complete "$id" "$@" "$id-call"
+    && run_captain "$home" complete "$id" "$id-call"
 }
 
 request_reconciles() {  # <home> <source-id> <task-id>...
@@ -755,12 +743,12 @@ Two choices remain unresolved: the route and the sample access level.
 A separate recommendation is already resolved and requires no captain action.
 EOF
 
-  if run_captain "$home" complete "$id" --claims-checked 1 --none > "$home/none.out" 2> "$home/none.err"; then
+  if run_captain "$home" complete "$id" --none > "$home/none.out" 2> "$home/none.err"; then
     fail "--none attested while captain calls were still open in the status stream"
   fi
   assert_no_grep "decisions_reviewed=1" "$home/state/$id.meta" \
     "failed completion recorded a false completion attestation"
-  if run_captain "$home" complete "$id" --claims-checked 1 sample-route-call > "$home/absent.out" 2> "$home/absent.err"; then
+  if run_captain "$home" complete "$id" sample-route-call > "$home/absent.out" 2> "$home/absent.err"; then
     fail "completion accepted an inventory entry that names no task"
   fi
 
@@ -784,7 +772,7 @@ EOF
     fm_wake_status_mark_current "$2" "$3"
   ' _ "$ROOT/bin/fm-wake-lib.sh" "$home/state" "$home/state/$id.status" \
     || fail "could not prime the announced decision baseline"
-  run_captain "$home" complete "$id" --claims-checked 1 sample-route-call >/dev/null \
+  run_captain "$home" complete "$id" sample-route-call >/dev/null \
     || fail "shared investigation completion gate failed"
   FM_STATE_OVERRIDE="$home/state" bash -c '
     . "$1"; fm_wake_signal_seen_current "$2" "$3"
@@ -836,7 +824,7 @@ test_answer_records_and_closes() {
   run_captain "$home" hold sample-guard-call \
     --title "Choose the guard option" --reason "captain guard choice pending" --repo sample >/dev/null \
     || fail "could not register the captain-held task"
-  run_captain "$home" complete "$id" --claims-checked 1 sample-guard-call >/dev/null \
+  run_captain "$home" complete "$id" sample-guard-call >/dev/null \
     || fail "completion failed for the held inventory"
   tasks_in "$home" add sample-guard-work "Apply the guard option" \
     --kind ship --repo sample --blocked-by sample-guard-call >/dev/null \
@@ -1302,7 +1290,7 @@ test_out_of_band_close_is_recordable() {
   run_captain "$home" hold sample-submission-call --title "Choose the sample submission" \
     --reason "captain submission choice pending" --repo sample --origin "$id" >/dev/null \
     || fail "could not register the captain-held task"
-  run_captain "$home" complete "$id" --claims-checked 1 sample-submission-call >/dev/null \
+  run_captain "$home" complete "$id" sample-submission-call >/dev/null \
     || fail "completion failed before the out-of-band close"
 
   tasks_in "$home" "done" sample-submission-call >/dev/null \
@@ -1360,7 +1348,7 @@ test_visual_review_uses_shared_completion_owner() {
   write_origin_meta "$home" "$id"
   printf 'done: investigation complete\n' > "$home/state/$id.status"
   printf '# Sample board investigation\n\nThe initial findings need no captain choice.\n' > "$home/data/$id/report.md"
-  run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null \
+  run_captain "$home" complete "$id" --none >/dev/null \
     || fail "initial investigation could not pass the shared completion owner"
   run_teardown "$home" "$id" >/dev/null 2> "$home/visual-teardown.err" \
     || fail "completed investigation teardown failed: $(cat "$home/visual-teardown.err")"
@@ -1371,7 +1359,7 @@ test_visual_review_uses_shared_completion_owner() {
   run_captain "$home" hold sample-layout-call --title "Choose the sample layout" \
     --reason "captain layout choice pending" --repo sample --origin "$id" >/dev/null \
     || fail "post-teardown visual review could not use the shared hold owner"
-  run_captain "$home" complete "$id" --claims-checked 1 sample-layout-call >/dev/null \
+  run_captain "$home" complete "$id" sample-layout-call >/dev/null \
     || fail "post-teardown visual review could not use the shared completion owner"
   json=$(run_bearings "$home") || fail "Bearings failed after the ended visual review"
   printf '%s' "$json" | jq -e '
@@ -1397,7 +1385,7 @@ test_none_inventory_and_resolved_prose_do_not_create_holds() {
 Decision record: the earlier choice is resolved.
 The recommendation is informational and needs no captain action.
 EOF
-  run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null \
+  run_captain "$home" complete "$id" --none >/dev/null \
     || fail "explicit no-call inventory failed"
   json=$(run_bearings "$home") || fail "Bearings failed for no-call inventory"
   printf '%s' "$json" | jq -e '
@@ -1460,12 +1448,10 @@ test_terminal_single_owner_status_decision_does_not_block_empty_inventory() {
   printf 'blocked [key=access]: waiting\ndone: report complete\nnote: cleanup complete\n' \
     > "$home/state/$id.status"
   printf '# Terminal sample review\n\nNo unresolved captain choice remains.\n' > "$home/data/$id/report.md"
-  # The fold takes the row's kind, and for a scout a terminal declaration
-  # retires the earlier blocker, so the raw read is already empty here.
-  open=$(bash -c '. "$1"; status_open_decisions "$2" "$3"' _ \
-    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status" scout)
+  open=$(bash -c '. "$1"; status_open_decisions "$2"' _ \
+    "$ROOT/bin/fm-classify-lib.sh" "$home/state/$id.status")
   [ -z "$open" ] || fail "the shared fold retained a pre-terminal blocker"
-  run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null \
+  run_captain "$home" complete "$id" --none >/dev/null \
     || fail "terminal single-owner stale status decision blocked empty inventory completion"
   run_captain "$home" verify "$id" >/dev/null \
     || fail "terminal single-owner stale status decision blocked inventory verification"
@@ -1477,7 +1463,7 @@ test_terminal_single_owner_status_decision_does_not_block_empty_inventory() {
     fail "verification accepted a genuinely reopened post-terminal decision"
   fi
   printf 'resolved [key=access]: answered\nfailed: investigation ended\nnote: final cleanup\n' >> "$home/state/$id.status"
-  run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null || fail "resolved reopening blocked completion"
+  run_captain "$home" complete "$id" --none >/dev/null || fail "resolved reopening blocked completion"
   run_captain "$home" verify "$id" >/dev/null || fail "resolved reopening blocked verification"
   run_teardown "$home" "$id" >/dev/null 2> "$home/terminal-teardown.err" \
     || fail "terminal single-owner stale status decision blocked teardown: $(cat "$home/terminal-teardown.err")"
@@ -1523,7 +1509,7 @@ EOF
   run_captain "$mate" hold sample-release-call --title "Choose the sample release" \
     --reason "captain release choice pending" --repo sample --origin "$origin" >/dev/null \
     || fail "secondmate-owned hold creation failed"
-  run_captain "$mate" complete "$origin" --claims-checked 1 sample-release-call >/dev/null \
+  run_captain "$mate" complete "$origin" sample-release-call >/dev/null \
     || fail "secondmate-owned completion failed"
   # The parent registers the mate before its children are ever torn down;
   # teardown resolves that registration to deliver the scout's final line.
@@ -1745,18 +1731,13 @@ test_bound_channel_answers_close_at_answer_time() {
     --reason "captain old bare reconcile pending" --repo sample --origin "$id" >/dev/null
   run_captain "$home" hold sample-old-reconcile-note --title "Captain call: old annotated reconcile" \
     --reason "captain old annotated reconcile pending" --repo sample --origin "$id" >/dev/null
-  for c in note-only free-value note-select; do
-    run_captain "$home" hold sample-"$c" --title "Captain call: $c" \
-      --reason "captain $c pending" --repo sample --origin "$id" >/dev/null
-  done
   tasks_in "$home" add sample-gated-work "Gated sample work" --kind ship --repo sample \
     --body 'Gated work plan.' >/dev/null
   run_captain "$home" hold sample-gated-work --reason "captain go needed" >/dev/null
-  run_captain "$home" complete "$id" --claims-checked 1 \
+  run_captain "$home" complete "$id" \
     sample-membership-call sample-headline-call sample-forged-call sample-invalid-close-call \
     sample-source-reconcile sample-bare-reconcile sample-old-shape sample-old-reconcile \
-    sample-old-reconcile-note sample-note-only sample-free-value sample-note-select \
-    sample-gated-work >/dev/null \
+    sample-old-reconcile-note sample-gated-work >/dev/null \
     || fail "completion failed for the deck's inventoried calls"
 
   artifact="$home/data/$id/review.html"
@@ -1777,7 +1758,7 @@ session:
   status: feedback
   session_ended: true
   ended_by: user
-prompts[16]{uid,prompt,selector,tag,text}:
+prompts[13]{uid,prompt,selector,tag,text}:
   "1","Reconcile first\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-source-reconcile\",\n  \"selection\": \"reconcile\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(6)",choice,"Reconcile"
   "2","Membership: gold-only - captain detail\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-membership-call\",\n  \"selection\": \"gold-only\",\n  \"note\": \"captain detail\"\n}","section#call > form:nth-of-type(1)",choice,"Membership: gold-only - captain detail"
   "3","Headline: f1-when-fp-gold\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-headline-call\",\n  \"selection\": \"f1-when-fp-gold\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(2)",choice,"Headline: f1-when-fp-gold"
@@ -1787,9 +1768,6 @@ prompts[16]{uid,prompt,selector,tag,text}:
   "7","Reconcile this - re-check latest publication\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-source-reconcile\",\n  \"selection\": \"reconcile\",\n  \"note\": \"re-check latest publication\"\n}","section#call > form:nth-of-type(6)",choice,"Reconcile - re-check latest publication"
   "8","Second reconcile\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-bare-reconcile\",\n  \"selection\": \"reconcile\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(7)",choice,"Reconcile"
   "9","Headline final: f1-when-fp-gold\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-headline-call\",\n  \"selection\": \"f1-when-fp-gold\",\n  \"note\": \"\"\n}","section#call > form:nth-of-type(2)",choice,"Headline: f1-when-fp-gold"
-  "13","Note only\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-note-only\",\n  \"selection\": \"\",\n  \"note\": \"why is memory growing vs upstream\",\n  \"options\": [\"yes\", \"no\", \"reconcile\"]\n}","section#call > form:nth-of-type(11)",choice,"Note only"
-  "14","Free value\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-free-value\",\n  \"selection\": \"maybe\",\n  \"note\": \"\",\n  \"options\": [\"yes\", \"no\", \"reconcile\"]\n}","section#call > form:nth-of-type(11)",choice,"Free value"
-  "15","Yes - because reasons\n\nContext data:\n{\n  \"schema\": \"fm-bearings-answer.v1\",\n  \"question\": \"sample-note-select\",\n  \"selection\": \"yes\",\n  \"note\": \"because reasons\",\n  \"options\": [\"yes\", \"no\", \"reconcile\"]\n}","section#call > form:nth-of-type(11)",choice,"Yes - because reasons"
   "10","Old board answer\n\nContext data:\n{\n  \"question\": \"sample-old-shape\",\n  \"answer\": \"yes\"\n}","section#call > form:nth-of-type(8)",choice,"Old answer: yes"
   "11","Old board reconcile\n\nContext data:\n{\n  \"question\": \"sample-old-reconcile\",\n  \"answer\": \"reconcile\"\n}","section#call > form:nth-of-type(9)",choice,"Old reconcile"
   "12","Old board reconcile note\n\nContext data:\n{\n  \"question\": \"sample-old-reconcile-note\",\n  \"answer\": \"reconcile - verify publication\"\n}","section#call > form:nth-of-type(10)",choice,"Old reconcile note"
@@ -1811,17 +1789,8 @@ EOF
     "an unsupported card close mode defaulted to completion"
   assert_not_contains "$out" "sample-source-reconcile" \
     "a reconcile selection leaked into keyed answers"
-  assert_not_contains "$out" "sample-old-shape" \
-    "a bare legacy freeform answer fed the keyed-answer intake"
-  assert_not_contains "$out" "sample-note-only" \
-    "a note that selects no authored option was emitted as an answer"
-  assert_not_contains "$out" "sample-free-value" \
-    "a value matching no authored option was emitted as an answer"
-  assert_contains "$out" "sample-note-select	yes" \
-    "a selection carrying a note stopped being the answer"
-  [ "$(run_lavish "$home" read "$result" | grep -c '^card_note: why is memory growing vs upstream')" -ge 1 ] \
-    && [ "$(run_lavish "$home" read "$result" | grep -c '^card_key: sample-note-only')" -ge 1 ] \
-    || fail "a note-only submission was not surfaced for firstmate"
+  assert_contains "$out" "sample-old-shape	yes" \
+    "an ordinary legacy board choice was discarded during rollout"
   assert_not_contains "$out" "sample-old-reconcile" \
     "a legacy reconcile-shaped value reached keyed answers"
   out=$(run_lavish "$home" reconciles "$result") || fail "could not read captured reconcile selections"
@@ -1876,15 +1845,9 @@ SH
   assert_contains "$out" "captain note: re-check latest publication" \
     "the annotated reconcile selection lost its note provenance"
   show=$(tasks_in "$home" show sample-old-shape --full)
-  assert_contains "$show" "state: queued" "a bare legacy freeform answer closed its task"
-  assert_contains "$show" "held: yes" "a bare legacy freeform answer released its task"
-  for c in sample-note-only sample-free-value; do
-    show=$(tasks_in "$home" show "$c" --full)
-    assert_contains "$show" "state: queued" "$c was closed without an authored option"
-    assert_contains "$show" "held: yes" "$c was released without an authored option"
-  done
-  show=$(tasks_in "$home" show sample-note-select --full)
-  assert_contains "$show" "state: done" "a selection carrying a note did not close its call"
+  assert_contains "$show" "state: done" "an ordinary legacy board choice did not close its task"
+  assert_contains "$show" "Resolution mode: answered" \
+    "an ordinary legacy board choice did not use the keyed-answer intake"
   show=$(tasks_in "$home" show sample-old-reconcile --full)
   assert_contains "$show" "state: queued" "a bare legacy reconcile value closed its task"
   assert_contains "$show" "held: yes" "a bare legacy reconcile value released its task"
@@ -2507,7 +2470,7 @@ test_chat_channel_feeds_the_same_keyed_answer_intake() {
   run_captain "$home" hold sample-chat-reconcile --title "Reconcile from chat" \
     --reason "captain chat reconcile pending" --repo sample >/dev/null \
     || fail "could not register the chat reconcile call"
-  run_captain "$home" complete "$id" --claims-checked 1 "$id-decision-chat-choice" sample-chat-followup \
+  run_captain "$home" complete "$id" "$id-decision-chat-choice" sample-chat-followup \
     sample-chat-reconcile >/dev/null \
     || fail "completion failed for the chat calls"
   grep -F 'captain-held [key=chat-choice]' "$home/state/$id.status" >/dev/null \
@@ -2751,232 +2714,6 @@ EOF
   pass "a captain call with no routed work, a verified transfer, an open decision, and an answered call all stay silent"
 }
 
-# REC-4 claims audit: a filed report requires --claims-checked N, quoting the
-# offending claim when REC-1's negative-claim classifier fires. This is a
-# forcing function (the invoking agent attests a count), not a re-verification
-# of the claims themselves.
-test_claims_audit_required_for_reports_without_negative_claims() {
-  local home id
-  home=$(make_home claims-audit-plain)
-  id=sample-plain-report
-  mkdir -p "$home/data/$id"
-  tasks_in "$home" add "$id" "Investigate a plain sample claim" --kind scout --repo sample --start >/dev/null \
-    || fail "could not create the plain-report origin"
-  write_origin_meta "$home" "$id"
-  printf '# Plain sample report\n\nThe feature works as documented.\n' > "$home/data/$id/report.md"
-
-  if run_captain "$home" complete "$id" --none > "$home/omitted.out" 2> "$home/omitted.err"; then
-    fail "completion succeeded on a filed report with no --claims-checked attestation"
-  fi
-  assert_grep "claims-checked" "$home/omitted.err" "the refusal did not name the missing attestation"
-  assert_no_grep "decisions_reviewed=1" "$home/state/$id.meta" \
-    "a refused completion recorded a false attestation"
-
-  if run_captain "$home" complete "$id" --claims-checked 0 --none \
-    > "$home/zero.out" 2> "$home/zero.err"; then
-    fail "completion succeeded with --claims-checked 0 on a filed report"
-  fi
-  assert_grep "N>=1" "$home/zero.err" "the refusal did not name the minimum count"
-
-  run_captain "$home" complete "$id" --claims-checked 1 --none >/dev/null \
-    || fail "completion refused a spot-verified plain report"
-  assert_grep "decisions_reviewed=1" "$home/state/$id.meta" "the attested completion was not recorded"
-  pass "a filed report with no negative claim requires --claims-checked >=1"
-}
-
-test_claims_audit_negative_claim_requires_two_and_quotes() {
-  local home id
-  home=$(make_home claims-audit-negative)
-  id=sample-negative-report
-  mkdir -p "$home/data/$id"
-  tasks_in "$home" add "$id" "Investigate a sample negative claim" --kind scout --repo sample --start >/dev/null \
-    || fail "could not create the negative-report origin"
-  write_origin_meta "$home" "$id"
-  printf '# Sample negative report\n\nThe iOS app does not exist on the App Store.\n' \
-    > "$home/data/$id/report.md"
-
-  if run_captain "$home" complete "$id" --none > "$home/omitted.out" 2> "$home/omitted.err"; then
-    fail "completion succeeded on a negative claim with no --claims-checked attestation"
-  fi
-  assert_grep "does not exist on the App Store" "$home/omitted.err" \
-    "the refusal did not quote the negative claim"
-
-  if run_captain "$home" complete "$id" --claims-checked 1 --none \
-    > "$home/one.out" 2> "$home/one.err"; then
-    fail "completion succeeded with an insufficient claims-checked count on a negative claim"
-  fi
-  assert_grep "does not exist on the App Store" "$home/one.err" \
-    "an insufficient count did not still quote the negative claim"
-  assert_grep "N>=2" "$home/one.err" "the refusal did not name the negative-claim minimum"
-
-  run_captain "$home" complete "$id" --claims-checked 2 --none >/dev/null \
-    || fail "completion refused a fully spot-verified negative claim"
-  assert_grep "decisions_reviewed=1" "$home/state/$id.meta" \
-    "the attested negative-claim completion was not recorded"
-  pass "a filed report with a detected negative claim requires --claims-checked >=2 and quotes the claim"
-}
-
-# Reuses REC-1's exact phrase set rather than re-deriving it, per the
-# adversarial review's build spec.
-test_claims_audit_classifier_detects_every_rec1_phrase() {
-  local home phrase i=0 id
-  home=$(make_home claims-audit-phrases)
-  for phrase in "does not exist" "no support" "not available" "unsupported" "no longer"; do
-    i=$((i + 1))
-    id="sample-phrase-report-$i"
-    mkdir -p "$home/data/$id"
-    tasks_in "$home" add "$id" "Investigate sample phrase $i" --kind scout --repo sample --start >/dev/null \
-      || fail "could not create phrase fixture $phrase"
-    write_origin_meta "$home" "$id"
-    printf '# Sample phrase report\n\nThe legacy widget is %s in this release.\n' "$phrase" \
-      > "$home/data/$id/report.md"
-    if run_captain "$home" complete "$id" --claims-checked 1 --none \
-      > "$home/phrase-$i.out" 2> "$home/phrase-$i.err"; then
-      fail "phrase '$phrase' did not trigger the negative-claim classifier's N>=2 requirement"
-    fi
-    run_captain "$home" complete "$id" --claims-checked 2 --none >/dev/null \
-      || fail "phrase '$phrase' refused a fully spot-verified completion"
-  done
-  pass "the classifier detects all five REC-1 negative-claim phrases"
-}
-
-test_claims_audit_shim_passes_through_claims_checked() {
-  local home id
-  home=$(make_home claims-audit-shim)
-  id=sample-shim-report
-  mkdir -p "$home/data/$id"
-  tasks_in "$home" add "$id" "Investigate a sample shim claim" --kind scout --repo sample --start >/dev/null \
-    || fail "could not create the shim-report origin"
-  write_origin_meta "$home" "$id"
-  printf '# Sample shim report\n\nThis package is unsupported now.\n' > "$home/data/$id/report.md"
-
-  if run_shim "$home" complete "$id" --claims-checked 1 --none \
-    > "$home/shim-one.out" 2> "$home/shim-one.err"; then
-    fail "the shim accepted an insufficient claims-checked count on a negative claim"
-  fi
-  assert_grep "unsupported now" "$home/shim-one.err" "the shim did not surface the quoted claim"
-
-  run_shim "$home" complete "$id" --claims-checked 2 --none >/dev/null \
-    || fail "the shim did not forward a sufficient claims-checked count"
-  assert_grep "decisions_reviewed=1" "$home/state/$id.meta" "the shim completion was not recorded"
-  pass "the shim forwards --claims-checked to the shared completion gate"
-}
-
-# An origin with no filed report has nothing for the claims audit to check;
-# the gate stays out of the way exactly as it did before REC-4.
-test_claims_audit_not_required_without_a_filed_report() {
-  local home id
-  home=$(make_home claims-audit-no-report)
-  id=sample-no-report-work
-  tasks_in "$home" add "$id" "Ordinary sample work with no filed report" --kind ship --repo sample --start >/dev/null \
-    || fail "could not create the report-less origin"
-  run_captain "$home" complete "$id" --none >/dev/null \
-    || fail "completion required --claims-checked on an origin with no filed report"
-  pass "completion does not require a claims audit when the origin has no filed report"
-}
-
-# Batched answers: a positional or numbered reply over multiple tasks records
-# which item/position that task received and the captain's words for that item,
-# while preserving the full batch decision text, digest, mode, and archived body.
-test_batched_answer_records_item_and_decision() {
-  local home id show out batch_text
-  home=$(make_home batch-answer)
-  batch_text="approve 1, 2, 3, 5, and recommendations 8-15. 16 already done."
-  printf '%s\n' "$batch_text" > "$home/batch.txt"
-
-  # 1. Direct answer with --item and --item-decision
-  tasks_in "$home" add sample-task-1 "Sample batch item 1" --kind ship --repo sample >/dev/null
-  run_captain "$home" hold sample-task-1 --reason "captain approval needed" >/dev/null
-  run_captain "$home" answer sample-task-1 --decision-file "$home/batch.txt" \
-    --item 1 --item-decision "approve" >/dev/null \
-    || fail "answer with --item and --item-decision failed"
-  show=$(tasks_in "$home" show sample-task-1 --full)
-  assert_contains "$show" "state: done" "the batched answer did not close the task"
-  assert_contains "$show" "Resolution recorded by fm-captain-hold" "lost resolution header"
-  assert_contains "$show" "Resolution mode: answered" "lost resolution mode"
-  assert_contains "$show" "Batch item: 1" "the task did not record its batch item position"
-  assert_contains "$show" "Item decision: approve" "the task did not record its item decision"
-  assert_contains "$show" "$batch_text" "the task lost the full captain decision text"
-
-  # Idempotent retry with matching item fields
-  run_captain "$home" answer sample-task-1 --decision-file "$home/batch.txt" \
-    --item 1 --item-decision "approve" >/dev/null \
-    || fail "identical batched answer retry was not idempotent"
-
-  # Drifted retry with different item is rejected
-  if run_captain "$home" answer sample-task-1 --decision-file "$home/batch.txt" \
-    --item 2 --item-decision "approve" > "$home/drift-item.out" 2> "$home/drift-item.err"; then
-    fail "retry with changed item was accepted"
-  fi
-  assert_grep "different batch item" "$home/drift-item.err" "drifted item refusal must be explicit"
-
-  # Drifted retry with different item-decision is rejected
-  if run_captain "$home" answer sample-task-1 --decision-file "$home/batch.txt" \
-    --item 1 --item-decision "reject" > "$home/drift-dec.out" 2> "$home/drift-dec.err"; then
-    fail "retry with changed item decision was accepted"
-  fi
-  assert_grep "different item decision" "$home/drift-dec.err" "drifted item decision refusal must be explicit"
-
-  # 2. Direct answer with --release and --item-words alias
-  tasks_in "$home" add sample-task-9 "Sample spend upgrade task" --kind ship --repo sample \
-    --body "Spend upgrade details." >/dev/null
-  run_captain "$home" hold sample-task-9 --reason "captain spend call" >/dev/null
-  run_captain "$home" answer sample-task-9 --decision-file "$home/batch.txt" --release \
-    --item 9 --item-words "measure 30 days, revisit 2026-09-25" >/dev/null \
-    || fail "answer --release with batch item failed"
-  show=$(tasks_in "$home" show sample-task-9 --full)
-  assert_contains "$show" "state: queued" "released batch task did not stay queued"
-  assert_contains "$show" "held: no" "released batch task kept its hold"
-  assert_contains "$show" "Resolution mode: released" "lost release resolution mode"
-  assert_contains "$show" "Batch item: 9" "lost batch item on release"
-  assert_contains "$show" "Item decision: measure 30 days, revisit 2026-09-25" "lost item decision on release"
-  assert_contains "$show" "$batch_text" "lost batch decision text on release"
-  assert_contains "$show" "Spend upgrade details." "lost task body on release"
-
-  # 3. Item without specific item-decision (honest attribution of named position)
-  tasks_in "$home" add sample-task-16 "Sample task 16" --kind ship --repo sample >/dev/null
-  run_captain "$home" hold sample-task-16 --reason "captain review needed" >/dev/null
-  run_captain "$home" answer sample-task-16 --decision-file "$home/batch.txt" \
-    --item "16" >/dev/null \
-    || fail "answer with --item only failed"
-  show=$(tasks_in "$home" show sample-task-16 --full)
-  assert_contains "$show" "Batch item: 16" "lost batch item"
-  assert_not_contains "$show" "Item decision:" "item decision invented when none provided"
-  assert_contains "$show" "$batch_text" "lost batch text"
-
-  # 4. Keyed-answer intake (answers) with batch columns on stdin
-  tasks_in "$home" add sample-chan-2 "Channel batch item 2" --kind ship --repo sample >/dev/null
-  tasks_in "$home" add sample-chan-3 "Channel batch item 3" --kind ship --repo sample >/dev/null
-  run_captain "$home" hold sample-chan-2 --reason "hold 2" >/dev/null
-  run_captain "$home" hold sample-chan-3 --reason "hold 3" >/dev/null
-
-  out=$(printf 'sample-chan-2\t%s\tItem 2\tdone\t2\tapprove\nsample-chan-3\t%s\tItem 3\tdone\t3\tapprove\n' \
-    "$batch_text" "$batch_text" \
-    | run_captain "$home" answers --source "chat batch response") \
-    || fail "answers with batch columns failed"
-  assert_contains "$out" "closed: sample-chan-2" "item 2 not closed"
-  assert_contains "$out" "closed: sample-chan-3" "item 3 not closed"
-
-  show=$(tasks_in "$home" show sample-chan-2 --full)
-  assert_contains "$show" "Batch item: 2" "channel item 2 lost batch item"
-  assert_contains "$show" "Item decision: approve" "channel item 2 lost item decision"
-  assert_contains "$show" "Task: sample-chan-2" "channel item 2 lost provenance"
-
-  show=$(tasks_in "$home" show sample-chan-3 --full)
-  assert_contains "$show" "Batch item: 3" "channel item 3 lost batch item"
-  assert_contains "$show" "Item decision: approve" "channel item 3 lost item decision"
-
-  # Replaying identical batch answers on stdin is idempotent
-  out=$(printf 'sample-chan-2\t%s\tItem 2\tdone\t2\tapprove\nsample-chan-3\t%s\tItem 3\tdone\t3\tapprove\n' \
-    "$batch_text" "$batch_text" \
-    | run_captain "$home" answers --source "chat batch response") \
-    || fail "replaying batch answers was not idempotent"
-  assert_contains "$out" "closed: sample-chan-2" "replayed item 2 was not closed"
-  assert_contains "$out" "closed: sample-chan-3" "replayed item 3 was not closed"
-
-  pass "batched answers record item position, words, and batch text while preserving single-answer behavior"
-}
-
 # The originating work item is itself the captain call, which is what the policy
 # prefers ("hold the work item the question gates"). Cleanup of that finished
 # work must never be the act that closes the captain's own row: the deliverable
@@ -2998,9 +2735,7 @@ test_teardown_never_closes_a_captain_held_task() {
   run_captain "$home" hold "$id" \
     --reason "captain must choose inline or by-reference attachments" >/dev/null \
     || fail "could not hold the originating work item for the captain"
-  # A filed report also trips this home's REC-4 claims audit, so the completion
-  # attests the spot-verified claim count the way a real scout does.
-  complete_through_sibling "$home" "$id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$id" >/dev/null \
     || fail "completion gate failed with the origin as its own captain call"
 
   run_teardown "$home" "$id" > "$home/teardown.out" 2> "$home/teardown.err" \
@@ -3031,7 +2766,7 @@ test_teardown_never_closes_a_captain_held_task() {
   write_origin_meta "$home" "$plain"
   printf 'done: report complete\n' > "$home/state/$plain.status"
   printf '# Sample cache\n\nNothing waits on the captain.\n' > "$home/data/$plain/report.md"
-  run_captain "$home" complete "$plain" --claims-checked 1 --none >/dev/null \
+  run_captain "$home" complete "$plain" --none >/dev/null \
     || fail "completion gate failed for the ordinary investigation"
   run_teardown "$home" "$plain" > "$home/plain.out" 2> "$home/plain.err" \
     || fail "ordinary cleanup failed: $(cat "$home/plain.err")"
@@ -3091,7 +2826,7 @@ test_retained_row_artifacts_survive_captain_answers() {
     > "$home/data/$retained_id/report.md"
   run_captain "$home" hold "$retained_id" --reason "captain must choose the report follow-up" \
     >/dev/null || fail "could not hold the retained report"
-  complete_through_sibling "$home" "$retained_id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$retained_id" >/dev/null \
     || fail "completion gate failed for the retained report"
   run_teardown "$home" "$retained_id" > "$home/retained-teardown.out" \
     2> "$home/report-teardown.err" \
@@ -3112,7 +2847,7 @@ test_retained_row_artifacts_survive_captain_answers() {
   run_captain "$home" hold "$precedence_id" \
     --reason "captain must choose the report follow-up" >/dev/null \
     || fail "could not hold the report precedence fixture"
-  complete_through_sibling "$home" "$precedence_id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$precedence_id" >/dev/null \
     || fail "completion gate failed for the report precedence fixture"
   run_teardown "$home" "$precedence_id" > "$home/precedence-teardown.out" \
     2> "$home/precedence-teardown.err" \
@@ -3193,7 +2928,6 @@ test_retained_row_artifacts_survive_captain_answers() {
     || fail "could not release the approved merge"
   show=$(tasks_in "$home" show "$approved_id" --full) || fail "the approved merge disappeared"
   assert_not_contains "$show" "hold_kind: captain" "merge approval retained its captain hold kind"
-  seed_landing_receipt "$home" "$approved_id" "$approved_pr"
   run_teardown "$home" "$approved_id" > "$home/approved-teardown.out" \
     2> "$home/approved-teardown.err" \
     || fail "approved merge cleanup failed: $(cat "$home/approved-teardown.err")"
@@ -3242,7 +2976,7 @@ test_retained_row_artifacts_survive_captain_answers() {
   printf '# Released report\n' > "$home/data/$released_id/report.md"
   run_captain "$home" hold "$released_id" --reason "captain report release pending" \
     >/dev/null || fail "could not hold the released report"
-  complete_through_sibling "$home" "$released_id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$released_id" >/dev/null \
     || fail "completion gate failed for the released report"
   printf 'Release the completed report.\n' > "$home/released-answer.txt"
   run_captain "$home" answer "$released_id" --release \
@@ -3347,7 +3081,7 @@ test_interrupted_cleanup_keeps_the_captain_call_recoverable() {
   printf '# Failed cleanup\n\nThe captain call remains open.\n' > "$home/data/$id/report.md"
   run_captain "$home" hold "$id" --reason "captain must choose after cleanup retry" >/dev/null \
     || fail "could not hold the cleanup-failure fixture"
-  complete_through_sibling "$home" "$id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$id" >/dev/null \
     || fail "completion gate failed for the cleanup-failure fixture"
   cat > "$home/fakebin/treehouse" <<'SH'
 #!/usr/bin/env bash
@@ -3406,7 +3140,7 @@ test_answer_before_cleanup_replay_preserves_the_retained_report() {
   printf '# Interrupted cleanup\n\nThe captain call remains open.\n' > "$home/data/$id/report.md"
   run_captain "$home" hold "$id" --reason "captain must choose after interrupted cleanup" \
     >/dev/null || fail "could not hold the answer-before-replay fixture"
-  complete_through_sibling "$home" "$id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$id" >/dev/null \
     || fail "completion gate failed for the answer-before-replay fixture"
   cat > "$home/fakebin/treehouse" <<'SH'
 #!/usr/bin/env bash
@@ -3517,7 +3251,7 @@ test_unusable_pending_close_record_names_its_reason() {
   printf '# Unusable pending close\n\nThe captain call remains open.\n' > "$home/data/$id/report.md"
   run_captain "$home" hold "$id" --reason "captain must choose after interrupted cleanup" \
     >/dev/null || fail "could not hold the unusable pending-close fixture"
-  complete_through_sibling "$home" "$id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$id" >/dev/null \
     || fail "completion gate failed for the unusable pending-close fixture"
   cat > "$home/fakebin/treehouse" <<'SH'
 #!/usr/bin/env bash
@@ -3586,7 +3320,7 @@ EOF
     || fail "could not hold the sibling captain call"
   PATH="$home/fakebin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
     FM_DATA_OVERRIDE="$data" FM_CONFIG_OVERRIDE="$home/config" \
-    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --claims-checked 1 "$id-call" >/dev/null \
+    "$ROOT/bin/fm-captain-hold.sh" complete "$id" "$id-call" >/dev/null \
     || fail "completion gate failed for the relocated answer-before-replay fixture"
   cat > "$home/fakebin/treehouse" <<'SH'
 #!/usr/bin/env bash
@@ -3668,7 +3402,7 @@ EOF
     || fail "could not hold the sibling captain call"
   PATH="$home/fakebin:$PATH" FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" \
     FM_DATA_OVERRIDE="$data" FM_CONFIG_OVERRIDE="$home/config" \
-    "$ROOT/bin/fm-captain-hold.sh" complete "$id" --claims-checked 1 "$id-call" >/dev/null \
+    "$ROOT/bin/fm-captain-hold.sh" complete "$id" "$id-call" >/dev/null \
     || fail "completion gate failed for the relocated captain hold"
 
   PATH="$home/fakebin:$PATH" FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" \
@@ -3705,7 +3439,6 @@ test_teardown_retains_a_gerrit_captain_call_with_its_change_url() {
   printf 'done: change landed\n' > "$home/state/$id.status"
   run_captain "$home" hold "$id" --reason "captain must choose the follow-up" >/dev/null \
     || fail "could not hold the landed Gerrit task for the captain"
-  seed_landing_receipt "$home" "$id" "$gerrit_url"
   # Pin the refusal tasks-axi applies to a --pr link that is not a canonical
   # GitHub pull request, so this case keeps reproducing whatever the installed
   # release accepts.
@@ -3754,7 +3487,6 @@ test_merge_approval_releases_before_zero_done_retention() {
     "window=firstmate:fm-$id" "endpoint_task_id=$id" "worktree=$wt" \
     "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
     "pr=$pr" "spawn_gen=fixture-$id"
-  seed_landing_receipt "$home" "$id" "$pr"
   printf 'done: merge ready\n' > "$home/state/$id.status"
   run_captain "$home" hold "$id" --reason "captain merge approval pending" >/dev/null \
     || fail "could not hold the zero-retention merge"
@@ -3797,7 +3529,6 @@ test_pr_merge_entrypoint_refuses_a_captain_held_task() {
     "window=firstmate:fm-$pr_id" "endpoint_task_id=$pr_id" "worktree=$wt" \
     "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
     "pr=$pr" "spawn_gen=fixture-$pr_id"
-  seed_landing_receipt "$home" "$pr_id" "$pr"
   run_captain "$home" hold "$pr_id" --reason "captain merge approval pending" >/dev/null \
     || fail "could not hold the PR entrypoint fixture"
 
@@ -4383,7 +4114,6 @@ test_released_merge_passes_the_entrypoint_and_lands() {
     "window=firstmate:fm-$id" "endpoint_task_id=$id" "worktree=$wt" \
     "project=$repo" "harness=codex" "kind=ship" "mode=no-mistakes" \
     "pr=$pr" "spawn_gen=fixture-$id"
-  seed_landing_receipt "$home" "$id" "$pr"
   printf 'done: merge ready\n' > "$home/state/$id.status"
   run_captain "$home" hold "$id" --reason "captain merge approval pending" >/dev/null \
     || fail "could not hold the released merge fixture"
@@ -4507,8 +4237,7 @@ PM
     > "$home/data/$scout/report.md"
   run_captain "$home" hold "$scout" --reason "captain must choose" >/dev/null \
     || fail "could not hold the investigation for the captain"
-  # The claims audit gate applies here too: this origin has a filed report.
-  complete_through_sibling "$home" "$scout" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$scout" >/dev/null \
     || fail "the completion gate failed with the origin as its own captain call"
   PERL5LIB="$shim" PERL5OPT=-MFmNoNonrefDefault \
     run_teardown "$home" "$scout" > "$home/nonref.out" 2> "$home/nonref.err" \
@@ -4546,7 +4275,7 @@ retain_row_with_body() {  # <home> <id> <body>
     || fail "could not give $id a body carrying non-ASCII characters"
   run_captain "$home" hold "$id" --reason "captain must choose" >/dev/null \
     || fail "could not hold $id for the captain"
-  complete_through_sibling "$home" "$id" --claims-checked 1 >/dev/null \
+  complete_through_sibling "$home" "$id" >/dev/null \
     || fail "the completion gate failed for $id"
   run_teardown "$home" "$id" > "$home/$id.out" 2> "$home/$id.err" \
     || fail "cleanup of captain-held $id failed: $(cat "$home/$id.err")"
@@ -5251,7 +4980,7 @@ test_archived_answered_hold_still_satisfies_the_gate() {
   run_captain "$home" hold sample-archived-call --title "Choose the archived option" \
     --reason "captain archived choice pending" --repo sample --origin "$id" >/dev/null \
     || fail "could not register the captain-held task"
-  run_captain "$home" complete "$id" --claims-checked 1 sample-archived-call >/dev/null \
+  run_captain "$home" complete "$id" sample-archived-call >/dev/null \
     || fail "completion failed before the answer"
   printf 'Captain chose the archived option.\n' > "$home/archived-decision.txt"
   run_captain "$home" answer sample-archived-call --decision-file "$home/archived-decision.txt" >/dev/null \
@@ -5270,7 +4999,7 @@ test_archived_answered_hold_still_satisfies_the_gate() {
 
   run_captain "$home" verify "$id" >/dev/null 2> "$home/archived-verify.err" \
     || fail "verify refused an answered call Done retention archived: $(cat "$home/archived-verify.err")"
-  run_captain "$home" complete "$id" --claims-checked 1 sample-archived-call >/dev/null 2> "$home/archived-complete.err" \
+  run_captain "$home" complete "$id" sample-archived-call >/dev/null 2> "$home/archived-complete.err" \
     || fail "complete refused an answered call Done retention archived: $(cat "$home/archived-complete.err")"
   run_teardown "$home" "$id" >/dev/null 2> "$home/archived-teardown.err" \
     || fail "teardown refused a scout whose answered call was archived: $(cat "$home/archived-teardown.err")"
@@ -5339,7 +5068,7 @@ EOF
   HOME="$axi_home" run_captain "$home" hold sample-userconfig-call --title "Choose the relocated option" \
     --reason "captain relocated choice pending" --repo sample --origin "$id" >/dev/null \
     || fail "could not register the captain-held task"
-  HOME="$axi_home" run_captain "$home" complete "$id" --claims-checked 1 sample-userconfig-call >/dev/null \
+  HOME="$axi_home" run_captain "$home" complete "$id" sample-userconfig-call >/dev/null \
     || fail "completion failed before the answer"
   printf 'Captain chose the relocated option.\n' > "$home/userconfig-decision.txt"
   HOME="$axi_home" run_captain "$home" answer sample-userconfig-call --decision-file "$home/userconfig-decision.txt" >/dev/null \
@@ -5358,7 +5087,7 @@ EOF
 
   HOME="$axi_home" run_captain "$home" verify "$id" >/dev/null 2> "$home/userconfig-verify.err" \
     || fail "verify refused an answered call archived to the user-configured location: $(cat "$home/userconfig-verify.err")"
-  HOME="$axi_home" run_captain "$home" complete "$id" --claims-checked 1 sample-userconfig-call >/dev/null 2> "$home/userconfig-complete.err" \
+  HOME="$axi_home" run_captain "$home" complete "$id" sample-userconfig-call >/dev/null 2> "$home/userconfig-complete.err" \
     || fail "complete refused an answered call archived to the user-configured location: $(cat "$home/userconfig-complete.err")"
   HOME="$axi_home" run_teardown "$home" "$id" >/dev/null 2> "$home/userconfig-teardown.err" \
     || fail "teardown refused a scout whose answered call was archived to the user-configured location: $(cat "$home/userconfig-teardown.err")"
@@ -5404,12 +5133,6 @@ test_chat_channel_feeds_the_same_keyed_answer_intake
 test_origin_slug_validation_precedes_path_construction
 test_status_resolution_over_an_open_hold_is_signalled
 test_legitimate_holds_produce_no_divergence_signal
-test_claims_audit_required_for_reports_without_negative_claims
-test_claims_audit_negative_claim_requires_two_and_quotes
-test_claims_audit_classifier_detects_every_rec1_phrase
-test_claims_audit_shim_passes_through_claims_checked
-test_claims_audit_not_required_without_a_filed_report
-test_batched_answer_records_item_and_decision
 test_teardown_never_closes_a_captain_held_task
 test_retained_row_artifacts_survive_captain_answers
 test_interrupted_cleanup_keeps_the_captain_call_recoverable

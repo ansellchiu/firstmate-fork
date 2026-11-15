@@ -598,11 +598,7 @@ async def take(cache, count):
 
 # Three sessions, one resolution: the second and third turns pay nothing.
 cache = relay.Credentials("a-profile")
-check(cache._lock is None,
-      "credential cache construction must not require a running event loop")
 got = asyncio.run(take(cache, 3))
-check(cache._lock is not None,
-      "credential cache should create its lock when first used by the loop")
 check(len(calls) == 1, "three sessions resolved credentials %d times" % len(calls))
 check([c["aws_access_key_id"] for c in got] == ["AK1"] * 3,
       "every session should get the same credentials: %s" % got)
@@ -823,7 +819,7 @@ class Stub:
         self.raises = raises
         self.replies = 0
         self.failed = False
-        self.ended = None
+        self.ended = asyncio.Event()
         self.turn = {}
         self.calls = []
 
@@ -845,8 +841,6 @@ options = relay.parse_args(["--serve"])
 
 async def drive(session, items):
     down = Down()
-    if session.ended is None:
-        session.ended = asyncio.Event()
     serving = True
     for kind, payload in items:
         session, serving = await relay.handle_uplink_frame(

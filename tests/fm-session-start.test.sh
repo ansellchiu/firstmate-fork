@@ -1770,55 +1770,6 @@ EOF
   pass "a fixture with many orphan status logs keeps the digest under the 64 KB ceiling"
 }
 
-test_pending_findings_surface_and_stay_silent() {
-  local rec root home fakebin out
-  rec=$(new_world pending-findings)
-  IFS='|' read -r root home fakebin <<EOF
-$rec
-EOF
-  make_fake_toolchain "$fakebin"
-  make_fake_ps_claude "$fakebin"
-
-  mkdir -p "$home/data/task-a"
-  printf '%s\n' \
-    '# Incidental findings - task task-a' \
-    '' \
-    '## finding: adjacent-broken-test' \
-    '- status: pending' \
-    '- recorded: 2026-09-11T00:00:00Z' \
-    '- evidence: tests/other.test.sh:44' \
-    '- suggested-disposition: file a follow-up fix' \
-    '' \
-    '## finding: docs-typo' \
-    '- status: triaged 2026-09-10T00:00:00Z -- dismissed: fixed in PR 5' \
-    '- recorded: 2026-09-09T00:00:00Z' \
-    '- evidence: README.md:8' \
-    '- suggested-disposition: fix wording' \
-    > "$home/data/task-a/findings.md"
-
-  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-
-  assert_contains "$out" "Pending incidental findings (data/*/findings.md)" \
-    "digest did not label the pending findings subsection"
-  assert_contains "$out" "task-a/adjacent-broken-test" "digest did not surface the pending finding"
-  assert_contains "$out" "file a follow-up fix" "digest omitted the suggested disposition"
-  assert_not_contains "$out" "docs-typo" "a triaged finding leaked into the digest"
-  assert_contains "$out" "fm-findings.sh triage" "digest did not name the triage command"
-
-  # A home with no findings files prints no subsection at all.
-  rec=$(new_world no-findings)
-  IFS='|' read -r root home fakebin <<EOF
-$rec
-EOF
-  make_fake_toolchain "$fakebin"
-  make_fake_ps_claude "$fakebin"
-  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_not_contains "$out" "Pending incidental findings" \
-    "digest printed a findings subsection with no findings files"
-
-  pass "pending incidental findings surface in the digest and stay silent when absent"
-}
-
 # --- session-start secondmate recovery boundary -----------------------------
 
 test_session_start_relaunches_missing_pi_secondmate() {
@@ -3714,7 +3665,6 @@ test_work_under_way_budget_bounds_first_record
 test_recovery_paths_follow_split_home_overrides
 test_many_orphans_keep_digest_under_ceiling
 test_digest_section_budgets_and_complete_stdout_accounting
-test_pending_findings_surface_and_stay_silent
 test_endpoint_liveness_tmux
 test_endpoint_liveness_herdr
 test_endpoint_read_death_is_isolated_and_reported

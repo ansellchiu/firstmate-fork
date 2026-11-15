@@ -37,19 +37,14 @@ SH
 make_spawn_fakebin() {
   local dir=$1 fakebin
   fakebin=$(fm_test_make_spawn_fakebin "$dir")
-  # A stand-in that runs the command with no bound. It drops leading timeout
-  # options and the duration itself, so both `timeout <secs> cmd` and
-  # `timeout -k <secs> <secs> cmd` reach the same exec.
   cat > "$fakebin/timeout" <<'SH'
 #!/usr/bin/env bash
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -k|--kill-after) shift 2 ;;
-    -*) shift ;;
-    *[!0-9.]*) break ;;
-    *) shift ;;
-  esac
-done
+# Match GNU timeout's option shape from bin/fm-timeout-lib.sh fm_run_timed:
+# `timeout -k <grace> <secs> cmd...` or plain `timeout <secs> cmd...`.
+if [ "${1:-}" = -k ]; then
+  shift 2
+fi
+shift
 exec "$@"
 SH
   cat > "$fakebin/cursor-agent" <<'SH'
@@ -68,10 +63,6 @@ if [ "${1:-}" = --list-models ]; then
 fi
 exit 0
 SH
-  cat > "$fakebin/agy" <<'SH'
-#!/usr/bin/env bash
-exit 0
-SH
   cat > "$fakebin/opencode" <<'SH'
 #!/usr/bin/env bash
 # fm-spawn probes `opencode --version` to resolve the installed major. Report a
@@ -86,7 +77,7 @@ if [ "${1:-}" = --version ]; then
 fi
 exit 0
 SH
-  chmod +x "$fakebin/timeout" "$fakebin/cursor-agent" "$fakebin/agy" "$fakebin/opencode"
+  chmod +x "$fakebin/timeout" "$fakebin/cursor-agent" "$fakebin/opencode"
   make_spawn_pi_probe "$fakebin" pi
   make_spawn_pi_probe "$fakebin" pi-signed
   printf '%s\n' "$fakebin"
@@ -1002,12 +993,6 @@ test_cursor_failed_catalog_probe_does_not_block_spawn() {
   assert_meta_profile "$HOME_DIR/state/$id.meta" cursor cursor-catalog-unreachable default
   pass "cursor preserves the requested model when its live catalog is unreachable"
 }
-
-# agy's dispatch profile is deliberately not asserted from this suite. Its
-# spawn only reaches the task record after the agy launch path answers the
-# folder-trust dialog and sees the working indicator, which this suite's fake
-# pane does not render; tests/fm-agy-harness.test.sh owns that path and asserts
-# the model and effort the profile threads.
 
 test_opencode_threads_model_and_effort_variant() {
   local rec id out status launch

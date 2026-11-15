@@ -23,20 +23,6 @@ PYTHON_BIN_DIR=$(dirname "$PYTHON_BIN")
 JQ_BIN=$(command -v jq) || fail "test needs jq"
 BASE_PATH=${FM_TEST_BASE_PATH:-$PYTHON_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin}
 
-# bin/fm-kimi-turnend-hook.sh validates config.toml with python3's tomllib,
-# which only exists from python 3.11 on.
-# On an older interpreter the hook refuses by design, so every case that drives
-# a real hook install would assert against that refusal instead of the behavior
-# it is written to prove.
-# Skip those cases explicitly, naming the reason, rather than letting them fail
-# for an environment gap or pass vacuously.
-kimi_tomllib_available() {  # <case-name>
-  "$PYTHON_BIN" -c 'import tomllib' >/dev/null 2>&1 && return 0
-  printf 'skip: python3 lacks tomllib (needs 3.11+, found %s); %s\n' \
-    "$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')" "$1"
-  return 1
-}
-
 task_inbox_export() {  # <home> <id>
   local state
   state=$(CDPATH='' cd -- "$1/state" && pwd -P) || fail "cannot resolve state dir $1/state"
@@ -340,7 +326,6 @@ EOF
 }
 
 test_kimi_launch_then_send_is_verified() {
-  kimi_tomllib_available "spawn installs the guarded turn-end hook region" || return 0
   local id rec out rc launch pointer brief_real meta task_tmp launch_dir launch_file launch_base
   id="kimi-success-z1-$$"
   task_tmp="/tmp/fm-$id"
@@ -431,7 +416,6 @@ kimi_typed_launch_file() {
 
 test_kimi_spawn_refuses_shared_task_temp_root() {
   local id rec out rc task_tmp launch_dir launch_file stale_file
-  kimi_tomllib_available "spawn refuses a shared task temp root" || return 0
   id="kimi-sharedtmp-z1-$$"
   task_tmp="/tmp/fm-$id"
   KIMI_RUNTIME_TASK_TMP=$task_tmp
@@ -493,7 +477,6 @@ test_kimi_spawn_refuses_shared_task_temp_root() {
 }
 
 test_kimi_hook_install_is_surgical_idempotent_and_removable() {
-  kimi_tomllib_available "hook install is idempotent and removal restores foreign bytes" || return 0
   local home config original once stripped count
   home="$TMP_ROOT/config-surgery"
   config="$home/.kimi-code/config.toml"
@@ -539,7 +522,6 @@ EOF
 }
 
 test_kimi_hook_remove_preserves_owned_newline_boundary() {
-  kimi_tomllib_available "hook removal preserves owned newline boundaries" || return 0
   local appended config expected home original
   home="$TMP_ROOT/config-owned-newline"
   config="$home/.kimi-code/config.toml"
@@ -577,7 +559,6 @@ PY
 }
 
 test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config() {
-  kimi_tomllib_available "hook install fails closed on missing, malformed, and partial config" || return 0
   local missing malformed partial out rc
   missing="$TMP_ROOT/config-missing"
   malformed="$TMP_ROOT/config-malformed"
@@ -612,7 +593,6 @@ test_kimi_hook_fails_closed_on_missing_malformed_or_partial_config() {
 }
 
 test_kimi_hook_install_refuses_without_jq() {
-  kimi_tomllib_available "hook install refuses without jq" || return 0
   local home config before fakebin out rc
   home="$TMP_ROOT/config-no-jq"
   config="$home/.kimi-code/config.toml"
@@ -635,7 +615,6 @@ test_kimi_hook_install_refuses_without_jq() {
 }
 
 test_kimi_hook_is_silent_and_requires_registered_workspace_token() {
-  kimi_tomllib_available "turn-end hook is silent and requires a registered workspace token" || return 0
   local id rec out rc hook target token no_token snapshot_before snapshot_after fakebin
   id=kimi-hook-auth-z6
   rec=$(make_spawn_case hook-auth "$id")
@@ -681,7 +660,6 @@ test_kimi_hook_is_silent_and_requires_registered_workspace_token() {
 }
 
 test_kimi_spawn_refuses_unsafe_global_config_before_pane_creation() {
-  kimi_tomllib_available "spawn refuses an unsafe global config before pane creation" || return 0
   local id rec out rc
   id=kimi-config-refuse-z7
   rec=$(make_spawn_case config-refuse "$id")
@@ -698,7 +676,6 @@ test_kimi_spawn_refuses_unsafe_global_config_before_pane_creation() {
 }
 
 test_kimi_teardown_removes_pointer_and_registry_token() {
-  kimi_tomllib_available "teardown removes the pointer and registry token" || return 0
   local id rec out rc token launch_dir foreign_dir
   id=kimi-teardown-z8
   rec=$(make_spawn_case teardown "$id")
@@ -731,7 +708,6 @@ test_kimi_teardown_removes_pointer_and_registry_token() {
 }
 
 test_kimi_falls_back_to_expanded_home_binary() {
-  kimi_tomllib_available "spawn falls back to the expanded HOME binary" || return 0
   local id rec out rc launch fallback
   id=kimi-fallback-z4
   rec=$(make_spawn_case fallback "$id")
@@ -768,7 +744,6 @@ test_kimi_missing_binary_refuses_before_pane_creation() {
 }
 
 test_kimi_unconfirmed_delivery_fails_loudly() {
-  kimi_tomllib_available "unconfirmed brief delivery fails loudly" || return 0
   local id rec out rc
   id=kimi-drop-z2
   rec=$(make_spawn_case drop "$id")
@@ -785,7 +760,6 @@ test_kimi_unconfirmed_delivery_fails_loudly() {
 }
 
 test_kimi_readiness_gate_precedes_pointer() {
-  kimi_tomllib_available "the readiness gate precedes pointer delivery" || return 0
   local id rec out rc
   id=kimi-not-ready-z3
   rec=$(make_spawn_case not-ready "$id")
@@ -805,10 +779,6 @@ test_kimi_readiness_gate_precedes_pointer() {
 
 test_kimi_fresh_worktree_trust_is_answered_and_verified() {
   local id rec out rc
-  # Every Kimi spawn installs the global turn-end hook, which fm-kimi-turnend-hook.sh
-  # validates with python3 tomllib, so these spawn cases need the same host guard
-  # the hook cases above use.
-  kimi_tomllib_available "a fresh Kimi worktree answers its trust dialog" || return 0
   id=kimi-trust-z9
   rec=$(make_spawn_case trust "$id")
   read_spawn_record "$rec"
@@ -827,10 +797,6 @@ test_kimi_fresh_worktree_trust_is_answered_and_verified() {
 
 test_kimi_swallowed_trust_enter_is_retried_until_the_dialog_clears() {
   local id rec out rc
-  # Every Kimi spawn installs the global turn-end hook, which fm-kimi-turnend-hook.sh
-  # validates with python3 tomllib, so these spawn cases need the same host guard
-  # the hook cases above use.
-  kimi_tomllib_available "a swallowed trust Enter is retried" || return 0
   id=kimi-trust-swallow-y3
   rec=$(make_spawn_case trust-swallow "$id")
   read_spawn_record "$rec"
@@ -849,7 +815,6 @@ test_kimi_swallowed_trust_enter_is_retried_until_the_dialog_clears() {
 
 test_kimi_banner_before_the_dialog_paints_does_not_pass_readiness() {
   local id rec out rc
-  kimi_tomllib_available "kimi banner before the dialog paints does not pass readiness" || return 0
   id=kimi-trust-late-y5
   rec=$(make_spawn_case trust-late "$id")
   read_spawn_record "$rec"
@@ -870,7 +835,6 @@ test_kimi_banner_before_the_dialog_paints_does_not_pass_readiness() {
 
 test_kimi_answered_dialog_left_in_history_does_not_restart_the_answer() {
   local id rec out rc
-  kimi_tomllib_available "kimi answered dialog left in history does not restart the answer" || return 0
   id=kimi-trust-history-y6
   rec=$(make_spawn_case trust-history "$id")
   read_spawn_record "$rec"
@@ -892,7 +856,6 @@ test_kimi_answered_dialog_left_in_history_does_not_restart_the_answer() {
 
 test_kimi_blank_viewport_frame_costs_only_its_poll() {
   local id rec out rc
-  kimi_tomllib_available "kimi blank viewport frame costs only its poll" || return 0
   id=kimi-trust-blank-y7
   rec=$(make_spawn_case trust-blank "$id")
   read_spawn_record "$rec"
@@ -936,7 +899,6 @@ test_kimi_refuses_a_backend_without_a_viewport_capture() {
 
 test_kimi_answers_a_trust_dialog_with_a_wrapped_hint() {
   local id rec out rc
-  kimi_tomllib_available "kimi answers a trust dialog with a wrapped hint" || return 0
   id=kimi-trust-wrapped-y9
   rec=$(make_spawn_case trust-wrapped "$id")
   read_spawn_record "$rec"
@@ -955,7 +917,6 @@ test_kimi_answers_a_trust_dialog_with_a_wrapped_hint() {
 
 test_kimi_blank_frame_between_banners_restarts_the_ready_count() {
   local id rec out rc
-  kimi_tomllib_available "kimi blank frame between banners restarts the ready count" || return 0
   id=kimi-trust-blink-z4
   rec=$(make_spawn_case trust-blink "$id")
   read_spawn_record "$rec"
@@ -974,7 +935,6 @@ test_kimi_blank_frame_between_banners_restarts_the_ready_count() {
 
 test_kimi_failed_viewport_read_fails_readiness_at_once() {
   local id rec out rc
-  kimi_tomllib_available "kimi failed viewport read fails readiness at once" || return 0
   id=kimi-viewport-fail-z5
   rec=$(make_spawn_case viewport-fail "$id")
   read_spawn_record "$rec"
@@ -992,7 +952,6 @@ test_kimi_failed_viewport_read_fails_readiness_at_once() {
 
 test_kimi_partial_trust_dialog_blocks_the_ready_verdict() {
   local id rec out rc
-  kimi_tomllib_available "kimi partial trust dialog blocks the ready verdict" || return 0
   id=kimi-trust-partial-y4
   rec=$(make_spawn_case trust-partial "$id")
   read_spawn_record "$rec"
@@ -1011,7 +970,6 @@ test_kimi_partial_trust_dialog_blocks_the_ready_verdict() {
 
 test_kimi_stuck_trust_dialog_fails_before_delivery() {
   local id rec out rc
-  kimi_tomllib_available "kimi stuck trust dialog fails before delivery" || return 0
   id=kimi-trust-stuck-y1
   rec=$(make_spawn_case trust-stuck "$id")
   read_spawn_record "$rec"
@@ -1033,7 +991,6 @@ test_kimi_stuck_trust_dialog_fails_before_delivery() {
 
 test_kimi_trust_detection_requires_the_complete_dialog() {
   local id rec out rc
-  kimi_tomllib_available "kimi trust detection requires the complete dialog" || return 0
   id=kimi-trust-decoy-y2
   rec=$(make_spawn_case trust-decoy "$id")
   read_spawn_record "$rec"
@@ -1215,7 +1172,6 @@ assert_project_server_stayed_idle() {
 
 test_kimi_230_prompt_with_no_project_servers_is_answered_and_verified() {
   local id rec out rc
-  kimi_tomllib_available "the recorded 2.3.0 prompt is answered into a verified spawn" || return 0
   id=kimi-230-plain-a1
   rec=$(make_spawn_case trust-230 "$id")
   read_spawn_record "$rec"
@@ -1235,7 +1191,6 @@ test_kimi_230_prompt_with_no_project_servers_is_answered_and_verified() {
 
 test_kimi_230_prompt_announcing_a_root_mcp_json_server_receives_no_key() {
   local id rec out rc
-  kimi_tomllib_available "a 2.3.0 prompt announcing a root .mcp.json server receives no key" || return 0
   id=kimi-230-rootmcp-a2
   rec=$(make_spawn_case trust-230-rootmcp "$id")
   read_spawn_record "$rec"
@@ -1256,7 +1211,6 @@ test_kimi_230_prompt_announcing_a_root_mcp_json_server_receives_no_key() {
 
 test_kimi_230_prompt_announcing_a_kimi_code_mcp_json_server_receives_no_key() {
   local id rec out rc
-  kimi_tomllib_available "a 2.3.0 prompt announcing a .kimi-code/mcp.json server receives no key" || return 0
   id=kimi-230-kimimcp-a3
   rec=$(make_spawn_case trust-230-kimimcp "$id")
   read_spawn_record "$rec"
@@ -1273,7 +1227,6 @@ test_kimi_230_prompt_announcing_a_kimi_code_mcp_json_server_receives_no_key() {
 
 test_kimi_230_prompt_in_a_terminal_too_small_to_confirm_receives_no_key() {
   local id rec out rc
-  kimi_tomllib_available "a 2.3.0 prompt too small to confirm receives no key" || return 0
   id=kimi-230-small-a4
   rec=$(make_spawn_case trust-230-small "$id")
   read_spawn_record "$rec"
@@ -1290,7 +1243,6 @@ test_kimi_230_prompt_in_a_terminal_too_small_to_confirm_receives_no_key() {
 
 test_kimi_230_prompt_that_pages_its_disclosure_receives_no_key() {
   local id rec out rc
-  kimi_tomllib_available "a 2.3.0 prompt that pages its disclosure receives no key" || return 0
   id=kimi-230-paged-a5
   rec=$(make_spawn_case trust-230-paged "$id")
   read_spawn_record "$rec"

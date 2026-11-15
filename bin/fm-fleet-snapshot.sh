@@ -23,9 +23,6 @@
 #     normalized current_role, requires_child_metadata, blocked_by_ids,
 #     unresolved_blocker_ids, captain_actionable, hold_set, hold_age_days,
 #     and hold_bucket fields.
-#     Rows whose hold reason spans multiple lines are assembled before parsing.
-#     Metadata fields such as since are extracted structurally outside the
-#     hold reason, preventing hold-reason prose from leaking into them.
 #     Repeated blocker tokens remain ordered; a blocker resolves only when its
 #     structured record is Done, and missing ids stay open.
 #     There is no separate decision type: any captain-held task is the same
@@ -36,8 +33,7 @@
 #     hold reason or body prose is ever matched. The buckets are total and
 #     mutually exclusive, so every captain hold lands in exactly one and none
 #     can fall through: "blocked" when any blocker is unresolved, else "dated"
-#     when hold_until is a valid ISO date still in the future (a non-ISO value
-#     is not undated either, so it stays "live"), else "aged" when an undated hold
+#     when hold_until is still in the future, else "aged" when an undated hold
 #     is at least FM_SNAPSHOT_UNDATED_HOLD_AGE_DAYS old (default 14; legacy
 #     unstamped holds fall back to `since`), else "live". A non-captain or Done
 #     row carries null.
@@ -118,17 +114,6 @@
 #     with the bearings projection so one Recently Landed section has one owner.
 #   contributions: cached owned-contribution coverage; fm-contributions.sh owns it.
 #   secondmate_guidance: return-channel action note for renderers and bearings.
-#   portfolio: the captain-attention classification of every registered or
-#     worked-on project, plus the portfolio limit and the counted set.
-#     bin/fm-attention-lib.sh owns what each class and reason means; this
-#     command only collects the durable records it classifies. It is deliberately
-#     cheap: the portfolio task rows skip the per-task current-state read, so the
-#     open-decision signal is the raw durable fold, which stays open until the
-#     worker records its resolved line. When the classification cannot be
-#     computed, --json still renders every other block and carries the portfolio
-#     as {schema:"fm-attention-portfolio-unavailable.v1",available:false,reason}
-#     so a renderer says so plainly instead of showing an empty portfolio;
-#     --portfolio, which intake reads as a decision input, keeps failing hard.
 #
 # --contribution-input prints only the canonical backlog/tasks ownership pair,
 # without worker observations or cross-home collection, for the home-local poll.
@@ -240,9 +225,6 @@ esac
 # shellcheck source=bin/fm-ff-lib.sh
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/fm-ff-lib.sh"  # validate_secondmate_home: shared seeded-home boundary checks
-# shellcheck source=bin/fm-attention-lib.sh
-# shellcheck disable=SC1091
-. "$SCRIPT_DIR/fm-attention-lib.sh"  # portfolio attention classification
 # shellcheck source=bin/fm-landed-lib.sh
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/fm-landed-lib.sh"  # FM_LANDED_JQ_DEFS: the shared landed selector
@@ -254,16 +236,12 @@ esac
 usage() {
   cat <<'EOF'
 usage: fm-fleet-snapshot.sh --json
-       fm-fleet-snapshot.sh --portfolio
        fm-fleet-snapshot.sh --secondmate-home-summary
 
 Print a structured snapshot of the firstmate fleet.
 JSON is the stable machine-readable output contract. The default snapshot
 refreshes only its parent-side remote-summary cache as an observational side effect.
 
---portfolio emits only the portfolio attention block (schema
-fm-fleet-portfolio.v1). It skips per-task current-state reads and cross-home
-secondmate aggregation, so intake can check the attention limit cheaply.
 --contribution-input emits the canonical local backlog/tasks ownership pair only,
 without worker observations or cross-home collection.
 
@@ -314,7 +292,6 @@ EOF
 OUTPUT_MODE=json
 case "${1:---json}" in
   --json) ;;
-  --portfolio) OUTPUT_MODE=portfolio ;;
   --secondmate-home-summary) OUTPUT_MODE=secondmate-home-summary ;;
   --contribution-input) OUTPUT_MODE=contribution-input ;;
   -h|--help) usage; exit 0 ;;
@@ -424,14 +401,6 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
       if ($d | type) != "string" then null
       elif ($d | test("T")) then try ($d | fromdateiso8601) catch null
       else try (($d + "T00:00:00Z") | fromdateiso8601) catch null end;
-    def valid_iso_date:
-      . as $d
-      | type == "string"
-      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
-      and (if test("T")
-        then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
-        else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
-        end);
     def days_between($from; $to):
       (timestamp_epoch($from)) as $a
       | (timestamp_epoch($to)) as $b
@@ -445,12 +414,8 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
     def cap($rest; $re):
       (((($rest | capture($re)?) // {}) | .v) // null) as $v
       | if $v == null then null else ($v | trim) end;
-    def hold_balanced:
-      "(?:[^()]|(?<p>\\((?:[^()]|\\g<p>)*\\)))*";
-    def without_hold:
-      gsub("(?s)\\(hold:(?:" + hold_balanced + "\\)|[^)]*\\))"; "");
     def metadata($rest; $key):
-      cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
+      cap($rest; ".*(?:\\(|,[[:space:]]*)" + $key + ":[[:space:]]*(?<v>[^,)]*)");
     # LOAD-BEARING, do not remove as a duplicate definition of the kind field.
     # tasks-axi 0.2.5 omits the (kind: ...) metadata when a title starts with
     # uppercase SCOUT or SHIP at a JavaScript word boundary (ASCII letters,
@@ -467,16 +432,15 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif ($rest | test("^SHIP(?![A-Za-z0-9_])")) then "ship"
         else null end;
     def hold_metadata($rest):
-      cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>" + hold_balanced + ")\\)")
-      // cap($rest; "(?s).*\\(hold:[[:space:]]*(?<v>[^)]*)");
+      cap($rest; ".*\\(hold:[[:space:]]*(?<v>[^)]*)");
     def metadata_word($rest; $key):
-      cap(($rest | without_hold); "(?s).*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
+      cap($rest; ".*(?:\\(|,[[:space:]]*)" + $key + "[[:space:]]+(?<v>[^,)]*)");
     def url_pattern: "https?://[^[:space:])\"<>]+";
     def wrapped_url_pattern: "<?" + url_pattern + ">?";
     def links($rest): [$rest | scan(url_pattern)];
     def strip_trailing_metadata:
       reduce range(0; 20) as $_ (.;
-        sub("(?s)[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
+        sub("[[:space:]]*\\([[:space:]]*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):[[:space:]]*[^)]*|(?:since|merged|reported|done)[[:space:]]+[^)]*)[[:space:]]*\\)[[:space:]]*$"; ""));
     def strip_title_artifacts:
       sub("[[:space:]]+-[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
       | sub("[[:space:]]+data/[^[:space:])]+/report\\.md$"; "")
@@ -490,7 +454,6 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
       | trim;
     def title_of($rest):
       $rest
-      | without_hold
       | gsub(wrapped_url_pattern; "")
       | sub("[[:space:]]*blocked-by:[[:space:]]+[^[:space:])]+[[:space:]]+-[[:space:]]+.*$"; "")
       | gsub("[[:space:]]*blocked-by:[[:space:]]+[^[:space:]]+"; "")
@@ -514,14 +477,12 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
         elif $done != null then {verb:"done",date:$done}
         else {verb:null,date:null} end;
     def row_match($line):
-      (($line | capture("^[-*][[:space:]]+\\[(?<check>[ xX])\\][[:space:]]+(?<id>[^[:space:]]+)[[:space:]]+-[[:space:]]+(?<rest>(?s).*)$")?) //
-       (($line | capture("^[-*][[:space:]]+\\*\\*(?<id>[^*]+)\\*\\*[[:space:]]+-[[:space:]]+(?<rest>(?s).*)$")?)
+      (($line | capture("^[-*][[:space:]]+\\[(?<check>[ xX])\\][[:space:]]+(?<id>[^[:space:]]+)[[:space:]]+-[[:space:]]+(?<rest>.*)$")?) //
+       (($line | capture("^[-*][[:space:]]+\\*\\*(?<id>[^*]+)\\*\\*[[:space:]]+-[[:space:]]+(?<rest>.*)$")?)
         | if . == null then null else . + {check:" "} end));
     def structured_row($line):
       ($line | test("^[-*][[:space:]]+\\[[ xX]\\][[:space:]]+[^[:space:]]+[[:space:]]+-[[:space:]]+"))
       or ($line | test("^[-*][[:space:]]+\\*\\*[^*]+\\*\\*[[:space:]]+-[[:space:]]+"));
-    def unclosed_hold($line):
-      $line | test("(?s)\\(hold:(?!" + hold_balanced + "\\))");
     def parse_row($line; $section; $order):
       row_match($line) as $m
       | if $m == null then
@@ -557,48 +518,15 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
              body_lines:[],
              body_excerpt:null}
         end;
-    def commit_pending($pending; $section; $order):
-      if unclosed_hold($pending) and ($pending | test("\n")) then
-        ($pending | split("\n")) as $parts
-        | parse_row($parts[0]; $section; $order)
-        | .body_lines = [$parts[1:][] | trim | select(. != "")]
-      else parse_row($pending; $section; $order) end;
     reduce inputs as $line
-      ({path:$path,present:true,records:[],section:null,order:0,pending_row:null};
+      ({path:$path,present:true,records:[],section:null,order:0};
        if ($line | test("^##[[:space:]]+")) then
-         (if .pending_row != null then
-            .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
-          else . end)
-         | .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
+         .section = (($line | sub("^##[[:space:]]+";"") | trim) | section_state)
        elif .section == null or ($line | trim) == "" then
-         (if .pending_row != null then
-            .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
-          else . end)
-       elif .pending_row != null then
-         if structured_row($line) then
-           .order += 1 | .records += [commit_pending(.pending_row; .section; .order)]
-           | if unclosed_hold($line) then
-               .pending_row = $line
-             else
-               .pending_row = null
-               | .order += 1
-               | .records += [parse_row($line; .section; .order)]
-             end
-         else
-           .pending_row += "\n" + $line
-           | if (unclosed_hold(.pending_row) | not) then
-               .order += 1
-               | .records += [parse_row(.pending_row; .section; .order)]
-               | .pending_row = null
-             else . end
-         end
+         .
        elif structured_row($line) then
-         if unclosed_hold($line) then
-           .pending_row = $line
-         else
-           .order += 1
-           | .records += [parse_row($line; .section; .order)]
-         end
+         .order += 1
+         | .records += [parse_row($line; .section; .order)]
        elif ((.records | length) > 0 and (.records[-1].structured == true) and ($line | test("^[[:space:]]+"))) then
          ($line | trim) as $body
          | if $body == "" then .
@@ -607,10 +535,6 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
          .order += 1
          | .records += [{order:.order,state:.section,structured:false,id:null,raw:$line,body_lines:[],body_excerpt:null}]
        end)
-    | if .pending_row != null then
-        .order += 1 | .records += [commit_pending(.pending_row; .section; .order)] | .pending_row = null
-      else . end
-    | del(.pending_row)
     | .records |= map(
         if (.body_lines | length) > 0 then
           .hold_set = cap(.body_lines[0]; "^Captain hold set:[[:space:]]*(?<v>[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?)$")
@@ -644,7 +568,7 @@ backlog_json() (  # [<backlog-path>] - defaults to this home's $BACKLOG
           | .hold_bucket =
               (if .hold_kind != "captain" or .hold_reason == null or .state == "done" then null
                elif (.unresolved_blocker_ids | length) > 0 then "blocked"
-               elif (.hold_until | valid_iso_date) and .hold_until > $today then "dated"
+               elif .hold_until != null and .hold_until > $today then "dated"
                elif .hold_until == null and .hold_age_days != null
                     and .hold_age_days >= $age_days then "aged"
                else "live" end)
@@ -825,7 +749,7 @@ task_json_lines() {
   local remote_host remote_root current_file endpoint_file observation_line index=0
   local pr pr_source event_json current_json endpoint_exists agent_alive meta_json status_json report_json worktree_json home_json
   local last_event_raw current_state current_source pending_decision blocked_event report_present=0 pr_from_status
-  local open_decisions_tsv open_decisions_json portfolio_fold_tsv portfolio_fold_json
+  local open_decisions_tsv open_decisions_json
 
   while [ "$index" -lt "$SNAPSHOT_TASK_META_COUNT" ]; do
     meta=${SNAPSHOT_TASK_METAS[index]}
@@ -895,22 +819,16 @@ task_json_lines() {
     # non-authoritative status-log/none read on a still-live task, keeps the fold's
     # open decision surfacing.
     open_decisions_tsv=$(status_open_decisions "$status_log" "$kind")
-    portfolio_fold_tsv=$open_decisions_tsv
     if [ "$kind" != secondmate ] && \
        { { { [ "$current_source" = run-step ] || [ "$current_source" = pane ]; } \
            && [ "$current_state" != parked ] && [ "$current_state" != blocked ]; } \
          || { [ "$current_state" = "done" ] || [ "$current_state" = "failed" ]; }; }; then
       open_decisions_tsv=""
     fi
-    portfolio_fold_json=$(printf '%s' "$portfolio_fold_tsv" | jq -R -s '
+    open_decisions_json=$(printf '%s' "$open_decisions_tsv" | jq -R -s '
       [ splits("\n") | select(length > 0)
         | (capture("^(?<key>[^\t]*)\t(?<verb>[^\t]*)\t(?<summary>.*)$")?)
         | select(. != null) ]')
-    if [ -n "$open_decisions_tsv" ]; then
-      open_decisions_json=$portfolio_fold_json
-    else
-      open_decisions_json='[]'
-    fi
     pending_decision=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "needs-decision") then 1 else 0 end')
     blocked_event=$(printf '%s' "$open_decisions_json" | jq 'if any(.[]; .verb == "blocked") then 1 else 0 end')
 
@@ -969,14 +887,12 @@ task_json_lines() {
       --argjson home_path "$home_json" \
       --argjson endpoint_exists "$endpoint_exists" \
       --argjson open_decisions "$open_decisions_json" \
-      --argjson portfolio_fold "$portfolio_fold_json" \
       --argjson pending_decision "$(bool_json "$pending_decision")" \
       --argjson blocked_event "$(bool_json "$blocked_event")" \
       --argjson report_present "$(bool_json "$report_present")" \
       '{
         id:$id,
         kind:$kind,
-        portfolio_fold:$portfolio_fold,
         harness:($harness // ""),
         mode:($mode // ""),
         yolo:($yolo // ""),
@@ -1071,14 +987,6 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
     | def trunc($n):
       tostring | gsub("\\s+"; " ")
       | if length > $n then .[:$n] + "…" else . end;
-    def valid_iso_date:
-      . as $d
-      | type == "string"
-      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?$")
-      and (if test("T")
-        then try ((fromdateiso8601 | strftime("%Y-%m-%dT%H:%M:%SZ")) == $d) catch false
-        else try (((. + "T00:00:00Z") | fromdateiso8601 | strftime("%Y-%m-%d")) == $d) catch false
-        end);
     def filed_epoch:
       (.since // null) as $filed
       | if ($filed | type) != "string" then null
@@ -1223,7 +1131,7 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
           captain_actionable:(.captain_actionable // false),
           repo:((.repo // null) | if . == null then null else trunc(120) end),
           kind:((.kind // null) | if . == null then null else trunc(40) end),
-          since:((.since // null) | if . == null then null elif valid_iso_date then . else "unknown" end)}]
+          since:((.since // null) | if . == null then null else trunc(40) end)}]
           | ((map(select(.captain_actionable != true)) | newest_filed_first)
              + (map(select(.captain_actionable == true)) | newest_filed_first))
           | .[:$queued_n]),
@@ -2056,84 +1964,6 @@ secondmate_landed_from_current_json() {  # <secondmate-current-json-file> <outpu
     | .records |= sort_by([(.completion.date // ""), .id]) | .records |= reverse' > "$2"
 }
 
-# Minimal per-task rows for the portfolio classification. Deliberately NOT the
-# full task_json_lines row: this reads metadata and the durable decision fold
-# only, so a portfolio read costs no current-state probe and no remote reach.
-# Secondmates are skipped: a secondmate is not a work item and its home is not a
-# project, so it can never hold a captain attention slot.
-portfolio_tasks_json() {
-  local meta id kind project yolo pr
-  for meta in "$STATE"/*.meta; do
-    [ -e "$meta" ] || continue
-    id=$(basename "$meta" .meta)
-    kind=$(meta_value "$meta" kind)
-    [ -n "$kind" ] || kind=ship
-    [ "$kind" != secondmate ] || continue
-    project=$(meta_value "$meta" project)
-    yolo=$(meta_value "$meta" yolo)
-    pr=$(meta_value "$meta" pr)
-    if [ -z "$pr" ]; then
-      pr=$(first_pr_url_in_file "$STATE/$id.status" || true)
-    fi
-    status_open_decisions "$STATE/$id.status" \
-      | jq -R -s \
-          --arg id "$id" --arg kind "$kind" --arg project "$project" \
-          --arg yolo "$yolo" --arg pr "$pr" '
-          {id:$id,kind:$kind,project:$project,yolo:$yolo,pr:$pr,
-           open_decisions:[ splits("\n") | select(length > 0)
-                            | (capture("^(?<key>[^\t]*)\t(?<verb>[^\t]*)\t(?<summary>.*)$")?)
-                            | select(. != null) ]}'
-  done | jq -s 'sort_by(.id)'
-}
-
-# <portfolio-tasks-json> is the minimal task row set: portfolio_tasks_json on the
-# cheap standalone path, or the rows the full snapshot already collected.
-# The configured limit is resolved once, at top level, BEFORE any portfolio is
-# built: portfolio_json runs inside a command substitution, so a rejection
-# recorded there would not survive into the unavailable reason and the captain
-# would be told the registry was at fault instead of the config file.
-PORTFOLIO_LIMIT=
-PORTFOLIO_LIMIT_ERROR=
-resolve_portfolio_limit() {
-  # Deliberately not a command substitution: the reader reports its rejection
-  # reason through a variable, which a subshell would discard.
-  if ! fm_attention_limit_valid "$CONFIG"; then
-    PORTFOLIO_LIMIT=
-    PORTFOLIO_LIMIT_ERROR=$FM_ATTENTION_LIMIT_ERROR
-    return 1
-  fi
-  PORTFOLIO_LIMIT=$FM_ATTENTION_LIMIT_VALUE
-  return 0
-}
-
-portfolio_json() {  # <backlog-json> <portfolio-tasks-json>
-  local registry_json
-  [ -n "$PORTFOLIO_LIMIT" ] || return 1
-  registry_json=$(fm_attention_registry_json "$SCRIPT_DIR/fm-project-mode.sh" "$DATA/projects.md") || return 1
-  fm_attention_portfolio_json "$1" "$2" "$registry_json" "$PORTFOLIO_LIMIT"
-}
-
-# The portfolio block a presentation surface renders when the classification
-# cannot be computed. It is deliberately NOT an empty portfolio: it carries no
-# projects and no counts, so no renderer and no intake read can mistake it for a
-# quiet fleet, and fm_attention_portfolio_valid rejects its schema.
-# Absent and unreadable call for different operator action, so the reason says
-# which one it was.
-portfolio_unavailable_reason() {
-  if [ -n "${PORTFOLIO_LIMIT_ERROR:-}" ]; then
-    printf '%s' "the configured attention limit was rejected: $PORTFOLIO_LIMIT_ERROR"
-  elif [ ! -f "$DATA/projects.md" ]; then
-    printf 'the project registry data/projects.md is absent; register this home\047s projects before trusting the portfolio'
-  else
-    printf 'the project registry data/projects.md could not be read; check its permissions, a mid-write truncation, or a registry line the parser rejected'
-  fi
-}
-
-portfolio_unavailable_json() {  # <reason>
-  jq -n --arg reason "$1" \
-    '{schema:"fm-attention-portfolio-unavailable.v1",available:false,reason:$reason}'
-}
-
 scout_report_lines() {
   local report id
   if [ ! -d "$DATA" ]; then
@@ -2150,21 +1980,6 @@ scout_report_lines() {
 }
 
 BACKLOG_JSON=$(backlog_json) || { echo "fm-fleet-snapshot: backlog read failed" >&2; exit 1; }
-
-if [ "$OUTPUT_MODE" = portfolio ]; then
-  PORTFOLIO_TASKS_JSON=$(portfolio_tasks_json) \
-    || { echo "fm-fleet-snapshot: portfolio task rows failed" >&2; exit 1; }
-  resolve_portfolio_limit || true
-  PORTFOLIO_JSON=$(portfolio_json "$BACKLOG_JSON" "$PORTFOLIO_TASKS_JSON") \
-    || { echo "fm-fleet-snapshot: portfolio classification failed: $(portfolio_unavailable_reason)" >&2; exit 1; }
-  jq -n \
-    --arg generated "$SNAPSHOT_NOW" \
-    --arg fm_home "$FM_HOME" \
-    --argjson portfolio "$PORTFOLIO_JSON" \
-    '{schema:"fm-fleet-portfolio.v1",generated:$generated,fm_home:$fm_home,portfolio:$portfolio}'
-  exit 0
-fi
-
 contribution_tasks_json() {
   local meta id merge_authority
   for meta in "$STATE"/*.meta; do
@@ -2195,11 +2010,6 @@ if [ "$OUTPUT_MODE" = contribution-input ]; then
 fi
 prefetch_task_current_states || { echo "fm-fleet-snapshot: task observation failed" >&2; exit 1; }
 TASKS_JSON=$(task_json_lines) || { echo "fm-fleet-snapshot: task snapshot failed" >&2; exit 1; }
-PORTFOLIO_TASKS_JSON=$(printf '%s' "$TASKS_JSON" | jq '
-  [ .[] | {id,kind,project,yolo,pr:(.pr.url // ""),open_decisions:(.portfolio_fold // [])} ]') \
-  || { echo "fm-fleet-snapshot: portfolio task rows failed" >&2; exit 1; }
-TASKS_JSON=$(printf '%s' "$TASKS_JSON" | jq 'map(del(.portfolio_fold))') \
-  || { echo "fm-fleet-snapshot: task snapshot failed" >&2; exit 1; }
 
 JSON_TRANSPORT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-fleet-snapshot.XXXXXX") \
   || { echo "fm-fleet-snapshot: temporary transport directory creation failed" >&2; exit 1; }
@@ -2239,11 +2049,6 @@ secondmate_current_json "$TASKS_JSON_FILE" "$SECONDMATE_CURRENT_JSON_FILE" \
   || { echo "fm-fleet-snapshot: registered secondmate aggregation failed" >&2; exit 1; }
 secondmate_landed_from_current_json "$SECONDMATE_CURRENT_JSON_FILE" "$SECONDMATE_LANDED_JSON_FILE" \
   || { echo "fm-fleet-snapshot: secondmate landed projection failed" >&2; exit 1; }
-resolve_portfolio_limit || true
-if ! PORTFOLIO_JSON=$(portfolio_json "$BACKLOG_JSON" "$PORTFOLIO_TASKS_JSON"); then
-  echo "fm-fleet-snapshot: portfolio classification unavailable; the rest of the snapshot still renders" >&2
-  PORTFOLIO_JSON=$(portfolio_unavailable_json "$(portfolio_unavailable_reason)")
-fi
 
 jq -n \
   --arg generated "$SNAPSHOT_NOW" \
@@ -2260,7 +2065,6 @@ jq -n \
   --slurpfile scout_reports "$SCOUT_REPORTS_JSON_FILE" \
   --slurpfile secondmate_current "$SECONDMATE_CURRENT_JSON_FILE" \
   --slurpfile secondmate_landed "$SECONDMATE_LANDED_JSON_FILE" \
-  --argjson portfolio "$PORTFOLIO_JSON" \
   '($backlog[0]) as $backlog
    | ($tasks[0]) as $tasks
    | ($main_inventory[0]) as $main_inventory
@@ -2282,7 +2086,6 @@ jq -n \
      scout_reports:($scout_reports | map(. + {kind:report_kind(.id)})),
      secondmate_current:$secondmate_current,
      secondmate_landed:$secondmate_landed,
-     portfolio:$portfolio,
      secondmate_guidance:{
        note:"For kind=secondmate, bearings selects validated structured state from that registered home; parent events and bounded terminal evidence are fallback-only supplements and never current-state authority."
      }

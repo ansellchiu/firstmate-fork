@@ -2104,10 +2104,9 @@ test_hook_claude_mode_concurrent_recovery_resets_are_idempotent() {
 # notice, then reasoned suppressed continuations, then exactly one loud final
 # rewake carrying the alarm the auto-arm wrote, and quiet suppressed
 # generations after it. <variant> picks the terminal path: arm (the watcher
-# arm keeps failing) or signal (the hook is TERMed mid-arm). A supervision-host
-# hand-back on a pending or announced handling marker is not a terminal path
-# in this fork: its rewake commits (see autoarm-actionable-rewake in
-# docs/private-divergence.json).
+# arm keeps failing), lost-handback / lost-announced-handback (the supervision
+# host hands back a wake but leaves a pending or announced handling marker, so
+# no rewake can commit), or signal (the hook is TERMed mid-arm).
 assert_autoarm_commits_attended_alarm_on_exhausted_continuation() {
   local variant=$1 dir i guard_status auto_status pid identity
   local alarmed=-1 loud=0 suppressed_reasons=0 empty=0
@@ -2120,6 +2119,21 @@ assert_autoarm_commits_attended_alarm_on_exhausted_continuation() {
       ;;
     signal)
       printf '#!/usr/bin/env bash\nexec sleep 30\n' > "$dir/bin/fm-watch-arm.sh"
+      ;;
+    lost-handback|lost-announced-handback)
+      local marker=pending
+      [ "$variant" = lost-handback ] || marker=announced
+      rm -f "$dir/config/supervision-host-off"
+      {
+        printf '#!/usr/bin/env bash\nsleep 1\n'
+        printf "printf '%s:handling:fixture-generation\\\\n' > \"\$FM_HOME/state/.watcher-down\"\n" "$marker"
+        cat <<'SH'
+printf 'signal: fixture.status\n'
+printf 'supervision-host: watcher downtime could not be restored for the main hand-back\n'
+exit 1
+SH
+      } > "$dir/bin/fm-supervision-host.sh"
+      chmod +x "$dir/bin/fm-supervision-host.sh"
       ;;
   esac
   if [ "$variant" = alarm-signal ]; then
@@ -2196,6 +2210,15 @@ SH
     grep -q 'FIRSTMATE SUPERVISION IS GENUINELY DOWN' "$dir/auto-$i.out" && loud=$((loud + 1))
     grep -q 'suppressed continuation' "$dir/auto-$i.out" && suppressed_reasons=$((suppressed_reasons + 1))
     { [ "$auto_status" -eq 2 ] && [ ! -s "$dir/auto-$i.out" ]; } && empty=$((empty + 1))
+    case "$variant" in
+      lost-handback|lost-announced-handback)
+        # The host's actionable wake lines ride every hand-back that rewakes.
+        if [ "$auto_status" -eq 2 ]; then
+          assert_contains "$(cat "$dir/auto-$i.out")" "supervision-host: watcher downtime could not be restored" \
+            "a lost hand-back rewake dropped the host's actionable output ($variant, stop $i)"
+        fi
+        ;;
+    esac
   done
   assert_present "$dir/state/.claude-autoarm-failure-notified" "the failure episode notice was never consumed ($variant)"
   [ "$alarmed" -ge 0 ] || fail "the auto-arm never committed the attended alarm ($variant)"
@@ -2207,6 +2230,7 @@ SH
   case "$variant" in
     arm|alarm-signal) assert_contains "$(cat "$dir/auto-1.out")" "automatic supervision mechanism is broken" "the first failure omitted its notice" ;;
     signal) assert_contains "$(cat "$dir/auto-1.out")" "firstmate watcher auto-arm INTERRUPTED" "the first interruption omitted its notice" ;;
+    *) assert_contains "$(cat "$dir/auto-1.out")" "auto-arm FAILED - the supervision host returned an actionable wake" "the first lost hand-back omitted its notice" ;;
   esac
   [ "$alarmed" -ge 2 ] || fail "the alarm cannot precede the consumed failure notice, it fired at stop $alarmed ($variant)"
   for i in $(seq $((alarmed + 1)) 7); do
@@ -2216,6 +2240,7 @@ SH
   # Positive recovery clears the whole episode - notice, alarm, and budget - so
   # the next failure episode restarts its own attended budget. The recovery
   # cycle closes non-actionably beside the verified healthy watcher.
+  : > "$dir/config/supervision-host-off"
   printf '#!/usr/bin/env bash\nprintf '"'"'watcher: FAILED - persistent fixture failure\\n'"'"'\nexit 1\n' > "$dir/bin/fm-watch-arm.sh"
   sleep 60 &
   pid=$!
@@ -2234,6 +2259,12 @@ SH
 test_hook_claude_mode_autoarm_commits_attended_alarm_on_exhausted_continuation() {
   assert_autoarm_commits_attended_alarm_on_exhausted_continuation arm
   pass "fm-turnend-guard --claude: the exhausted auto-arm commits the attended alarm once, then stays suppressed until recovery"
+}
+
+test_hook_claude_mode_autoarm_commits_attended_alarm_on_lost_handback() {
+  assert_autoarm_commits_attended_alarm_on_exhausted_continuation lost-handback
+  assert_autoarm_commits_attended_alarm_on_exhausted_continuation lost-announced-handback
+  pass "fm-turnend-guard --claude: a repeatedly lost host hand-back on a pending or announced handling marker reaches the attended alarm"
 }
 
 test_hook_claude_mode_autoarm_commits_attended_alarm_on_interruption() {
@@ -2703,6 +2734,7 @@ test_hook_claude_mode_frozen_epoch_without_verified_failure_spends_budget_and_ke
 test_hook_claude_mode_recovery_contention_is_not_ordinary_allow
 test_hook_claude_mode_concurrent_recovery_resets_are_idempotent
 test_hook_claude_mode_autoarm_commits_attended_alarm_on_exhausted_continuation
+test_hook_claude_mode_autoarm_commits_attended_alarm_on_lost_handback
 test_hook_claude_mode_autoarm_commits_attended_alarm_on_interruption
 test_hook_claude_mode_stale_rewake_epoch_blocks
 test_hook_claude_mode_budget_without_verified_failure_keeps_blocking

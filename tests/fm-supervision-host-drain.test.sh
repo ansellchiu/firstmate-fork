@@ -238,24 +238,6 @@ test_branch_outcomes_put_captain_first_and_collapse_routine_overflow() {
 }
 
 
-# The store's repeat suppression (present:false) holds off Pi too: identical
-# routine notes inside the window reach the drain once, not once per append.
-test_branch_outcomes_drain_honors_repeat_suppression() {
-  local home drained n
-  home="$TMP_ROOT/drain-repeat"
-  mkdir -p "$home/state" "$home/config"
-  : > "$home/config/supervision-host"
-  for n in 1 2 3; do
-    FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task demo --verdict routine --summary 'still running the suite' >/dev/null \
-      || fail "fixture: could not record routine outcome $n"
-  done
-  drained=$(FM_HOME="$home" "$FAKE_CLAUDE" -c '"$0" 2>&1' "$ROOT/bin/fm-wake-drain.sh")
-  [ "$(printf '%s\n' "$drained" | grep -c 'demo: still running the suite')" -eq 1 ] \
-    || fail "the drain listed a suppressed repeat: $drained"
-  pass "drain: suppressed routine repeats stay off the host drain"
-}
-
-
 # Repeated captain outcomes for one task collapse to its newest, one line per
 # task; when the byte cap holds rows back, the section shows only the oldest
 # contiguous run its acknowledgement covers - a shown task's newer row that
@@ -609,7 +591,6 @@ fm_test_run \
   test_dispatch_entry_scopes_rows_and_renders_the_away_tail \
   test_branch_outcomes_only_on_a_host_home_off_pi \
   test_branch_outcomes_put_captain_first_and_collapse_routine_overflow \
-  test_branch_outcomes_drain_honors_repeat_suppression \
   test_branch_outcomes_collapse_repeated_captain_outcomes_per_task \
   test_branch_outcomes_present_a_long_away_window_once \
   test_branch_outcomes_budgets_count_bytes \

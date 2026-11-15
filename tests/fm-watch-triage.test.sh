@@ -1078,9 +1078,7 @@ unknown_alive_stale_case() {  # <evidence: status|worktree|none>
   printf '%s' "$previous" > "$state/.hash-$key"
   printf '1\n' > "$state/.count-$key"
   : > "$out"
-  # FM_WAKE_REPEAT_SUPPRESS_SECS=0 disables unchanged-repeat suppression, which
-  # otherwise withholds this byte-identical stale payload for its own horizon.
-  watch_bg "$state" "$fakebin" "$out" env FM_WAKE_REPEAT_SUPPRESS_SECS=0
+  watch_bg "$state" "$fakebin" "$out"
   pid=$!
   if [ "$evidence" = none ]; then
     wait_for_exit "$pid" 100 || fail "[none] an unknown-but-alive pane without progress evidence went quiet"
@@ -2273,7 +2271,6 @@ test_stale_terminal_status_overridden_by_active_run() {
   # Phase A: a high escalation threshold means the first sighting is absorbed,
   # not surfaced, despite the captain-relevant "done:" status-log line.
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=grok \
     FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=999 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -2346,7 +2343,6 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
   echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
   : > "$out"
   PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_FAKE_TMUX_CURRENT_COMMAND=grok \
     FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
     FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
   pid=$!
@@ -2936,222 +2932,6 @@ test_wedge_escalation_resets_when_pane_becomes_active() {
   pass "a pane becoming active again resets the consecutive wedge-escalation counter"
 }
 
-test_stale_auto_standdown_tears_down_requeues_and_notes_on_threshold() {
-  local dir state fakebin data out capture_file window task key pane_hash sig pid wt proj
-  dir=$(make_case stale-auto-standdown); state="$dir/state"; fakebin="$dir/fakebin"; data="$dir/data"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  window="test:fm-gated"
-  task="gated"
-  wt="$dir/wt"
-  proj="$dir/projects/testproj"
-
-  mkdir -p "$data/$task" "$proj" "$wt"
-  printf 'test brief content\n' > "$data/$task/brief.md"
-
-  cat > "$fakebin/treehouse" <<'SH'
-#!/bin/sh
-exit 0
-SH
-  chmod +x "$fakebin/treehouse"
-
-  git init -q -b main "$proj"
-  git -C "$proj" config user.email "test@example.com"
-  git -C "$proj" config user.name "Test"
-  echo "init" > "$proj/file.txt"
-  git -C "$proj" add file.txt
-  git -C "$proj" commit -q -m "initial commit"
-
-  git -C "$proj" worktree add -q -b "$task" "$wt" main
-
-  printf 'window=%s\nendpoint_task_id=%s\nworktree=%s\nproject=%s\nkind=ship\nmode=local-only\nspawn_gen=1\ndispatch_base=%s\n' \
-    "$window" "$task" "$wt" "$proj" "$(git -C "$wt" rev-parse HEAD)" > "$state/$task.meta"
-  touch "$state/$task.status"
-  sig=$(seen_sig "$state/$task.status"); printf '%s' "$sig" > "$state/.seen-${task}_status"
-
-  if command -v tasks-axi >/dev/null 2>&1; then
-    tasks-axi add "$task" "Gated worker task" --file "$data/backlog.md" >/dev/null 2>&1
-    tasks-axi start "$task" --file "$data/backlog.md" >/dev/null 2>&1
-  fi
-
-  printf 'Please authenticate: Sign in with Google to continue\n' > "$capture_file"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "$(cat "$capture_file")")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-
-  export FM_FAKE_CREW_STATE='state: unknown · source: none'
-
-  printf '%s' "$pane_hash" > "$state/.stale-$key"
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-
-  # Pre-seed 1 prior escalation
-  printf '1\n' > "$state/.wedge-escalations-$key"
-  stale_underlying_state_sig "$task" "$state" "$pane_hash" > "$state/.stale-sig-$key"
-
-  # Round 2: escalates to count 2
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" \
-    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_STALE_AUTO_STANDDOWN_THRESHOLD=3 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not escalate on round 2: $(cat "$out")"
-  grep -F "escalation 2" "$out" >/dev/null || fail "round 2 did not report escalation count 2: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge round 2"
-
-  # Round 3 (threshold 3 reached): should trigger auto-standdown
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" \
-    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_STALE_AUTO_STANDDOWN_THRESHOLD=3 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not exit on auto-standdown threshold: $(cat "$out")"
-
-  grep -F "check: auto-standdown: task $task stood down (login gating); brief preserved at data/$task/brief.md" "$out" >/dev/null \
-    || fail "auto-standdown did not report expected loud wake line: $(cat "$out")"
-
-  [ -f "$data/$task/brief.md" ] || fail "task brief was not preserved"
-  [ "$(cat "$data/$task/brief.md")" = "test brief content" ] || fail "task brief content was corrupted"
-
-  [ ! -f "$state/$task.meta" ] || fail "task meta was not removed by teardown"
-
-  if command -v tasks-axi >/dev/null 2>&1; then
-    grep -i "login gating" "$data/backlog.md" >/dev/null || fail "backlog does not contain blocker note: $(cat "$data/backlog.md")"
-  fi
-
-  unset FM_FAKE_CREW_STATE
-  pass "stale auto-standdown tears down never-started gated worker, preserves brief, requeues in backlog with note"
-}
-
-test_never_started_respects_any_status_event_or_recorded_pr() {
-  local dir state task
-  dir=$(make_case never-started-guards); state="$dir/state"; task="started"
-  export FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh"
-  export FM_FAKE_CREW_STATE='state: unknown · source: none'
-  printf 'window=test:fm-started\nendpoint_task_id=%s\nkind=ship\n' "$task" > "$state/$task.meta"
-  : > "$state/$task.status"
-  crew_is_never_started "$task" "$state" || fail "an empty status and no PR was not classified never-started"
-
-  # Stamped lines, as every worker and status_stamp_line writes them.
-  printf 'needs-decision [at=1791218000] [key=ci-1]: CI choice\nresolved [at=1791218932] [key=ci-1]: answered\n' > "$state/$task.status"
-  if crew_is_never_started "$task" "$state"; then fail "stamped status events were classified never-started"; fi
-  printf 'note\n' > "$state/$task.status"
-  if crew_is_never_started "$task" "$state"; then fail "an unrecognized status event was classified never-started"; fi
-  printf 'pr: https://github.com/example/repo/pull/33\n' > "$state/$task.status"
-  if crew_is_never_started "$task" "$state"; then fail "a PR url in status was classified never-started"; fi
-
-  : > "$state/$task.status"
-  printf 'pr=https://github.com/example/repo/pull/33\n' >> "$state/$task.meta"
-  if crew_is_never_started "$task" "$state"; then fail "a recorded pr= was classified never-started"; fi
-  unset FM_FAKE_CREW_STATE
-  pass "never-started classification refuses a task with any status event or a recorded PR"
-}
-
-test_stale_escalation_resets_when_status_state_changes() {
-  local dir state fakebin data out capture_file window task key pane_hash sig pid
-  dir=$(make_case stale-reset-status); state="$dir/state"; fakebin="$dir/fakebin"; data="$dir/data"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  window="test:fm-statuschange"
-  task="statuschange"
-
-  printf 'window=%s\nendpoint_task_id=%s\nkind=ship\n' "$window" "$task" > "$state/$task.meta"
-  touch "$state/$task.status"
-  sig=$(seen_sig "$state/$task.status"); printf '%s' "$sig" > "$state/.seen-${task}_status"
-
-  printf 'idle output\n' > "$capture_file"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "$(cat "$capture_file")")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  printf '%s' "$pane_hash" > "$state/.stale-$key"
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-
-  printf '2\n' > "$state/.wedge-escalations-$key"
-  printf '%s\told-mtime\told-sig\n' "$pane_hash" > "$state/.stale-sig-$key"
-
-  export FM_FAKE_CREW_STATE='state: unknown · source: none'
-
-  sleep 1
-  echo "note" >> "$state/$task.status"
-  sig=$(seen_sig "$state/$task.status"); printf '%s' "$sig" > "$state/.seen-${task}_status"
-
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" \
-    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_STALE_AUTO_STANDDOWN_THRESHOLD=3 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not exit on reset escalation: $(cat "$out")"
-
-  grep -F "escalation 1" "$out" >/dev/null || fail "escalation counter did not reset to 1 on status change: $(cat "$out")"
-  [ "$(cat "$state/.wedge-escalations-$key" 2>/dev/null)" = "1" ] || fail "wedge-escalations marker was not reset to 1"
-
-  unset FM_FAKE_CREW_STATE
-  pass "stale escalation counter resets when underlying status state changes between escalations"
-}
-
-test_stale_escalation_suppresses_standdown_when_task_has_committed_work() {
-  local dir state fakebin data out capture_file window task key pane_hash sig pid wt proj
-  dir=$(make_case stale-real-work); state="$dir/state"; fakebin="$dir/fakebin"; data="$dir/data"
-  out="$dir/watch.out"; capture_file="$dir/pane.txt"
-  window="test:fm-realwork"
-  task="realwork"
-  wt="$dir/wt"
-  proj="$dir/projects/testproj"
-
-  mkdir -p "$proj" "$wt"
-  git init -q -b main "$proj"
-  git -C "$proj" config user.email "test@example.com"
-  git -C "$proj" config user.name "Test"
-  echo "init" > "$proj/file.txt"
-  git -C "$proj" add file.txt
-  git -C "$proj" commit -q -m "initial commit"
-
-  git -C "$proj" worktree add -q -b "$task" "$wt" main
-
-  echo "real work committed" > "$wt/work.txt"
-  git -C "$wt" add work.txt
-  git -C "$wt" commit -q -m "feat: real work in progress"
-
-  printf 'window=%s\nendpoint_task_id=%s\nworktree=%s\nproject=%s\nkind=ship\nmode=local-only\nspawn_gen=1\n' \
-    "$window" "$task" "$wt" "$proj" > "$state/$task.meta"
-  touch "$state/$task.status"
-  sig=$(seen_sig "$state/$task.status"); printf '%s' "$sig" > "$state/.seen-${task}_status"
-
-  printf 'idle output\n' > "$capture_file"
-  key=$(printf '%s' "$window" | tr ':/.' '___')
-  pane_hash=$(hash_text "$(cat "$capture_file")")
-  printf '%s' "$pane_hash" > "$state/.hash-$key"
-  printf '1\n' > "$state/.count-$key"
-  printf '%s' "$pane_hash" > "$state/.stale-$key"
-  echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
-
-  printf '2\n' > "$state/.wedge-escalations-$key"
-  stale_underlying_state_sig "$task" "$state" "$pane_hash" > "$state/.stale-sig-$key"
-
-  export FM_FAKE_CREW_STATE='state: unknown · source: none'
-
-  : > "$out"
-  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$capture_file" \
-    FM_HOME="$dir" FM_STATE_OVERRIDE="$state" FM_DATA_OVERRIDE="$data" \
-    FM_CREW_STATE_BIN="$fakebin/fm-crew-state.sh" FM_STALE_ESCALATE_SECS=240 FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_STALE_AUTO_STANDDOWN_THRESHOLD=3 FM_WEDGE_DEMAND_INSPECT_COUNT=3 FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=999999 "$WATCH" > "$out" &
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not exit: $(cat "$out")"
-
-  grep -F "escalation 3" "$out" >/dev/null || fail "did not report escalation 3: $(cat "$out")"
-  grep -F "demand-deep-inspection" "$out" >/dev/null || fail "did not demand deep inspection: $(cat "$out")"
-  grep -F "auto-standdown" "$out" >/dev/null && fail "auto-standdown fired on task with real work: $(cat "$out")"
-
-  [ -f "$state/$task.meta" ] || fail "task meta was incorrectly removed"
-  [ -d "$wt" ] || fail "task worktree was incorrectly removed"
-
-  unset FM_FAKE_CREW_STATE
-  pass "stale escalation suppresses auto-standdown when task has real committed work"
-}
-
 # --- a stop request is honored mid-poll --------------------------------------
 # Every stopper (the arm's signal path, the away-mode daemon, reap above) waits
 # for the watcher to exit after one TERM, so TERM must end it through its EXIT
@@ -3722,7 +3502,6 @@ test_afk_busy_declared_pause_hands_off_plain_stale() {
   key=$(printf '%s' "$window" | tr ':/.' '___')
   touch -t 200001010000 "$state/afk-review-scout.meta"
   date '+%s' > "$state/.afk"
-  seed_daemon_lock "$state"
 
   # Phase A: past the bound, with the wedge threshold as low as it goes, the
   # declaration is handed to the daemon undecorated instead of being wedge-timed.
@@ -3828,8 +3607,6 @@ SH
   key=$(printf '%s' "$window" | tr ':/.' '___')
   touch -t 200001010000 "$state/afk-ticking-scout.meta"
   date '+%s' > "$state/.afk"
-  seed_daemon_lock "$state"
-
   # An undeclared busy phase already ran the wedge timer and escalated twice
   # before the crew declared the wait.
   echo $(( $(date +%s) - 500 )) > "$state/.stale-since-$key"
@@ -4718,228 +4495,6 @@ test_procevent_marker_failure_exits_and_replays() {
   pass "marker failure exits through the shared wake owner, releases its lock, and replays later"
 }
 
-# --- machine-wide leak guard -------------------------------------------------
-#
-# Every other detector here reads ONE crew's pane, so a worker that leaks
-# CPU-burning children starves the machine while every per-task signal still
-# reads healthy (docs/worker-process-leak-rca.md). FM_FAKE_PROCS and
-# FM_FAKE_LOADAVG are the seams: these drive the guard's decisions without
-# loading the test machine or creating real orphans.
-
-LEAK_PROCS='  101     1  97.5  2-01:00:00  47:10:00.00 /System/Library/Frameworks/CoreSpotlight.framework/corespotlightd
-  102     1  97.4    03:00:00 170:00.00 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-44467     1  88.1       06:00   5:17.00 /bin/zsh
-44468   500  90.0       06:00   5:24.00 /bin/bash'
-
-test_orphaned_shell_alarm_surfaces_once_then_rearms() {
-  local dir state fakebin out pid
-  dir=$(make_case orphan-shell); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$LEAK_PROCS"
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not exit for an orphaned shell hot on consecutive polls"
-  [ -s "$state/.orphan-shells" ] || fail "the orphan guard did not record its between-poll observation"
-  # Exactly the orphaned shell: not the hot ppid-1 apps, not the parented bash.
-  grep -F 'check: leaked worker probe - orphaned shell pid 44467 (ppid 1,' "$out" >/dev/null \
-    || fail "the orphan guard did not name exactly the orphaned shell: $(cat "$out")"
-  grep "$(printf '\tcheck\torphan-shell\t')" "$state/.wake-queue" >/dev/null \
-    || fail "the orphan alarm was not queued as a check wake: $(cat "$state/.wake-queue")"
-  [ -e "$state/.orphan-alarm" ] || fail "the orphan alarm did not record its episode marker"
-  ack_stopped_cycle "$state" || fail "could not acknowledge the orphan alarm"
-  : > "$out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$LEAK_PROCS"
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "the orphan alarm repeated on every poll instead of once per episode: $(cat "$out")"
-  fi
-  reap "$pid"
-  # Re-arm once the orphan is gone, and forget its pid.
-  watch_bg "$state" "$fakebin" "$out"
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the watcher exited with no orphaned shell"; }
-  reap "$pid"
-  [ -e "$state/.orphan-alarm" ] && fail "a cleared orphan did not re-arm the guard"
-  [ -e "$state/.orphan-shells" ] && fail "a cleared orphan left its pid recorded"
-  pass "an orphaned hot shell wakes once per episode after two polls, and re-arms when it is gone"
-}
-
-test_orphaned_shell_single_sample_is_not_an_alarm() {
-  local dir state fakebin out pid i=0
-  dir=$(make_case orphan-shell-once); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  # One sample is not an alarm: a shell can reparent for a moment in teardown.
-  # The recorded pid from the previous poll is gone, so this sample starts over.
-  printf '%s\n' 777 > "$state/.orphan-shells"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS='44467     1  88.1       06:00   5:17.00 /bin/zsh' FM_POLL=3
-  pid=$!
-  while ! grep -Fx 44467 "$state/.orphan-shells" >/dev/null 2>&1 && [ "$i" -lt 100 ]; do
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.1; i=$((i + 1))
-  done
-  kill -0 "$pid" 2>/dev/null || fail "one sample of an orphaned shell woke firstmate: $(cat "$out")"
-  reap "$pid"
-  grep -Fx 44467 "$state/.orphan-shells" >/dev/null \
-    || fail "the orphan guard did not record the first sample for the next poll"
-  grep -Fx 777 "$state/.orphan-shells" >/dev/null \
-    && fail "the orphan guard kept a pid that is gone"
-  [ -e "$state/.orphan-alarm" ] && fail "one sample of an orphaned shell armed the orphan guard"
-  pass "a single sample of an orphaned shell is recorded, not alarmed, and gone pids are forgotten"
-}
-
-test_surviving_orphan_does_not_mask_a_new_leak() {
-  local dir state fakebin out pid a b
-  dir=$(make_case orphan-new-leak); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  a='44467     1  88.1       06:00   5:17.00 /bin/zsh'
-  b='55501     1  91.0       00:20   0:18.00 /bin/bash'
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$a"
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not exit for orphan A"
-  grep -F 'orphaned shell pid 44467 (ppid 1,' "$out" >/dev/null \
-    || fail "orphan A did not alarm: $(cat "$out")"
-  ack_stopped_cycle "$state" || fail "could not acknowledge orphan A's alarm"
-  # A is left running: it stays reported, not re-alarmed.
-  : > "$out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$a"
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "surviving orphan A re-alarmed: $(cat "$out")"
-  fi
-  reap "$pid"
-  # A fresh leak B, with A still hot, must wake and name only B.
-  : > "$out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$a
-$b"
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "a new orphan B was masked by surviving orphan A: $(cat "$out")"
-  grep -F 'orphaned shell pid 55501 (ppid 1,' "$out" >/dev/null \
-    || fail "the new-leak alarm did not name exactly orphan B: $(cat "$out")"
-  { grep -Fx 44467 "$state/.orphan-alarm" && grep -Fx 55501 "$state/.orphan-alarm"; } >/dev/null \
-    || fail "the episode marker does not list both reported pids: $(cat "$state/.orphan-alarm")"
-  pass "a surviving reported orphan does not mask a new orphaned-shell leak"
-}
-
-test_contended_orphaned_spinner_alarms_on_cumulative_cpu() {
-  local dir state fakebin out pid
-  dir=$(make_case orphan-contended); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  # At the incident's load a spinner receives ~5% of a core: its instantaneous
-  # share is below any sane floor, but its cumulative own CPU keeps accruing.
-  # Spinners from one probe cross the thresholds together, so both go fresh on
-  # the same poll and both must be named.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS='44467     1   5.0       06:00   0:18.00 /bin/zsh
-44468     1   5.1       06:00   0:18.30 /bin/zsh'
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "contended orphaned spinners at 5% of a core did not alarm"
-  grep -F 'orphaned shell pid 44467 (ppid 1, cumulative path:' "$out" >/dev/null \
-    || fail "the contended spinner was not reported through the cumulative-CPU path: $(cat "$out")"
-  grep -F '; pid 44468 (ppid 1, cumulative path:' "$out" >/dev/null \
-    || fail "the second spinner fresh on the same poll was not named: $(cat "$out")"
-  pass "orphaned spinners starved to 5% of a core still alarm on cumulative CPU, all named"
-}
-
-test_quiet_or_young_orphaned_shell_is_not_an_alarm() {
-  local dir state fakebin out pid sample name
-  for name in sleeper young; do
-    case "$name" in
-      # Two hours alive, 12s of own CPU: a mostly-sleeping daemonized shell.
-      sleeper) sample='44467     1   0.0    02:00:00   0:12.00 /bin/bash' ;;
-      # One minute alive: below the age floor, and below the fast-path share.
-      young) sample='44467     1   5.0       01:00   0:50.00 /bin/zsh' ;;
-    esac
-    dir=$(make_case "orphan-$name"); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"
-    watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$sample"
-    pid=$!
-    if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-      reap "$pid"; fail "a $name orphaned shell woke firstmate: $(cat "$out")"
-    fi
-    reap "$pid"
-    [ -e "$state/.orphan-alarm" ] && fail "a $name orphaned shell armed the orphan guard"
-  done
-  pass "a long-lived mostly-sleeping orphaned shell and a young orphan do not alarm"
-}
-
-test_hot_orphaned_non_shell_is_not_an_alarm() {
-  local dir state fakebin out pid
-  dir=$(make_case orphan-nonshell); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  # launchd starts apps and daemons with ppid 1; a hot browser is not a leak,
-  # and neither is a hot shell whose parent is still alive.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_PROCS="$(printf '%s\n' "$LEAK_PROCS" | grep -v zsh)"
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "a hot ppid-1 non-shell or a parented shell woke firstmate: $(cat "$out")"
-  fi
-  reap "$pid"
-  [ -e "$state/.orphan-alarm" ] && fail "a hot ppid-1 non-shell armed the orphan guard"
-  pass "a hot ppid-1 app or daemon and a parented shell do not alarm"
-}
-
-test_machine_load_alarm_surfaces_once_then_rearms() {
-  local dir state fakebin out pid
-  dir=$(make_case machine-load); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_POLLS=3 \
-    FM_FAKE_PROCS='44468   500  90.0       06:00   5:24.00 /bin/bash'
-  pid=$!
-  # Sustained shape: the first overloaded polls only count toward the streak.
-  wait_poll_cycle "$state" "$pid" || fail "the load backstop woke on its first overloaded poll: $(cat "$out")"
-  [ -e "$state/.load-alarm" ] && fail "the load backstop armed before its sustain requirement was met"
-  wait_for_exit "$pid" 100 || fail "watcher did not exit for a sustainedly overloaded machine"
-  grep -F 'check: machine load' "$out" >/dev/null \
-    || fail "the load guard did not print its wake reason: $(cat "$out")"
-  grep -F 'Hungriest: pid ' "$out" >/dev/null \
-    || fail "the load wake did not attribute the load to processes: $(cat "$out")"
-  grep "$(printf '\tcheck\tmachine-load\t')" "$state/.wake-queue" >/dev/null \
-    || fail "the load alarm was not queued as a check wake: $(cat "$state/.wake-queue")"
-  [ -e "$state/.load-alarm" ] || fail "the load alarm did not record its episode marker"
-  # One wake per episode: the same overload must not re-alarm on every poll.
-  ack_stopped_cycle "$state" || fail "could not acknowledge the load alarm"
-  : > "$out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_POLLS=3
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid" || ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "the load alarm repeated on every poll instead of once per episode: $(cat "$out")"
-  fi
-  reap "$pid"
-  # Re-arm when the machine recovers, so the NEXT leak is reported too.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="0.20 0.30" FM_LOAD_ALARM_POLLS=3
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the watcher exited on a healthy load"; }
-  reap "$pid"
-  [ -e "$state/.load-alarm" ] && fail "a recovered load did not re-arm the guard"
-  [ -e "$state/.load-streak" ] && fail "a recovered load did not reset the sustain streak"
-  pass "sustained machine overload wakes once per episode after its streak, names its hungriest processes, and re-arms on recovery"
-}
-
-test_machine_load_spike_is_not_an_alarm() {
-  local dir state fakebin out pid
-  dir=$(make_case machine-load-spike); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  # A one-minute burst with a quiet five-minute average is a parallel build step,
-  # not a leak: sustained overload is the signal.
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 0.40" FM_LOAD_ALARM_POLLS=1
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "a short load spike woke firstmate: $(cat "$out")"; }
-  reap "$pid"
-  [ -e "$state/.load-alarm" ] && fail "a short load spike armed the load guard"
-  pass "a one-minute load spike with a quiet five-minute average does not alarm"
-}
-
-test_machine_load_guard_can_be_disabled() {
-  local dir state fakebin out pid
-  dir=$(make_case machine-load-off); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  watch_bg "$state" "$fakebin" "$out" env FM_FAKE_LOADAVG="99999 99999" FM_LOAD_ALARM_MULTIPLE=off \
-    FM_LOAD_ALARM_POLLS=1
-  pid=$!
-  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "the disabled load guard still woke firstmate: $(cat "$out")"; }
-  reap "$pid"
-  [ -e "$state/.load-alarm" ] && fail "the disabled load guard still armed its marker"
-  pass "FM_LOAD_ALARM_MULTIPLE=off disables the load guard entirely"
-}
-
 # --- heartbeat: no-change absorbed, backstop surfaces a missed status --------
 
 test_heartbeat_no_change_absorbed() {
@@ -4949,7 +4504,7 @@ test_heartbeat_no_change_absorbed() {
   sig=$(seen_sig "$state/routine.status"); printf '%s' "$sig" > "$state/.seen-routine_status"
   # A quiet fleet with a fast heartbeat cadence.
   PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 FM_WAKE_BATCH_WINDOW=1 "$WATCH" > "$out" &
+    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 "$WATCH" > "$out" &
   pid=$!
   if ! wait_poll_cycle "$state" "$pid"; then
     reap "$pid"; fail "watcher exited for a no-change heartbeat (should absorb): $(cat "$out")"
@@ -4964,20 +4519,6 @@ test_heartbeat_no_change_absorbed() {
     sleep 0.1
     i=$((i + 1))
   done
-  # A later no-change heartbeat crosses the one-second batch window. The timer
-  # may rotate local telemetry, but it must not change the original absorb
-  # decision into a captain-facing notification.
-  i=0
-  while [ "$i" -lt 200 ]; do
-    grep -q 'closed quiet batch without notification:' "$state/.watch-triage.log" 2>/dev/null && break
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  kill -0 "$pid" 2>/dev/null \
-    || fail "watcher exited when an absorbed heartbeat batch became due: $(cat "$out")"
-  grep -q 'closed quiet batch without notification:' "$state/.watch-triage.log" \
-    || fail "due absorbed heartbeat telemetry did not roll over locally"
   [ ! -s "$out" ] || fail "no-change heartbeat printed a wake reason: $(cat "$out")"
   [ ! -s "$state/.wake-queue" ] || fail "no-change heartbeat enqueued a durable wake record"
   [ "$(cat "$state/.heartbeat-streak" 2>/dev/null || echo 0)" -ge 1 ] || fail "heartbeat backoff streak did not advance while absorbing"
@@ -4986,29 +4527,6 @@ test_heartbeat_no_change_absorbed() {
     || fail "routine heartbeat classification did not commit its captured endpoint"
   reap "$pid"
   pass "a heartbeat with no captain-relevant change is absorbed and backs off the cadence"
-}
-
-test_heartbeat_corrupt_streak_treated_as_zero() {
-  local dir state fakebin out pid i
-  dir=$(make_case heartbeat-bad-streak); state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"
-  printf 'working: routine heartbeat history\n' > "$state/routine.status"
-  printf '%s' "$(seen_sig "$state/routine.status")" > "$state/.seen-routine_status"
-  # A garbled streak that is a syntax error in shell arithmetic.
-  printf '1 2' > "$state/.heartbeat-streak"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 FM_WAKE_BATCH_WINDOW=1 "$WATCH" > "$out" 2>&1 &
-  pid=$!
-  i=0
-  while [ "$i" -lt 200 ]; do
-    [ "$(cat "$state/.heartbeat-streak" 2>/dev/null)" = 1 ] && break
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  kill -0 "$pid" 2>/dev/null || fail "watcher died on a corrupt heartbeat streak: $(cat "$out")"
-  reap "$pid"
-  [ "$(cat "$state/.heartbeat-streak")" = 1 ] || fail "corrupt heartbeat streak was not treated as 0"
-  pass "a corrupt heartbeat streak is treated as 0 instead of killing the watcher"
 }
 
 test_heartbeat_backstop_surfaces_a_masked_status() {
@@ -5072,8 +4590,6 @@ test_afk_heartbeat_preserves_idle_accounting() {
   dir=$(make_case afk-heartbeat); state="$dir/state"; fakebin="$dir/fakebin"
   out="$dir/watch.out"
   date '+%s' > "$state/.afk"
-  # Away mode counts only while the away daemon holds its singleton lock.
-  seed_daemon_lock "$state"
   printf '3\n' > "$state/.heartbeat-streak"
   touch "$state/.last-heartbeat"
   set_mtime "$(( $(date +%s) - 30 ))" "$state/.last-heartbeat"
@@ -5086,41 +4602,6 @@ test_afk_heartbeat_preserves_idle_accounting() {
     "$state/.wake-queue" || fail "away-mode heartbeat did not enqueue a heartbeat wake"
   grep -Fx heartbeat "$out" >/dev/null || fail "away-mode heartbeat lost its transport wake reason"
   pass "away-mode heartbeat keeps daemon triage and idle backoff accounting"
-}
-
-# Cross-layer catch-all dedupe, the watcher half. `afk stop` re-arms this watcher
-# while the away-mode daemon can still be live, and each layer keeps its own
-# catch-all marker family. Without a cross-check the watcher re-presents every
-# digest the daemon already presented, on every heartbeat, forever.
-test_heartbeat_backstop_honors_daemon_catchall_marker() {
-  local dir state fakebin out sig pid i
-  dir=$(make_case heartbeat-cross-layer); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"
-  printf 'done: PR https://example.test/pr/9\n' > "$state/handled.status"
-  sig=$(seen_sig "$state/handled.status"); printf '%s' "$sig" > "$state/.seen-handled_status"
-  # The away-mode daemon already presented this log through its end and recorded
-  # it in its own marker family.
-  status_presentation_marker_commit "$state/.subsuper-seen-status-handled" \
-    "$state/handled.status" "$(size_of "$state/handled.status")" \
-    "$(_fm_open_decisions_file_ident "$state/handled.status")" \
-    || fail "could not prime the daemon catch-all marker"
-  PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" FM_POLL=1 FM_SIGNAL_GRACE=1 \
-    FM_CHECK_INTERVAL=999999 FM_HEARTBEAT=1 "$WATCH" > "$out" &
-  pid=$!
-  if ! wait_poll_cycle "$state" "$pid"; then
-    reap "$pid"; fail "watcher re-presented a digest the away-mode daemon already delivered: $(cat "$out")"
-  fi
-  i=0
-  while [ "$i" -lt 200 ]; do
-    [ "$(cat "$state/.heartbeat-streak" 2>/dev/null || echo 0)" -ge 1 ] && break
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.1
-    i=$((i + 1))
-  done
-  [ ! -s "$out" ] || { reap "$pid"; fail "heartbeat re-presented the daemon-handled status: $(cat "$out")"; }
-  [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "heartbeat enqueued a wake for a daemon-handled status"; }
-  reap "$pid"
-  pass "the heartbeat backstop honours the away-mode daemon's catch-all marker"
 }
 
 # --- beacon stays fresh while absorbing -------------------------------------
@@ -5164,7 +4645,6 @@ test_afk_signal_records_heartbeat_endpoint() {
   out="$dir/watch.out"; status_file="$state/task.status"
   printf 'needs-decision: choose release target\nworking: preparing both targets\n' > "$status_file"
   date '+%s' > "$state/.afk"
-  seed_daemon_lock "$state"
   export FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)'
   watch_bg "$state" "$fakebin" "$out"
   pid=$!
@@ -5183,7 +4663,6 @@ test_afk_present_reverts_watcher_to_one_shot() {
   status_file="$state/task.status"
   printf 'working: routine note\n' > "$status_file"
   date '+%s' > "$state/.afk"   # away mode: the supervise-daemon owns triage
-  seed_daemon_lock "$state"
   # Set a PROVABLY-WORKING verdict: if afk failed to bypass the provably-working
   # check, this no-verb signal would be absorbed (not surfaced). The test asserting
   # a surface therefore also proves afk reverts to one-shot and skips the costly read.
@@ -5215,7 +4694,6 @@ test_afk_paused_changed_pane_hands_off_plain_stale() {
   else touch -m -d "@$back" "$statusf"; fi
   sig=$(seen_sig "$statusf"); printf '%s' "$sig" > "$state/.seen-afk-held_status"
   date '+%s' > "$state/.afk"
-  seed_daemon_lock "$state"
   key=$(printf '%s' "$window" | tr '.:/' '___')
 
   # Deliberately do not seed .hash-*: this is the changed-pane path that used to
@@ -5233,53 +4711,6 @@ test_afk_paused_changed_pane_hands_off_plain_stale() {
   grep "$(printf '\tstale\t')" "$drain_out" | grep -F "stale: $window" >/dev/null \
     || fail "AFK paused stale was not queued with the plain window identity"
   pass "AFK changed paused panes hand off plain stale identities for daemon-owned pause triage"
-}
-
-test_afk_without_live_daemon_keeps_absorption_enabled() {
-  local dir state fakebin out status_file pid
-
-  # Sub-case 1: .afk present WITHOUT daemon lock -> absorption stays enabled
-  dir=$(make_case afk-no-daemon-lock); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; status_file="$state/task.status"
-  printf 'working: step 1\n' > "$status_file"
-  date '+%s' > "$state/.afk"
-  export FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)'
-  watch_bg "$state" "$fakebin" "$out"
-  pid=$!
-  wait_poll_cycle "$state" "$pid" 100 || fail ".afk without daemon lock exited instead of absorbing"
-  [ ! -s "$out" ] || fail ".afk without daemon lock emitted output: $(cat "$out")"
-  [ ! -s "$state/.wake-queue" ] || fail ".afk without daemon lock queued a wake"
-  reap "$pid"
-
-  # Sub-case 2: .afk present WITH STALE daemon lock (dead pid) -> absorption stays enabled
-  dir=$(make_case afk-stale-daemon-lock); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; status_file="$state/task.status"
-  printf 'working: step 1\n' > "$status_file"
-  date '+%s' > "$state/.afk"
-  seed_stale_daemon_lock "$state"
-  export FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)'
-  watch_bg "$state" "$fakebin" "$out"
-  pid=$!
-  wait_poll_cycle "$state" "$pid" 100 || fail ".afk with stale daemon lock exited instead of absorbing"
-  [ ! -s "$out" ] || fail ".afk with stale daemon lock emitted output: $(cat "$out")"
-  [ ! -s "$state/.wake-queue" ] || fail ".afk with stale daemon lock queued a wake"
-  reap "$pid"
-
-  # Sub-case 3: .afk present WITH LIVE daemon lock -> absorption disabled (daemon triages)
-  dir=$(make_case afk-live-daemon-lock); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; status_file="$state/task.status"
-  printf 'working: step 1\n' > "$status_file"
-  date '+%s' > "$state/.afk"
-  seed_daemon_lock "$state"
-  export FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)'
-  watch_bg "$state" "$fakebin" "$out"
-  pid=$!
-  wait_for_exit "$pid" 100 || fail ".afk with live daemon lock did not exit one-shot"
-  grep -F "signal: $status_file" "$out" >/dev/null || fail ".afk with live daemon lock did not surface signal"
-  [ -s "$state/.wake-queue" ] || fail ".afk with live daemon lock did not queue wake"
-  unset FM_FAKE_CREW_STATE
-
-  pass ".afk without live daemon lock retains absorption; .afk with live daemon lock disables absorption"
 }
 
 test_pi_stream_silence_uses_inspection_timer() {
@@ -5860,96 +5291,6 @@ if [ -n "${FM_TEST_STOCK_BASH:-}" ]; then
   fm_test_run test_turn_ended_churn_existing_marker_absorbed
   exit 0
 fi
-# --- catch-up burst: one queued row per changed file, each bounded to itself ---
-# The 2026-09-19 incident: a home that lost monitoring for hours resumed with
-# ~130 changed status logs, and every one of the ~130 queued rows carried a
-# payload listing EVERY status file in the home. The rows stay per-file and
-# individually sequenced, but a row's payload names only the file that
-# triggered it.
-
-# The status file a burst row must NOT name: a sibling changed in the same cycle.
-other_burst_file() {  # <index>
-  case "$1" in
-    1) printf 'burst2.status' ;;
-    *) printf 'burst1.status' ;;
-  esac
-}
-
-test_signal_burst_rows_are_bounded_to_their_own_file() {
-  local dir state fakebin out drain_out pid rows i payload
-  dir=$(make_case signal-burst); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"
-  for i in 1 2 3; do
-    printf 'working: step\nneeds-decision: pick A or B for task %s\n' "$i" > "$state/burst$i.status"
-  done
-  export FM_FAKE_CREW_STATE='state: unknown · source: none · no current-state source available'
-  watch_bg "$state" "$fakebin" "$out"
-  pid=$!
-  wait_for_exit "$pid" 100 || fail "watcher did not surface a multi-file catch-up burst"
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null \
-    || fail "drain after the catch-up burst failed"
-  rows=$(grep -c "$(printf '\tsignal\t')" "$drain_out")
-  [ "$rows" -eq 3 ] || fail "expected one queued row per changed file, got $rows"
-  for i in 1 2 3; do
-    # Field 5 alone: the payload this bound is about, read apart from the key
-    # field that names the same file on every row.
-    payload=$(awk -F'\t' -v key="burst$i.status" '$3 == "signal" && $4 == key { print $5 }' "$drain_out")
-    case "$payload" in
-      *"/burst$i.status") ;;
-      *) fail "burst$i.status's row payload does not name its own file: '$payload'" ;;
-    esac
-    case "$payload" in
-      *"$(other_burst_file "$i")"*)
-        fail "burst$i.status's row payload enumerated another task's status file: '$payload'" ;;
-    esac
-  done
-  # Distinct sequence numbers are what keep each row acknowledgeable through the
-  # ordinary drain contract rather than as one blob.
-  [ "$(awk -F'\t' '$3 == "signal" { print $2 }' "$drain_out" | sort -u | wc -l | tr -d ' ')" -eq 3 ] \
-    || fail "queued burst rows did not carry distinct sequence numbers"
-  ack_stopped_cycle "$state" || fail "the burst rows could not be acknowledged through the drain"
-  pass "a catch-up burst queues one row per changed file and bounds each payload to that file"
-}
-
-# The same bound on the second append path: a batch absorbed as benign whose
-# classified-position commit failed re-queues the batch, and those rows must be
-# per-file too - this is the path the catch-up burst actually took for every
-# task whose marker commit lost its race.
-test_signal_commit_error_rows_are_bounded_to_their_own_file() {
-  local dir state fakebin out drain_out pid rows i other payload
-  dir=$(make_case signal-commit-error); state="$dir/state"; fakebin="$dir/fakebin"
-  out="$dir/watch.out"; drain_out="$dir/drain.out"
-  for i in 1 2; do
-    printf 'working: compiling step %s\n' "$i" > "$state/fallback$i.status"
-    # An unwritable seen marker fails this cycle's classified-position commit,
-    # which is what sends an otherwise absorbed benign batch to the fallback.
-    mkdir "$state/.seen-fallback${i}_status"
-  done
-  export FM_FAKE_CREW_STATE='state: working · source: run-step · validating (running)'
-  watch_bg "$state" "$fakebin" "$out"
-  pid=$!
-  wait_for_exit "$pid" 100 \
-    || { reap "$pid"; fail "an absorbed batch whose position commit failed did not re-queue: $(cat "$out")"; }
-  FM_STATE_OVERRIDE="$state" "$DRAIN" > "$drain_out" 2>/dev/null \
-    || fail "drain after the commit-error fallback failed"
-  rows=$(grep -c "$(printf '\tsignal\t')" "$drain_out")
-  [ "$rows" -eq 2 ] || fail "expected one re-queued row per changed file, got $rows"
-  for i in 1 2; do
-    other=$((3 - i))
-    payload=$(awk -F'\t' -v key="fallback$i.status" '$3 == "signal" && $4 == key { print $5 }' "$drain_out")
-    case "$payload" in
-      *"/fallback$i.status") ;;
-      *) fail "fallback$i.status's re-queued row payload does not name its own file: '$payload'" ;;
-    esac
-    case "$payload" in
-      *"fallback$other.status"*)
-        fail "the commit-error fallback row for fallback$i.status enumerated another task's status file: '$payload'" ;;
-    esac
-  done
-  unset FM_FAKE_CREW_STATE
-  pass "a re-queued benign batch bounds each row's payload to that row's file"
-}
-
 if [ -n "${FM_TEST_ONLY:-}" ]; then
   "$FM_TEST_ONLY"
   exit 0
@@ -6033,10 +5374,6 @@ fm_test_run \
   test_nonterminal_stale_provably_working_absorbed_then_escalated \
   test_wedge_escalation_marks_demand_deep_inspection_after_threshold \
   test_wedge_escalation_resets_when_pane_becomes_active \
-  test_stale_auto_standdown_tears_down_requeues_and_notes_on_threshold \
-  test_never_started_respects_any_status_event_or_recorded_pr \
-  test_stale_escalation_resets_when_status_state_changes \
-  test_stale_escalation_suppresses_standdown_when_task_has_committed_work \
   test_gone_endpoint_reports_once_instead_of_escalating_forever \
   test_live_and_unproven_endpoints_still_wedge_escalate \
   test_wedge_guards_absent_config_keeps_the_unchanged_ladder \
@@ -6074,30 +5411,16 @@ fm_test_run \
   test_procevent_surface_serializes_with_drain \
   test_procevent_surface_crash_boundaries \
   test_procevent_marker_failure_exits_and_replays \
-  test_orphaned_shell_alarm_surfaces_once_then_rearms \
-  test_orphaned_shell_single_sample_is_not_an_alarm \
-  test_surviving_orphan_does_not_mask_a_new_leak \
-  test_contended_orphaned_spinner_alarms_on_cumulative_cpu \
-  test_quiet_or_young_orphaned_shell_is_not_an_alarm \
-  test_hot_orphaned_non_shell_is_not_an_alarm \
-  test_machine_load_alarm_surfaces_once_then_rearms \
-  test_machine_load_spike_is_not_an_alarm \
-  test_machine_load_guard_can_be_disabled \
   test_heartbeat_no_change_absorbed \
-  test_heartbeat_corrupt_streak_treated_as_zero \
   test_heartbeat_backstop_surfaces_unsurfaced_status \
-  test_heartbeat_backstop_honors_daemon_catchall_marker \
   test_heartbeat_backstop_surfaces_a_masked_status \
   test_afk_heartbeat_preserves_idle_accounting \
   test_beacon_stays_fresh_while_absorbing \
   test_afk_signal_records_heartbeat_endpoint \
   test_afk_present_reverts_watcher_to_one_shot \
   test_afk_paused_changed_pane_hands_off_plain_stale \
-  test_afk_without_live_daemon_keeps_absorption_enabled \
   test_exit_picker_stale_names_the_dialog \
   test_exit_picker_wedge_keeps_climbing \
   test_quoted_exit_picker_stays_ordinary_stale \
   test_secondmate_exit_picker_stays_quiet \
-  test_closed_exit_picker_drops_saved_dialog_name \
-  test_signal_burst_rows_are_bounded_to_their_own_file \
-  test_signal_commit_error_rows_are_bounded_to_their_own_file
+  test_closed_exit_picker_drops_saved_dialog_name
