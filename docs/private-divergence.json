@@ -1580,6 +1580,24 @@
       "upstreamEquivalent": "none",
       "disposition": "parked",
       "parkedAt": "afbc4b447550c7ff9b981970090cb0522d24a29a"
+    },
+    {
+      "id": "portable-serial-shard-count",
+      "area": "CI workflow",
+      "paths": [
+        "bin/fm-test-run.sh",
+        ".github/workflows/ci.yml",
+        "docs/fm-test-portable-shards.md"
+      ],
+      "intent": "Retain twelve portable serial shards for the merged fork-plus-upstream suite: bin/fm-test-run.sh --check-coverage with eleven shards reported serial_max_ms 1208458 against the 1200000 ms serial budget (red), while twelve shards reported ok with serial_max_ms 1107753. This is a CI-capacity change, not a behaviour change.",
+      "provenance": {
+        "commits": [
+          "027c16b9"
+        ]
+      },
+      "upstreamEquivalent": "none",
+      "disposition": "retain",
+      "upstreamReviewedAt": "427056c4181c41074ad24f051f79919330df0fa5"
     }
   ]
 }
