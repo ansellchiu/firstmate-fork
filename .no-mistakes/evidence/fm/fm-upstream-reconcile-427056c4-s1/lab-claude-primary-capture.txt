@@ -1,0 +1,14 @@
+ ▐▛███▛█   Claude Code v2.1.325
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/.no-mistakes/worktrees/d9c8a3404af5/01M7H9QCDW6QK9WSHG7FAXHWMV
+❯ Start the session per AGENTS.md (run bin/fm-session-start.sh). Then reply with one line: the BOOTSTRAP section contents and the HOME ROLE line. Do not spawn anything.
+  Ran 1 shell command
+⏺ Captain, BOOTSTRAP: VAULT: approval service degraded - key-injecting tool calls will refuse (open the menu-bar vault app) · HOME ROLE: fm-role: user (default) (note: another live session holds the
+  fleet lock, pid 25501, so this session is read-only and nothing was spawned).
+✻ Baked for 21s · done 12:34 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Opus-5-5:medium:thinking  5h: 6%  7d: 33%  ██░░░░░░  (62.2k/1.0M)
+  ~/.no-mistakes/worktrees/d9c8a3404af5/01M7H9QCDW6QK9WSHG7FAXHWMV  ↑62.2k  ↓137
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
