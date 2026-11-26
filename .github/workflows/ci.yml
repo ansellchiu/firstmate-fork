@@ -32,12 +32,19 @@ concurrency:
 
 # Fork opt-out: a fork sets the repository variable FM_CI_SKIP_PUSH to 1 to
 # skip the push run, and FM_CI_SKIP_MACOS to 1 to skip the macOS job, without
-# a tracked edit that drifts from upstream; with neither set, every job runs
-# exactly as before. The skip is a job-level condition, repeated per job
-# because workflow syntax has no shared anchor, and never a trigger filter: a
-# job skipped by its condition reports success, while a workflow filtered out
-# at the trigger stays pending and blocks the merge. CONTRIBUTING.md documents
-# the variables.
+# a tracked edit that drifts from upstream; with neither set, every job except
+# upstream-ancestry runs exactly as before. The skip is a job-level condition,
+# repeated per job because workflow syntax has no shared anchor, and never a
+# trigger filter: a job skipped by its condition reports success, while a
+# workflow filtered out at the trigger stays pending and blocks the merge.
+# CONTRIBUTING.md documents the variables.
+#
+# Upstream ancestry tripwire: upstream-ancestry is not part of that opt-out.
+# It runs only on a push (and push runs start only for main) and only when the
+# repository variable FM_UPSTREAM_URL is set. Unset, the job does not run, so
+# public upstream and any fork without the variable stay unchanged. The job
+# fails when the check reports upstream-status: ancestry-gap and passes on
+# every other status, including not-compared.
 #
 # Outside pull request gate: the full suite (lint, every test lane, macOS and
 # the timing aggregate) runs on main pushes, PRs from this repository's own
@@ -639,6 +646,35 @@ jobs:
           if [ -n "$tracked" ]; then
             echo "::error::Personal fleet paths are tracked in git:"
             printf '%s\n' "$tracked"
+            exit 1
+          fi
+
+  # Push-to-main tripwire for a public upstream merge landed without its
+  # ancestry. Opt-in via FM_UPSTREAM_URL so a repository that has not set the
+  # variable, including public upstream, does not run it. The check's other
+  # statuses, including not-compared, pass; only ancestry-gap fails.
+  upstream-ancestry:
+    name: Upstream ancestry
+    runs-on: ubuntu-24.04
+    if: ${{ github.event_name == 'push' && vars.FM_UPSTREAM_URL != '' }}
+    # Fast tier: the ancestry check is one bounded fetch plus a local comparison.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Fail when main lost upstream ancestry
+        env:
+          FM_UPSTREAM_URL: ${{ vars.FM_UPSTREAM_URL }}
+        run: |
+          set -eu
+          git remote add upstream "$FM_UPSTREAM_URL"
+          git remote set-url --push upstream DISABLED
+          git remote set-head origin main
+          out=$(FM_HOME="$RUNNER_TEMP/fm-home" bin/fm-upstream.sh check)
+          printf '%s\n' "$out"
+          if printf '%s\n' "$out" | grep -qx 'upstream-status: ancestry-gap'; then
+            echo "::error::main carries a public upstream merge without its ancestry; run bin/fm-upstream.sh repair-ancestry"
             exit 1
           fi
 

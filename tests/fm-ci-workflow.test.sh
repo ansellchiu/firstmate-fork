@@ -18,7 +18,10 @@
 #
 # They also hold the fork opt-out: the repository variables FM_CI_SKIP_PUSH and
 # FM_CI_SKIP_MACOS let a fork skip the push run and the macOS job through a
-# job-level condition, while with neither set every job runs exactly as before.
+# job-level condition, while with neither set every job except the
+# upstream-ancestry tripwire runs exactly as before. That job runs only on a
+# push when FM_UPSTREAM_URL is set, and it fails when the check reports
+# upstream-status: ancestry-gap.
 #
 # The workflow is parsed as YAML and its concurrency and job-level `if`
 # expressions are resolved against simulated pull_request and push contexts,
@@ -172,6 +175,7 @@ end
 # fork variables unset, and needed jobs successful. Short keys: event, action,
 # label (the label an event adds), labels (comma-separated labels on the PR),
 # association, head (head repository), number, run_id, skip_push, skip_macos,
+# upstream_url,
 # needs (success, failure, or cancelled: the needed jobs' results that job
 # conditions and the Full suite verdict read), outcome (how every job that runs
 # concludes, read only by published_checks). A push event clears the PR fields,
@@ -183,6 +187,7 @@ def simulated_context(workflow_name, overrides)
     "event" => "pull_request", "action" => "synchronize", "label" => "",
     "labels" => "", "association" => "NONE", "head" => "contributor/firstmate",
     "number" => "108", "run_id" => "900001", "skip_push" => "", "skip_macos" => "",
+    "upstream_url" => "",
     "needs" => "success", "outcome" => "success",
   }
   if overrides.any? { |pair| pair == "event=push" }
@@ -206,6 +211,7 @@ def simulated_context(workflow_name, overrides)
     "github.run_id" => o["run_id"],
     "vars.FM_CI_SKIP_PUSH" => o["skip_push"],
     "vars.FM_CI_SKIP_MACOS" => o["skip_macos"],
+    "vars.FM_UPSTREAM_URL" => o["upstream_url"],
     "needs.status" => o["needs"],
     "needs.*.result" => [o["needs"]],
     "simulated.outcome" => o["outcome"],
@@ -330,7 +336,7 @@ puts YAML.load_file(ARGV[0]).fetch("jobs").fetch(ARGV[1]).fetch("timeout-minutes
 # Tier membership is the executable inventory of the timeout policy: a new job
 # must join a tier, and a job-level value outside these tiers is exactly the
 # one-off number the policy removed.
-FAST_TIER_JOBS='test-coverage invariants tests-timing-aggregate full-suite'
+FAST_TIER_JOBS='test-coverage invariants tests-timing-aggregate full-suite upstream-ancestry'
 NORMAL_TIER_JOBS='tests-portable-parallel-1 tests-portable-parallel-2 macos-stock-bash'
 EXTENDED_TIER_JOBS='lint tests-portable-serial'
 HEAVY_TIER_JOBS='tests-herdr tests-hc'
@@ -443,12 +449,12 @@ test_outside_pr_without_label_runs_only_quick_checks() {
 # verdict then follows the lanes.
 test_full_ci_label_runs_the_whole_suite() {
   local all actual out
-  all=$(workflow_jobs | tr '\n' ' ') || fail "could not list ci.yml jobs"
+  all=$(workflow_jobs | grep -vx upstream-ancestry | tr '\n' ' ') || fail "could not list ci.yml jobs"
   actual=$(jobs_running_under action=labeled label=full-ci labels=full-ci | tr '\n' ' ') \
     || fail "could not resolve full-ci label jobs"
-  [ "$actual" = "$all" ] || fail "adding full-ci must run every job, ran: $actual"
+  [ "$actual" = "$all" ] || fail "adding full-ci must run every pull-request job, ran: $actual"
   actual=$(jobs_running_under labels=bug,full-ci | tr '\n' ' ') || fail "could not resolve labelled push jobs"
-  [ "$actual" = "$all" ] || fail "a later push to a full-ci PR must run every job, ran: $actual"
+  [ "$actual" = "$all" ] || fail "a later push to a full-ci PR must run every pull-request job, ran: $actual"
   out=$(run_full_suite_verdict labels=full-ci) \
     || fail "the Full suite verdict must pass on a labelled PR whose lanes passed:"$'\n'"$out"
   if out=$(run_full_suite_verdict labels=full-ci needs=failure); then
@@ -457,20 +463,20 @@ test_full_ci_label_runs_the_whole_suite() {
   if out=$(run_full_suite_verdict labels=full-ci needs=cancelled); then
     fail "the Full suite verdict must fail when a lane was cancelled:"$'\n'"$out"
   fi
-  pass "the full-ci label and later pushes run every job, and the verdict follows the lanes"
+  pass "the full-ci label and later pushes run every pull-request job, and the verdict follows the lanes"
 }
 
 # DOP-167: main, own branches and write-access authors run everything as today.
 test_trusted_runs_are_unchanged() {
   local all context actual out
-  all=$(workflow_jobs | tr '\n' ' ') || fail "could not list ci.yml jobs"
+  all=$(workflow_jobs | grep -vx upstream-ancestry | tr '\n' ' ') || fail "could not list ci.yml jobs"
   for context in event=push association=OWNER association=MEMBER association=COLLABORATOR head=kunchenguid/firstmate; do
     actual=$(jobs_running_under "$context" | tr '\n' ' ') || fail "could not resolve jobs for $context"
-    [ "$actual" = "$all" ] || fail "$context must run every job as before, ran: $actual"
+    [ "$actual" = "$all" ] || fail "$context must run every job except the ancestry tripwire, ran: $actual"
     out=$(run_full_suite_verdict "$context") \
       || fail "the Full suite verdict must pass for $context when its lanes passed:"$'\n'"$out"
   done
-  pass "main pushes, own branches and write-access authors still run every job and pass the verdict"
+  pass "main pushes, own branches and write-access authors still run every suite job and pass the verdict"
 }
 
 # DOP-167: another label neither starts nor cancels a run: no job runs, not
@@ -518,6 +524,7 @@ test_unrelated_label_never_masks_an_earlier_failure() {
     # conclusion, so the label run below has a real failure to mask.
     while IFS=$'\t' read -r name conclusion; do
       case "$expect:$name" in
+        all-failed:'Upstream ancestry') want=skipped ;;
         all-failed:*) want=failure ;;
         waiting:'Full suite') want=failure ;;
         waiting:'Test coverage guard'|waiting:'Repo invariants') want=success ;;
@@ -648,12 +655,14 @@ LANES
   pass "each heavy lane keeps a 20 minute step tripwire under a $heavy minute job backstop"
 }
 
-# The fork opt-out is opt-in: with neither variable set every job runs on both
-# events, FM_CI_SKIP_PUSH=1 empties only the push run, and FM_CI_SKIP_MACOS=1
-# removes only the macOS job. A "-" in the table means the variable is unset.
+# The fork opt-out is opt-in: with neither variable set every job except the
+# ancestry tripwire runs on both events, FM_CI_SKIP_PUSH=1 empties only the
+# push run, and FM_CI_SKIP_MACOS=1 removes only the macOS job. The tripwire
+# stays out of this table because FM_UPSTREAM_URL is unset here. A "-" in the
+# table means the variable is unset.
 test_fork_skip_variables_are_opt_in() {
   local all event skip_push skip_macos expected want actual
-  all=$(workflow_jobs) || fail "could not list ci.yml jobs"
+  all=$(workflow_jobs | grep -vx upstream-ancestry) || fail "could not list ci.yml jobs"
   printf '%s\n' "$all" | grep -qx macos-stock-bash \
     || fail "the macOS job is missing from ci.yml, so the table below would prove nothing"
   while read -r event skip_push skip_macos expected; do
@@ -739,7 +748,34 @@ RUBY
   pass "CI matrices cover every executable serial lane and canonical lint root exactly once"
 }
 
+# The ancestry tripwire is opt-in and push-only: it runs when a push has
+# FM_UPSTREAM_URL set, stays idle otherwise, and fails only on ancestry-gap.
+test_upstream_ancestry_runs_only_on_push_when_configured() {
+  local runs
+  ruby -ryaml -e '
+job = YAML.load_file(ARGV[0]).fetch("jobs").fetch("upstream-ancestry")
+checkout = job.fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
+raise "upstream-ancestry needs actions/checkout" unless checkout
+raise "upstream-ancestry checkout must use fetch-depth 0" unless checkout.dig("with", "fetch-depth") == 0
+script = job.fetch("steps").map { |step| step["run"].to_s }.join("\n")
+raise "upstream-ancestry must grep for upstream-status: ancestry-gap" unless script.include?("upstream-status: ancestry-gap")
+message = "main carries a public upstream merge without its ancestry; run bin/fm-upstream.sh repair-ancestry"
+raise "upstream-ancestry must fail with the repair message" unless script.include?(message)
+' "$CI_WORKFLOW" || fail "upstream-ancestry job is missing or does not fail on ancestry-gap"
+  runs=$(job_runs_under upstream-ancestry event=push upstream_url=https://github.com/kunchenguid/firstmate) \
+    || fail "could not resolve upstream-ancestry on a configured push"
+  [ "$runs" = true ] || fail "a push with FM_UPSTREAM_URL set must run upstream-ancestry, got $runs"
+  runs=$(job_runs_under upstream-ancestry event=push) \
+    || fail "could not resolve upstream-ancestry on an unconfigured push"
+  [ "$runs" = false ] || fail "a push without FM_UPSTREAM_URL must not run upstream-ancestry, got $runs"
+  runs=$(job_runs_under upstream-ancestry upstream_url=https://github.com/kunchenguid/firstmate) \
+    || fail "could not resolve upstream-ancestry on a pull request"
+  [ "$runs" = false ] || fail "a pull request must not run upstream-ancestry, got $runs"
+  pass "upstream-ancestry runs only on push when FM_UPSTREAM_URL is set and greps for upstream-status: ancestry-gap"
+}
+
 test_ci_matrices_match_executable_partitions
+test_upstream_ancestry_runs_only_on_push_when_configured
 test_pr_pushes_supersede_within_one_pr
 test_separate_prs_do_not_cancel_each_other
 test_main_pushes_keep_only_the_newest_run
