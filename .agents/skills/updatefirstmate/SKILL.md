@@ -52,13 +52,14 @@ This touches only the firstmate repo and its own worktrees, never anything under
 bin/fm-upstream.sh check
 ```
 
-It reports the comparison's answer on its `upstream-status:` line - the three real classifications are reported separately - and you act on exactly that one line:
+It reports the comparison's answer on its `upstream-status:` line - the four real classifications are reported separately - and you act on exactly that one line:
 
 | `upstream-status:` | Meaning | Do |
 | --- | --- | --- |
 | `current` | Public upstream has no commit origin lacks | Go to step 3 |
 | `contained` | Every upstream commit origin lacks is already patch-equivalent to work origin carries | Go to step 3, and tell the captain nothing needed replaying |
 | `diverged` | At least one genuinely new public commit | Go to step 2 |
+| `ancestry-gap` | Public commits through `upstream-ancestry-gap-through:` are already in origin by content, but they were landed by a squash or rebase that discarded the ancestry recording it | Go to step 2a |
 | `not-compared` | Public upstream was unavailable, so no public comparison ran | Go to step 3, and tell the captain the public check did not happen |
 
 Route on the state that table reports, never on the `upstream-topology:` line alone.
@@ -89,7 +90,11 @@ It builds the merge in a fresh worktree on a new branch based on `origin/<defaul
 Its `reconcile:` line is the whole decision:
 
 - **`reconcile: ready`** - the merge is clean on the branch and worktree it names, with `private-commits: preserved` and `active-checkout: unchanged` proving both invariants.
-  Ship it through the project's ordinary no-mistakes delivery path from that worktree, exactly like any other firstmate-repo change, opening the pull request against `origin` and nothing else.
+  Ship it through the project's ordinary no-mistakes delivery path from that worktree, opening the pull request against `origin` and nothing else, with one difference from every other firstmate-repo change: **this pull request must land as a merge commit.**
+  Its purpose is the merge commit whose second parent is public upstream; a squash or rebase merge keeps every file and discards that parent, and every later check then reports the same public commits as new.
+  `reconcile: ready` prints `merge-method-required: merge` for this reason.
+  Before asking for merge approval, run `bin/fm-upstream.sh carried <pull-request-head-sha> origin/<default> <reconcile-upstream-tip>` and confirm `upstream-carried-commits:` equals the `reconcile-merged-commits:` count; a `0` means the branch was rewritten on its way to the pull request, no merge method can restore its ancestry, and the reconciliation must be rebuilt.
+  Land it only with `bin/fm-pr-merge.sh <task-id> <pull-request-url> --expected-head <pull-request-head-sha> -- --merge`, never with the forge's merge button, `gh pr merge`, or auto-merge, and say "merge commit required" in the approval request.
   Reconcile the inventory in the same change: for every `inventory-entry:` line reporting `upstream-unreviewed-change`, `upstream-equivalent-unconfirmed`, `superseded`, or `needs-review`, and for every `inventory-uncovered:` path, either update the entry's disposition or add the missing entry, then record the review with `bin/fm-private-divergence.sh --refresh-reviewed <upstream-sha> --entry <id>` inside that worktree.
   Leaving one of those lines unaddressed is how intentional private behavior gets replayed away, so account for every one.
 - **`reconcile: conflict`** - the merge needs semantic judgement, on the paths its `reconcile-conflict-path:` lines name.
@@ -112,6 +117,20 @@ When the pull request is ready but merge approval is still the captain's, stop t
 Tell the captain the full `https://...` pull-request URL and say plainly that `/updatefirstmate` must be run again after it lands to actually update the fleet.
 
 Once the pull request has landed, continue to step 3 in the same session or the rerun.
+
+## 2a. Repair an ancestry gap
+
+```sh
+bin/fm-upstream.sh repair-ancestry
+```
+
+`upstream-status: ancestry-gap` means a past reconciliation was landed without its merge commit.
+Nothing is missing from the files; only the record that upstream was merged is.
+`repair: ready` names a branch whose one commit changes no file (`repair-tree: unchanged`) and records the missing parent.
+Open its pull request against `origin`, expect zero changed files, and land it under the same merge-commit rule as step 2.
+Then run `bin/fm-upstream.sh check` again: `current` goes to step 3, and `diverged` goes to step 2 for the public commits that really are new.
+`repair: failed:` is a stop: report the stated assertion to the captain and do not retry over it.
+Never run `reconcile` while the status is `ancestry-gap`; it refuses with exit 7.
 
 ## 3. Update the fleet from the private origin
 
