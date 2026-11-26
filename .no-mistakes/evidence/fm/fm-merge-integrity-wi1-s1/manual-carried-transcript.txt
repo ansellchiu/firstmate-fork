@@ -1,0 +1,27 @@
+$ fm-upstream.sh carried <REC> <base> <upstream>
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WORKTREE TANGLE - PRIMARY CHECKOUT IS ON A FEATURE BRANCH
+●  /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-carried.H84HHQ/main is on 'rec', not its default branch 'main'.
+●  A crewmate likely branched/committed in the primary instead of its own worktree.
+●  The work is SAFE on the 'rec' ref.
+●  Restore the primary to 'main':
+●      git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-carried.H84HHQ/main checkout main
+●  then re-validate 'rec' in a proper isolated worktree.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+upstream-carried-commits: 3
+upstream-carried-through: b7714fe9a72c53012d87a7ec4a27e857a651b0a7
+[exit 0] (upstream tip=b7714fe9a72c53012d87a7ec4a27e857a651b0a7)
+
+$ fm-upstream.sh carried <FEAT> <base> <upstream>
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WORKTREE TANGLE - PRIMARY CHECKOUT IS ON A FEATURE BRANCH
+●  /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-carried.H84HHQ/main is on 'rec', not its default branch 'main'.
+●  A crewmate likely branched/committed in the primary instead of its own worktree.
+●  The work is SAFE on the 'rec' ref.
+●  Restore the primary to 'main':
+●      git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-carried.H84HHQ/main checkout main
+●  then re-validate 'rec' in a proper isolated worktree.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+upstream-carried-commits: 0
+[exit 0] (upstream tip=b7714fe9a72c53012d87a7ec4a27e857a651b0a7)
+

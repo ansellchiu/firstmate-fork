@@ -1,0 +1,129 @@
++(eval):7> mkdir -p /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/home/state /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/home/data
++(eval):7> touch /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/home/state/.last-watcher-beat
++(eval):8> git init -q --bare /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/upstream.git
++(eval):8> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/upstream.git symbolic-ref HEAD refs/heads/main
++(eval):9> git clone -q /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/upstream.git /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub
++(eval):10> mkdir -p /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub/docs
++(eval):10> echo '{ "version": 1, "entries": [] }'
++(eval):10> echo v1
++(eval):11> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub add -A
++(eval):11> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub commit -qm fork
++(eval):11> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub push -q origin main
++(eval):12> git clone -q --bare /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/upstream.git /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git
++(eval):12> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git symbolic-ref HEAD refs/heads/main
++(eval):13> git clone -q /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main
++(eval):13> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main remote add upstream /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/upstream.git
++(eval):13> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main remote set-url --push upstream DISABLED
++(eval):14> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main fetch -q upstream
++(eval):14> FORK=+(eval):14> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main rev-parse HEAD
++(eval):14> FORK=f2841401c046c947929dd74db90ff79d7a41961c 
++(eval):15> echo p
++(eval):15> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main add -A
++(eval):15> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main commit -qm private
++(eval):15> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main push -q origin main
++(eval):16> n=1
++(eval):16> echo 1
++(eval):16> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub add -A
++(eval):16> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub commit -qm pub1
++(eval):16> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub push -q origin main
++(eval):16> n=2
++(eval):16> echo 2
++(eval):16> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub add -A
++(eval):16> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub commit -qm pub2
++(eval):16> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/pub push -q origin main
++(eval):17> UP=+(eval):17> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/upstream.git rev-parse main
++(eval):17> UP=ef20a1797510ae876ab786ad09109a2c975e7e6c 
++(eval):17> BR=fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1 
++(eval):18> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main fetch -q upstream
++(eval):18> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main checkout -q -b fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1
++(eval):18> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main merge -q --no-ff upstream/main -m reconcile
++(eval):18> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main push -q origin fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1
++(eval):19> HEADSHA=+(eval):19> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main rev-parse HEAD
++(eval):19> HEADSHA=b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 
++(eval):19> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main checkout -q main
++(eval):21> git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/main update-ref refs/remotes/upstream/main f2841401c046c947929dd74db90ff79d7a41961c
++(eval):22> set +x
+$ fm-upstream.sh carried b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 main upstream/main
+carried: unresolvable: main
+[exit 2]
+
+$ fm-upstream.sh carried b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 main ef20a1797510ae876ab786ad09109a2c975e7e6c
+carried: unresolvable: main
+[exit 2]
+
+$ fm-upstream.sh carried nosuchrev main ef20a1797510ae876ab786ad09109a2c975e7e6c
+carried: unresolvable: nosuchrev
+[exit 2]
+
+$ fm-upstream.sh carried b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 main
+usage: fm-upstream.sh [check]
+       fm-upstream.sh reconcile [--branch <name>] [--worktree <dir>]
+       fm-upstream.sh cleanup --worktree <dir>
+       fm-upstream.sh carried <head> <base> <upstream>
+       fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
+       fm-upstream.sh pr-landed --through <full-sha> --base <branch>
+[exit 1]
+
+$ fm-upstream.sh pr-guard --repo-url /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git --pr-ref refs/heads/fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1 --head b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 --base main
+upstream-guard: carries
+upstream-carried-commits: 2
+upstream-carried-through: ef20a1797510ae876ab786ad09109a2c975e7e6c
+[exit 0]
+
+$ fm-upstream.sh pr-guard --repo-url /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git --pr-ref refs/heads/fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1 --head refs/guard/head --base main
+usage: fm-upstream.sh [check]
+       fm-upstream.sh reconcile [--branch <name>] [--worktree <dir>]
+       fm-upstream.sh cleanup --worktree <dir>
+       fm-upstream.sh carried <head> <base> <upstream>
+       fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
+       fm-upstream.sh pr-landed --through <full-sha> --base <branch>
+[exit 1]
+
+$ fm-upstream.sh pr-guard --repo-url /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git --pr-ref refs/heads/fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1 --head b23dd7c6b7e3 --base main
+usage: fm-upstream.sh [check]
+       fm-upstream.sh reconcile [--branch <name>] [--worktree <dir>]
+       fm-upstream.sh cleanup --worktree <dir>
+       fm-upstream.sh carried <head> <base> <upstream>
+       fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
+       fm-upstream.sh pr-landed --through <full-sha> --base <branch>
+[exit 1]
+
+$ fm-upstream.sh pr-guard --repo-url /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git --pr-ref refs/heads/main --head b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 --base main
+upstream-guard: unknown: head b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 is not available from refs/heads/main
+[exit 0]
+
+$ fm-upstream.sh pr-guard --repo-url https://example.invalid/other/repo --pr-ref refs/heads/fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1 --head b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 --base main
+upstream-guard: not-applicable: https://example.invalid/other/repo is not this home's origin
+[exit 0]
+
+$ fm-upstream.sh pr-guard --repo-url /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/origin.git --pr-ref refs/heads/fm/fm-upstream-reconcile-ef20a1797510ae876ab786ad09109a2c975e7e6c-s1 --head b23dd7c6b7e3d8a2b34f9be5e5d62589b53d1b85 --base main
+fatal: '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi1-manual.ilTmEa/nope.git' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+upstream-guard: unknown: public upstream unreachable
+[exit 0]
+
+$ fm-upstream.sh pr-landed --through ef20a1797510ae876ab786ad09109a2c975e7e6c --base main
+upstream-ancestry: lost
+[exit 0]
+
+$ fm-upstream.sh pr-landed --through 0123456789012345678901234567890123456789 --base main
+upstream-ancestry: unknown: unresolvable 0123456789012345678901234567890123456789
+[exit 0]
+
+--- FM_ROOT refs/HEAD and files changed under FM_ROOT/.git or FM_HOME during guard verbs:
+(no change)
+--- squash-merge the reconcile branch onto origin main, then pr-landed
+$ fm-upstream.sh pr-landed --through ef20a1797510ae876ab786ad09109a2c975e7e6c --base main
+upstream-ancestry: lost
+[exit 0]
+
+--- real merge commit onto origin main, then pr-landed
+$ fm-upstream.sh pr-landed --through ef20a1797510ae876ab786ad09109a2c975e7e6c --base main
+upstream-ancestry: landed
+[exit 0]
+
+(eval):51: no matches found: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-upstream-scratch.*
+leftover scratch dirs:        0
