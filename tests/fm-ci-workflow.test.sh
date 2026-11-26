@@ -752,16 +752,51 @@ RUBY
 # FM_UPSTREAM_URL set, stays idle otherwise, and fails only on ancestry-gap.
 test_upstream_ancestry_runs_only_on_push_when_configured() {
   local runs
-  ruby -ryaml -e '
+  ruby -ryaml -ropen3 -rtmpdir -e "$EXPRESSION_RUBY" -e "$CONTEXT_RUBY" -e '
 job = YAML.load_file(ARGV[0]).fetch("jobs").fetch("upstream-ancestry")
 checkout = job.fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
 raise "upstream-ancestry needs actions/checkout" unless checkout
 raise "upstream-ancestry checkout must use fetch-depth 0" unless checkout.dig("with", "fetch-depth") == 0
-script = job.fetch("steps").map { |step| step["run"].to_s }.join("\n")
-raise "upstream-ancestry must grep for upstream-status: ancestry-gap" unless script.include?("upstream-status: ancestry-gap")
-message = "main carries a public upstream merge without its ancestry; run bin/fm-upstream.sh repair-ancestry"
-raise "upstream-ancestry must fail with the repair message" unless script.include?(message)
-' "$CI_WORKFLOW" || fail "upstream-ancestry job is missing or does not fail on ancestry-gap"
+steps = job.fetch("steps").select { |step| step.key?("run") }
+raise "upstream-ancestry needs executable steps" if steps.empty?
+context = simulated_context("CI", ["event=push", "upstream_url=https://example.com/upstream.git"])
+message = "::error::main carries a public upstream merge without its ancestry; run bin/fm-upstream.sh repair-ancestry"
+cases = %w[not-compared current contained diverged].map { |s| ["upstream-status: #{s}", 0, 0, false] }
+cases += [
+  ["upstream-status: ancestry-gap", 0, 1, true],
+  ["upstream-topology: same-repo-as-origin", 2, 2, false],
+  ["upstream-status: current\ninventory: unavailable", 5, 5, false],
+  ["upstream-status: ancestry-gap\ninventory: unavailable", 5, 1, true],
+]
+Dir.mktmpdir("fm-ci-upstream-", ARGV[1]) do |root|
+  Dir.mkdir(File.join(root, "bin"))
+  File.write(File.join(root, "bin/git"), "#!/usr/bin/env bash\nexit 0\n")
+  File.write(File.join(root, "bin/fm-upstream.sh"), <<~SH)
+    #!/usr/bin/env bash
+    [ "$#" -eq 1 ] && [ "$1" = check ] || exit 99
+    [ "$FM_HOME" = "$RUNNER_TEMP/fm-home" ] || exit 98
+    printf "%s\\n" "$CHECK_OUTPUT"
+    exit "$CHECK_RC"
+  SH
+  File.chmod(0755, File.join(root, "bin/git"), File.join(root, "bin/fm-upstream.sh"))
+  cases.each do |output, rc, expected_rc, gap|
+    env = {"PATH" => "#{root}/bin:#{ENV.fetch("PATH")}", "RUNNER_TEMP" => root,
+           "CHECK_OUTPUT" => output, "CHECK_RC" => rc.to_s}
+    actual = ""
+    result = nil
+    steps.each do |step|
+      step_env = step.fetch("env", {}).transform_values { |v| interpolate(v, context) }
+      text, result = Open3.capture2e(env.merge(step_env), "bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", step.fetch("run"), chdir: root)
+      actual += text
+      break unless result.success?
+    end
+    raise "#{output} (rc #{rc}): expected exit #{expected_rc}, got #{result.exitstatus}: #{actual}" unless result.exitstatus == expected_rc
+    lines = actual.lines.map(&:chomp)
+    raise "check diagnostics were suppressed: #{actual}" unless output.lines.map(&:chomp).all? { |line| lines.include?(line) }
+    raise "incorrect ancestry repair diagnostic: #{actual}" unless lines.include?(message) == gap
+  end
+end
+' "$CI_WORKFLOW" "$ROOT" || fail "upstream-ancestry job is missing or violates the check status contract"
   runs=$(job_runs_under upstream-ancestry event=push upstream_url=https://github.com/kunchenguid/firstmate) \
     || fail "could not resolve upstream-ancestry on a configured push"
   [ "$runs" = true ] || fail "a push with FM_UPSTREAM_URL set must run upstream-ancestry, got $runs"

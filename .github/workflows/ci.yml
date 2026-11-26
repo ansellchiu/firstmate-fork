@@ -671,12 +671,14 @@ jobs:
           git remote add upstream "$FM_UPSTREAM_URL"
           git remote set-url --push upstream DISABLED
           git remote set-head origin main
-          out=$(FM_HOME="$RUNNER_TEMP/fm-home" bin/fm-upstream.sh check)
+          rc=0
+          out=$(FM_HOME="$RUNNER_TEMP/fm-home" bin/fm-upstream.sh check) || rc=$?
           printf '%s\n' "$out"
           if printf '%s\n' "$out" | grep -qx 'upstream-status: ancestry-gap'; then
             echo "::error::main carries a public upstream merge without its ancestry; run bin/fm-upstream.sh repair-ancestry"
             exit 1
           fi
+          exit "$rc"
 
   # The Full suite verdict: one check that fails until an outside PR has the
   # full-ci go-ahead and otherwise fails when any lane failed or was cancelled.
