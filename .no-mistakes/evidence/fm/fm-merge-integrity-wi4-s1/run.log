@@ -1,0 +1,15 @@
+fixture: upstream u3=76f96ced63b6d7e6cfa24a806b49b5c7e23e2640 carry_head=fe8cdf4a646ae05016b5e01c354235e314b9c05d clear_head=d66e56ed5faf210e75465f156bb2951a587e14cb
+== live-fj-carry-default-squash: exit=1
+== live-fj-carry-explicit-rebase: exit=1
+== live-fj-carry-merge-commit: exit=0
+== live-fj-clear-default-squash: exit=0
+== live-gl-carry: exit=1
+== live-gl-carry-with-merge-flag: exit=1
+== live-gl-clear: exit=0
+== live-gl-upstream-unreachable: exit=1
+ok - M7 Forgejo's default squash is refused when the pull request carries upstream commits
+ok - M8 a Forgejo merge commit is allowed when the pull request carries upstream commits
+ok - M9 a GitLab merge request that carries upstream commits is refused
+ok - M1 default squash is refused when the pull request carries upstream commits
+ok - M4 a merge commit is allowed when the pull request carries upstream commits
+ok - M6 an unchecked pull request is refused unless the method is a merge commit

@@ -1,0 +1,25 @@
+$ fm-pr-merge.sh task-x1 https://forgejo.example/fixture/fixture-repo/pulls/10
+exit=0
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://forgejo.example/fixture/fixture-repo/pulls/10 is open and mergeable, with a successful combined status at head d66e56ed5faf210e75465f156bb2951a587e14cb
+--- stdout
+armed: state/task-x1.check.sh
+--- real pr-guard/pr-landed calls
+--- pr-guard -> rc=0
+upstream-guard: clear
+--- forge log
+login list --output json
+login list --output json
+api --login fm-fixture --repo fixture/fixture-repo /repos/{owner}/{repo}
+api --login fm-fixture --repo fixture/fixture-repo /repos/{owner}/{repo}/pulls/10
+api --login fm-fixture --repo fixture/fixture-repo /repos/{owner}/{repo}/commits/d66e56ed5faf210e75465f156bb2951a587e14cb/status?limit=50&page=1
+api --login fm-fixture --repo fixture/fixture-repo /repos/{owner}/{repo}/commits/d66e56ed5faf210e75465f156bb2951a587e14cb/status?limit=50&page=2
+api --login fm-fixture --repo fixture/fixture-repo -X POST /repos/{owner}/{repo}/pulls/10/merge -f Do=squash -f head_commit_id=d66e56ed5faf210e75465f156bb2951a587e14cb
+api --login fm-fixture --repo fixture/fixture-repo /repos/{owner}/{repo}/pulls/10

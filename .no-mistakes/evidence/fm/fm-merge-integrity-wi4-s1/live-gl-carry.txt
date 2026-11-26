@@ -1,0 +1,21 @@
+$ fm-pr-merge.sh task-x1 https://gitlab.example/group/subgroup/project/-/merge_requests/7
+exit=1
+--- stderr
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+verified: https://gitlab.example/group/subgroup/project/-/merge_requests/7 is open and mergeable, with a successful pipeline at head fe8cdf4a646ae05016b5e01c354235e314b9c05d
+error: refusing to merge https://gitlab.example/group/subgroup/project/-/merge_requests/7: it carries public upstream commits, or that could not be ruled out (carries), and this script cannot prove which merge method GitLab will apply; merge it on the forge with a merge commit
+--- stdout
+armed: state/task-x1.check.sh
+--- real pr-guard/pr-landed calls
+--- pr-guard -> rc=0
+upstream-guard: carries
+upstream-carried-commits: 2
+upstream-carried-through: 76f96ced63b6d7e6cfa24a806b49b5c7e23e2640
+--- forge log
+GITLAB_HOST=gitlab.example mr view 7 -R https://gitlab.example/group/subgroup/project -F json
