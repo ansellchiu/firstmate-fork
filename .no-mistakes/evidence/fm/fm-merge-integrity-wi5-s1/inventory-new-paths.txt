@@ -1,0 +1,15 @@
+$ bin/fm-private-divergence.sh   # real inventory
+inventory: ok
+inventory-entries: 75
+inventory-entry: upstream-reconciliation ok
+[exit ]
+paths: bin/fm-upstream-guard-lib.sh bin/fm-pr-merge.sh tests/fm-pr-merge.test.sh .github/workflows/ci.yml
+intent-tail: equest that carries public upstream commits must land as a merge commit; the merge script refuses any other method, and the check reports a squashed reconciliation as an ancestry gap with a content-free repair.
+tracked: bin/fm-upstream-guard-lib.sh
+tracked: bin/fm-pr-merge.sh
+tracked: tests/fm-pr-merge.test.sh
+tracked: .github/workflows/ci.yml
+$ bin/fm-private-divergence.sh --inventory <copy with bin/fm-pr-merge.sh misspelled>
+inventory: attention
+inventory-entry: upstream-reconciliation stale-paths: bin/fm-pr-merge-MISSING.sh
+[exit ]

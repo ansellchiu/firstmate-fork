@@ -1,0 +1,71 @@
+=== S1: check on a diverged fork, then reconcile (step 2) ===
+upstream-status: diverged
+[exit 0]
+reconcile-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5.KZzqBe/rwt
+reconcile-branch: fm-reconcile-test
+private-commits: preserved
+reconcile-merged-commits: 3
+reconcile-upstream-tip: 2ca9dd66d9af7c45c5eb3639c8982785e361c8a4
+merge-method-required: merge
+reconcile: ready
+[exit 0]
+=== S2: documented pre-approval carried check, run literally from the reconcile worktree ===
+$ bin/fm-upstream.sh carried 784f537cc42513255d29583c479979dc2d7b64c0 "$(git rev-parse origin/main)" 2ca9dd66d9af7c45c5eb3639c8982785e361c8a4
+upstream-carried-commits: 3
+upstream-carried-through: 2ca9dd66d9af7c45c5eb3639c8982785e361c8a4
+[exit 0]
+compare: upstream-carried-commits=3 reconcile-merged-commits=3 -> EQUAL
+=== S3 (adversarial): ref name instead of sha, as the doc warns ===
+carried: unresolvable: origin/main
+[exit 2]
+=== S4 (adversarial): branch rewritten (squashed) on its way to the PR -> carried 0 ===
+upstream-carried-commits: 0
+[exit 0]
+=== S5: reconciliation landed as squash -> check reports ancestry-gap; reconcile refuses exit 7 ===
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: 2ca9dd66d9af7c45c5eb3639c8982785e361c8a4
+upstream-ancestry-gap-commits: 3
+upstream-ancestry-gap-candidate: 784f537cc42513255d29583c479979dc2d7b64c0
+upstream-ancestry-gap-proof: tip aac3b21bc58845d1aea4a29f8441679475724cf2
+[exit 0]
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: 2ca9dd66d9af7c45c5eb3639c8982785e361c8a4
+upstream-ancestry-gap-commits: 3
+upstream-ancestry-gap-candidate: 784f537cc42513255d29583c479979dc2d7b64c0
+upstream-ancestry-gap-proof: tip aac3b21bc58845d1aea4a29f8441679475724cf2
+reconcile: refused: ancestry-gap through 2ca9dd6, upstream is already present by content but not by ancestry
+reconcile-recovery: bin/fm-upstream.sh repair-ancestry, land that pull request with a merge commit, then rerun
+[exit 7]
+=== S6: step 2a repair-ancestry -> repair: ready, repair-tree unchanged; land as merge commit; check again ===
+$ fm-upstream.sh repair-ancestry --branch fm-repair --worktree /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5.KZzqBe/rep
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5.KZzqBe/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5.KZzqBe/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 2ca9dd6
+origin-ref: origin/main aac3b21
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: 2ca9dd66d9af7c45c5eb3639c8982785e361c8a4
+upstream-ancestry-gap-commits: 3
+upstream-ancestry-gap-candidate: 784f537cc42513255d29583c479979dc2d7b64c0
+upstream-ancestry-gap-proof: tip aac3b21bc58845d1aea4a29f8441679475724cf2
+active-checkout: unchanged
+repair-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5.KZzqBe/rep
+repair-branch: fm-repair
+repair-tree: unchanged
+repair-parents: aac3b21bc58845d1aea4a29f8441679475724cf2 784f537cc42513255d29583c479979dc2d7b64c0
+merge-method-required: merge
+repair: ready
+[exit 0]
+repair branch parents: 29945ab6c3744a47c4a02e6d826724e9dfd5b463 aac3b21bc58845d1aea4a29f8441679475724cf2 784f537cc42513255d29583c479979dc2d7b64c0
+files changed vs origin/main: 0
+carried on repair PR: upstream-carried-commits: 3
+upstream-status: current
+[exit 0]
+=== S7: new genuinely public commit after repair -> diverged (step 2) ===
+upstream-status: diverged
+[exit 0]

@@ -1,0 +1,72 @@
+
+===== A1 step 1: check on a world with 2 new public commits =====
+upstream-new-commits: 2
+upstream-status: diverged
+reconcile-required: yes
+[exit 0]
+
+===== A2 step 2: reconcile =====
+pr-target: origin /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi5.fXf6Zm/A/origin.git
+reconcile-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi5.fXf6Zm/A/home/state/upstream-reconcile/fm-upstream-reconcile-8141bf2
+reconcile-branch: fm/upstream-reconcile-8141bf2
+private-commits: preserved
+active-checkout: unchanged
+reconcile-merged-commits: 2
+reconcile-upstream-tip: 8141bf295b5af44499129705dd8dab5b1d7e04f5
+merge-method-required: merge
+reconcile: ready
+[exit 0]
+
+===== A3 documented pre-approval check, verbatim form: carried <pr-head> "$(git rev-parse origin/main)" <upstream-tip> =====
+upstream-carried-commits: 2
+upstream-carried-through: 8141bf295b5af44499129705dd8dab5b1d7e04f5
+[exit 0] reconcile-merged-commits was: 2
+
+===== A4 caution in the doc: passing the ref name instead =====
+carried: unresolvable: origin/main
+[exit 2]
+
+===== A5 adversarial: branch rewritten (squashed) on its way to the PR =====
+upstream-carried-commits: 0
+[exit 0]
+
+===== A6 land as a merge commit, then check =====
+upstream-status: current
+[exit 0]
+
+===== B1 adversarial: reconcile PR landed by SQUASH, then step 1 check =====
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: ba0b9197c91ef3c6291834d5b569274fa17419a6
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 35520d1412643c914f5c140d78ec56503cc33fbe
+upstream-ancestry-gap-proof: tip 7699bd832461908f1d3afc7a7620325bc85f51fa
+reconcile-required: no
+ancestry-repair: bin/fm-upstream.sh repair-ancestry
+[exit 0]
+
+===== B2 adversarial: run reconcile while status is ancestry-gap (doc: refuses with exit 7) =====
+reconcile: refused: ancestry-gap through ba0b919, upstream is already present by content but not by ancestry
+reconcile-recovery: bin/fm-upstream.sh repair-ancestry, land that pull request with a merge commit, then rerun
+[exit 7]
+
+===== B3 step 2a: repair-ancestry =====
+active-checkout: unchanged
+repair-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-wi5.fXf6Zm/B/home/state/upstream-reconcile/fm-upstream-ancestry-repair-ba0b919
+repair-branch: fm/upstream-ancestry-repair-ba0b919
+repair-tree: unchanged
+repair-parents: 7699bd832461908f1d3afc7a7620325bc85f51fa 35520d1412643c914f5c140d78ec56503cc33fbe
+merge-method-required: merge
+repair: ready
+[exit 0]
+
+===== B4 PR against origin: expected zero changed files =====
+changed files: 0
+
+===== B5 step 2a: check again after merge-commit landing =====
+upstream-status: current
+[exit 0]
+
+===== B6 new public commit after repair: check routes to diverged (step 2) =====
+upstream-new-commits: 1
+upstream-status: diverged
+[exit 0]

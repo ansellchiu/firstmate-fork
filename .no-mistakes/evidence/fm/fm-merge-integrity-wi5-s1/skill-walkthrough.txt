@@ -1,0 +1,181 @@
+== Step 1: check (two genuinely new public commits)
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 99e4673
+origin-ref: origin/main 5bd8e3e
+upstream-new-commits: 2
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: 527d9a9 public-one
+upstream-commit: 99e4673 public-two
+reconcile-required: yes
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared d75e57cae29e4cd4c5c75373b42a399c3340fad2..origin/main vs d75e57cae29e4cd4c5c75373b42a399c3340fad2..upstream/main
+inventory-uncovered-count: 0
+[exit 0]
+== Step 2: reconcile
+$ fm-upstream.sh reconcile --worktree /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/rwt
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 99e4673
+origin-ref: origin/main 5bd8e3e
+upstream-new-commits: 2
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: 527d9a9 public-one
+upstream-commit: 99e4673 public-two
+pr-target: origin /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+push-to-upstream: never
+reconcile-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/rwt
+reconcile-branch: fm/upstream-reconcile-99e4673
+private-commits: preserved
+active-checkout: unchanged
+reconcile-merged-commits: 2
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared d75e57cae29e4cd4c5c75373b42a399c3340fad2..HEAD vs d75e57cae29e4cd4c5c75373b42a399c3340fad2..upstream/main
+inventory-uncovered-count: 0
+reconcile-upstream-tip: 99e46734db814c7f5e4f9b0460f4520e2541599f
+merge-method-required: merge
+reconcile: ready
+[exit 0]
+== Step 2 pre-approval: carried on the PR head (expect = reconcile-merged-commits 2)
+$ fm-upstream.sh carried 0cc1ec02d079ef26320c1efa7b674bf1db7670c8 origin/main 99e46734db814c7f5e4f9b0460f4520e2541599f
+carried: unresolvable: origin/main
+[exit 2]
+== Adversarial: branch rewritten (squashed) before the PR -> carried must say 0
+$ fm-upstream.sh carried eab2e23ef13ea3f195062e429624be82cf89ff89 origin/main 99e46734db814c7f5e4f9b0460f4520e2541599f
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WORKTREE TANGLE - PRIMARY CHECKOUT IS ON A FEATURE BRANCH
+●  /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/main is on 'squashed', not its default branch 'main'.
+●  A crewmate likely branched/committed in the primary instead of its own worktree.
+●  The work is SAFE on the 'squashed' ref.
+●  Restore the primary to 'main':
+●      git -C /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/main checkout main
+●  then re-validate 'squashed' in a proper isolated worktree.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+carried: unresolvable: origin/main
+[exit 2]
+== Adversarial: land the reconcile by SQUASH onto origin main (what the forge squash button does)
+== Step 1 again: check (expect ancestry-gap)
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 99e4673
+origin-ref: origin/main eab2e23
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: 99e46734db814c7f5e4f9b0460f4520e2541599f
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 0cc1ec02d079ef26320c1efa7b674bf1db7670c8
+upstream-ancestry-gap-proof: tip eab2e23ef13ea3f195062e429624be82cf89ff89
+reconcile-required: no
+ancestry-repair: bin/fm-upstream.sh repair-ancestry
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared 99e46734db814c7f5e4f9b0460f4520e2541599f..origin/main vs 99e46734db814c7f5e4f9b0460f4520e2541599f..upstream/main
+inventory-uncovered-count: 0
+[exit 0]
+== Step 2a guard: reconcile while ancestry-gap (expect exit 7)
+$ fm-upstream.sh reconcile --worktree /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/rwt2
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 99e4673
+origin-ref: origin/main eab2e23
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: 99e46734db814c7f5e4f9b0460f4520e2541599f
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 0cc1ec02d079ef26320c1efa7b674bf1db7670c8
+upstream-ancestry-gap-proof: tip eab2e23ef13ea3f195062e429624be82cf89ff89
+reconcile: refused: ancestry-gap through 99e4673, upstream is already present by content but not by ancestry
+reconcile-recovery: bin/fm-upstream.sh repair-ancestry, land that pull request with a merge commit, then rerun
+[exit 7]
+== Step 2a: repair-ancestry
+$ fm-upstream.sh repair-ancestry --worktree /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/fix
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 99e4673
+origin-ref: origin/main eab2e23
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: 99e46734db814c7f5e4f9b0460f4520e2541599f
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 0cc1ec02d079ef26320c1efa7b674bf1db7670c8
+upstream-ancestry-gap-proof: tip eab2e23ef13ea3f195062e429624be82cf89ff89
+active-checkout: unchanged
+repair-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/fix
+repair-branch: fm/upstream-ancestry-repair-99e4673
+repair-tree: unchanged
+repair-parents: eab2e23ef13ea3f195062e429624be82cf89ff89 0cc1ec02d079ef26320c1efa7b674bf1db7670c8
+merge-method-required: merge
+repair: ready
+[exit 0]
+-- repair commit parents and changed files vs origin/main (expect zero changed files):
+parents: eab2e23ef13ea3f195062e429624be82cf89ff89 0cc1ec02d079ef26320c1efa7b674bf1db7670c8
+changed-files: 0
+-- land repair as a MERGE commit (--no-ff) onto origin main
+== Step 2a then: check again (expect current)
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 99e4673
+origin-ref: origin/main 3d5d361
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: current
+reconcile-required: no
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared 99e46734db814c7f5e4f9b0460f4520e2541599f..origin/main vs 99e46734db814c7f5e4f9b0460f4520e2541599f..upstream/main
+inventory-uncovered-count: 0
+[exit 0]
+== New public commit after repair: check (expect diverged -> step 2, only the new commit)
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//wi5-walk.uuXVQ2/w/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 79f84b3
+origin-ref: origin/main 3d5d361
+upstream-new-commits: 1
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: 79f84b3 public-three
+reconcile-required: yes
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared 99e46734db814c7f5e4f9b0460f4520e2541599f..origin/main vs 99e46734db814c7f5e4f9b0460f4520e2541599f..upstream/main
+inventory-uncovered-count: 0
+[exit 0]

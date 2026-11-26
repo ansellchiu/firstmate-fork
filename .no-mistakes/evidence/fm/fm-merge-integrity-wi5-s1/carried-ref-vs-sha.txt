@@ -1,0 +1,13 @@
+$ fm-upstream.sh carried <reconcile-head> origin/main <upstream-tip>
+carried: unresolvable: origin/main
+[exit 2]
+$ fm-upstream.sh carried <reconcile-head> refs/remotes/origin/main <upstream-tip>
+carried: unresolvable: refs/remotes/origin/main
+[exit 2]
+$ fm-upstream.sh carried <reconcile-head> 5bd8e3e8909bcbf8c9ad1c91fdb60d1da6e500c3 <upstream-tip>
+upstream-carried-commits: 2
+upstream-carried-through: 99e46734db814c7f5e4f9b0460f4520e2541599f
+[exit 0]
+$ fm-upstream.sh carried <squashed-head> 5bd8e3e8909bcbf8c9ad1c91fdb60d1da6e500c3 <upstream-tip>   # rewritten branch
+upstream-carried-commits: 0
+[exit 0]
