@@ -463,7 +463,7 @@ SH
 write_mr_json() {
   local file=$1 kv key value
   local state=opened detail=mergeable conflicts=false discussions=true
-  local head=$MR_HEAD pipeline_sha=$MR_HEAD pipeline_status=success pipeline=present
+  local head=$MR_HEAD target_branch=main pipeline_sha=$MR_HEAD pipeline_status=success pipeline=present
   local merge_when_pipeline_succeeds=false merge_after=null
   shift
   for kv in "$@"; do
@@ -475,6 +475,7 @@ write_mr_json() {
       conflicts) conflicts=$value ;;
       discussions) discussions=$value ;;
       head) head=$value ;;
+      target_branch) target_branch=$value ;;
       pipeline_sha) pipeline_sha=$value ;;
       pipeline_status) pipeline_status=$value ;;
       pipeline) pipeline=$value ;;
@@ -490,8 +491,8 @@ write_mr_json() {
     "$state" "$detail" "$conflicts" > "$file"
   printf '"blocking_discussions_resolved":%s,"sha":"%s","head_pipeline":%s,' \
     "$discussions" "$head" "$pipeline" >> "$file"
-  printf '"merge_when_pipeline_succeeds":%s,"merge_after":%s}\n' \
-    "$merge_when_pipeline_succeeds" "$merge_after" >> "$file"
+  printf '"merge_when_pipeline_succeeds":%s,"merge_after":%s,"target_branch":"%s"}\n' \
+    "$merge_when_pipeline_succeeds" "$merge_after" "$target_branch" >> "$file"
 }
 
 # tea mock recording every invocation, so a test can prove the login and
@@ -608,7 +609,7 @@ SH
 # with named fields overridden so one case drives exactly one condition.
 write_forgejo_pr_json() {
   local file=$1 kv key value
-  local state=open mergeable=true merged=false draft=false head=$FJ_HEAD
+  local state=open mergeable=true merged=false draft=false head=$FJ_HEAD base=main
   shift
   for kv in "$@"; do
     key=${kv%%=*}
@@ -619,11 +620,12 @@ write_forgejo_pr_json() {
       merged) merged=$value ;;
       draft) draft=$value ;;
       head) head=$value ;;
+      base) base=$value ;;
       *) fail "write_forgejo_pr_json: unknown field '$key'" ;;
     esac
   done
-  printf '{"state":"%s","mergeable":%s,"merged":%s,"draft":%s,"head":{"sha":"%s"}}\n' \
-    "$state" "$mergeable" "$merged" "$draft" "$head" > "$file"
+  printf '{"state":"%s","mergeable":%s,"merged":%s,"draft":%s,"head":{"sha":"%s"},"base":{"ref":"%s"}}\n' \
+    "$state" "$mergeable" "$merged" "$draft" "$head" "$base" > "$file"
 }
 
 # write_forgejo_status_json <file> [state=<value>] [total_count=<n>]
@@ -1949,6 +1951,64 @@ test_upstream_guard_refuses_default_method_when_check_is_unknown() {
   assert_no_grep 'pr merge' "$case_dir/gh.log" \
     "M6 does not ask GitHub to merge"
   pass "M6 an unchecked pull request is refused unless the method is a merge commit"
+}
+
+# M7-M9. Forgejo and GitLab ask the same stub. A Forgejo merge is allowed
+# only for the merge style; GitLab is refused outright because the script
+# cannot see which method that forge will apply.
+prepare_forgejo_upstream_guard_case() {
+  local name=$1 kind=$2 case_dir
+  case_dir=$(make_forgejo_case "$name")
+  write_upstream_guard_stub "$case_dir" "$kind"
+  printf '%s\n' "$case_dir"
+}
+
+prepare_gitlab_upstream_guard_case() {
+  local name=$1 kind=$2 case_dir
+  case_dir=$(make_gitlab_case "$name")
+  write_upstream_guard_stub "$case_dir" "$kind"
+  printf '%s\n' "$case_dir"
+}
+
+test_upstream_guard_refuses_forgejo_default_squash_when_pr_carries() {
+  local case_dir
+  case_dir=$(prepare_forgejo_upstream_guard_case upstream-guard-m7 carries)
+  printf '%s\n' '{"default_merge_style":"squash"}' > "$case_dir/tea-repo.json"
+  run_upstream_guard_merge "$case_dir" task-x1 "$FJ_URL"
+  expect_code 1 "$UPSTREAM_GUARD_RC" "M7 carried Forgejo pull request with the default squash style"
+  assert_grep 'carries 51 public upstream commits (through 427056c4)' "$case_dir/stderr" \
+    "M7 names the carried count and short upstream commit"
+  assert_grep 'rerun with: -- --merge' "$case_dir/stderr" \
+    "M7 names the merge-commit remedy"
+  [ -z "$(tea_merge_line "$case_dir/tea.log")" ] \
+    || fail "M7 does not ask Forgejo to merge"
+  pass "M7 Forgejo's default squash is refused when the pull request carries upstream commits"
+}
+
+test_upstream_guard_allows_forgejo_merge_commit_when_pr_carries() {
+  local case_dir merge_line
+  case_dir=$(prepare_forgejo_upstream_guard_case upstream-guard-m8 carries)
+  run_upstream_guard_merge "$case_dir" task-x1 "$FJ_URL" -- --merge
+  expect_code 0 "$UPSTREAM_GUARD_RC" "M8 carried Forgejo pull request with --merge"
+  merge_line=$(tea_merge_line "$case_dir/tea.log")
+  case "$merge_line" in
+    *'Do=merge'*) ;;
+    *) fail "M8 merge call was not logged with Do=merge: '$merge_line'" ;;
+  esac
+  pass "M8 a Forgejo merge commit is allowed when the pull request carries upstream commits"
+}
+
+test_upstream_guard_refuses_gitlab_when_pr_carries() {
+  local case_dir
+  case_dir=$(prepare_gitlab_upstream_guard_case upstream-guard-m9 carries)
+  run_upstream_guard_merge "$case_dir" task-x1 "$MR_URL"
+  expect_code 1 "$UPSTREAM_GUARD_RC" "M9 carried GitLab merge request"
+  assert_grep 'error: refusing to merge '"$MR_URL"': it carries public upstream commits, or that could not be ruled out (carries), and this script cannot prove which merge method GitLab will apply; merge it on the forge with a merge commit' \
+    "$case_dir/stderr" \
+    "M9 uses the GitLab refusal"
+  [ -z "$(glab_merge_line "$case_dir/glab.log")" ] \
+    || fail "M9 does not ask GitLab to merge"
+  pass "M9 a GitLab merge request that carries upstream commits is refused"
 }
 
 test_missing_meta_refuses_before_merge() {
@@ -3733,6 +3793,9 @@ test_upstream_guard_refuses_explicit_rebase_when_pr_carries
 test_upstream_guard_allows_merge_commit_when_pr_carries
 test_upstream_guard_keeps_default_squash_when_pr_is_clear
 test_upstream_guard_refuses_default_method_when_check_is_unknown
+test_upstream_guard_refuses_forgejo_default_squash_when_pr_carries
+test_upstream_guard_allows_forgejo_merge_commit_when_pr_carries
+test_upstream_guard_refuses_gitlab_when_pr_carries
 test_missing_meta_refuses_before_merge
 test_malformed_url_refuses_before_merge
 test_help_prints_usage_and_exits_zero

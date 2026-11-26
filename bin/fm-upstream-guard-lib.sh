@@ -105,6 +105,26 @@ fm_upstream_guard_refuse() {
   return 0
 }
 
+# fm_upstream_guard_refuse_gitlab <url>
+#
+# GitLab does not tell this script which merge method it will apply, so a
+# carrying or unchecked merge request is refused outright. Returns 0 for
+# not-applicable and clear. The parenthetical is the guard's reason, or the
+# verdict when the guard stated none.
+fm_upstream_guard_refuse_gitlab() {
+  local url=${1:-} reason
+  case "${FM_UPSTREAM_GUARD:-}" in
+    not-applicable|clear) return 0 ;;
+  esac
+  reason=${FM_UPSTREAM_GUARD_REASON:-}
+  if [ -z "$reason" ]; then
+    reason=${FM_UPSTREAM_GUARD:-unknown}
+  fi
+  printf 'error: refusing to merge %s: it carries public upstream commits, or that could not be ruled out (%s), and this script cannot prove which merge method GitLab will apply; merge it on the forge with a merge commit\n' \
+    "$url" "$reason" >&2
+  return 1
+}
+
 # fm_upstream_guard_landed <url> <base>
 #
 # After a merge this run reported as landed, warns when a carried upstream
