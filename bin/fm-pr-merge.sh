@@ -24,6 +24,10 @@
 # With the opt-in config/pr-squash-summary presence flag, a GitHub squash merge
 # whose caller passed no subject or body takes the PR title and the body's
 # "## What Changed" section as its commit text; github_add_squash_summary owns it.
+# A pull request in this home's own origin that carries public upstream commits
+# is refused for every method except --merge, and so is one whose upstream
+# content could not be checked; bin/fm-upstream.sh pr-guard owns that test and
+# bin/fm-upstream-guard-lib.sh owns the refusal.
 # On Forgejo the merge style defaults to the repository's own
 # default_merge_style, read live, and a merge is refused when it cannot be read.
 # A GitHub merge is refused unless every pre-merge condition holds, each read
@@ -257,6 +261,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 . "$SCRIPT_DIR/fm-merge-authority-lib.sh"
 # shellcheck source=bin/fm-afk-contract.sh
 . "$SCRIPT_DIR/fm-afk-contract.sh"
+# shellcheck source=bin/fm-upstream-guard-lib.sh
+. "$SCRIPT_DIR/fm-upstream-guard-lib.sh"
 
 if [ "$#" -lt 2 ]; then
   echo "error: invalid PR merge request" >&2
@@ -1886,6 +1892,8 @@ case "$PROVIDER" in
       fi
       exit 1
     fi
+    fm_upstream_guard_eval "https://$PR_HOST/$PR_OWNER/$PR_REPO" "refs/pull/$PR_NUMBER/head" "$FM_PR_MERGE_HEAD" "$FM_PR_GITHUB_BASE"
+    fm_upstream_guard_refuse "$URL" "${FM_PR_GITHUB_CALLER_METHOD:-squash}" "$FM_PR_GITHUB_AUTO_REQUESTED" || exit 1
     # The away record is locked first, so this last presence and authority read
     # and the forge command below share one live-owner critical section.
     hold_away_record_for_merge || exit 1
@@ -1932,6 +1940,7 @@ case "$PROVIDER" in
     if [ "$FM_PR_GITHUB_MERGED" = true ]; then
       printf 'verified: %s is merged (state=%s, merged=%s, isInMergeQueue=%s)\n' \
         "$URL" "$FM_PR_GITHUB_STATE" "$FM_PR_GITHUB_MERGED" "$FM_PR_GITHUB_QUEUED"
+      fm_upstream_guard_landed "$URL" "$FM_PR_GITHUB_BASE"
     elif [ "$FM_PR_GITHUB_QUEUED" = true ]; then
       printf 'verified: %s is queued (state=%s, merged=%s, isInMergeQueue=%s)\n' \
         "$URL" "$FM_PR_GITHUB_STATE" "$FM_PR_GITHUB_MERGED" "$FM_PR_GITHUB_QUEUED"

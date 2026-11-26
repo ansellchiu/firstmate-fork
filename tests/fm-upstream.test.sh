@@ -1088,6 +1088,111 @@ test_carried_reports_the_recorded_incident() {
   pass "H1 carried reports the 51 commits of the recorded incident"
 }
 
+# --- L1-L6: upstream guard refusal ------------------------------------------
+# The library refuses a carried or unchecked pull request before the forge
+# sees it. These cases call that refusal directly.
+GUARD_URL=https://github.com/example/repo/pull/69
+GUARD_THROUGH=427056c4181c41074ad24f051f79919330df0fa5
+GUARD_SQUASH_REFUSAL='error: refusing to merge https://github.com/example/repo/pull/69: it carries 51 public upstream commits (through 427056c4) and merge method "squash" would discard their ancestry; rerun with: -- --merge'
+GUARD_REBASE_REFUSAL='error: refusing to merge https://github.com/example/repo/pull/69: it carries 51 public upstream commits (through 427056c4) and merge method "rebase" would discard their ancestry; rerun with: -- --merge'
+GUARD_UNKNOWN_REFUSAL='error: refusing to merge https://github.com/example/repo/pull/69 with merge method "squash": could not prove it carries no public upstream commits (public upstream unreachable); rerun with: -- --merge, which is safe either way'
+GUARD_AUTO_REFUSAL='error: refusing to merge https://github.com/example/repo/pull/69: it carries 51 public upstream commits and --auto can hand it to a merge queue that applies its own method; merge it synchronously with: -- --merge'
+
+load_upstream_guard() {
+  # shellcheck source=bin/fm-upstream-guard-lib.sh
+  . "$ROOT/bin/fm-upstream-guard-lib.sh"
+}
+
+guard_set_carries() {
+  FM_UPSTREAM_GUARD=carries
+  FM_UPSTREAM_GUARD_COUNT=51
+  FM_UPSTREAM_GUARD_THROUGH=$GUARD_THROUGH
+  FM_UPSTREAM_GUARD_REASON=
+}
+
+run_guard_refuse() {
+  local err_file=$1
+  shift
+  GUARD_RC=0
+  fm_upstream_guard_refuse "$@" >"$err_file.out" 2>"$err_file" || GUARD_RC=$?
+}
+
+test_upstream_guard_refuses_squash_of_carried_commits() {
+  local err="$TMP_ROOT/l1.err"
+  load_upstream_guard
+  guard_set_carries
+  run_guard_refuse "$err" "$GUARD_URL" squash false
+  expect_code 1 "$GUARD_RC" "L1 squash of carried commits"
+  assert_equals "$GUARD_SQUASH_REFUSAL" "$(cat "$err")" "L1 stderr is the squash refusal"
+  pass "L1 squash is refused when the pull request carries upstream commits"
+}
+
+test_upstream_guard_refuses_rebase_of_carried_commits() {
+  local err="$TMP_ROOT/l2.err"
+  load_upstream_guard
+  guard_set_carries
+  run_guard_refuse "$err" "$GUARD_URL" rebase false
+  expect_code 1 "$GUARD_RC" "L2 rebase of carried commits"
+  assert_equals "$GUARD_REBASE_REFUSAL" "$(cat "$err")" "L2 stderr is the rebase refusal"
+  pass "L2 rebase is refused when the pull request carries upstream commits"
+}
+
+test_upstream_guard_allows_merge_of_carried_commits() {
+  local method err
+  load_upstream_guard
+  for method in merge MERGE; do
+    err="$TMP_ROOT/l3-$method.err"
+    guard_set_carries
+    run_guard_refuse "$err" "$GUARD_URL" "$method" false
+    expect_code 0 "$GUARD_RC" "L3 method $method of carried commits"
+    assert_equals "" "$(cat "$err")" "L3 method $method prints nothing"
+    assert_equals "" "$(cat "$err.out")" "L3 method $method prints nothing on stdout"
+  done
+  pass "L3 a merge commit is allowed whether the method is spelled merge or MERGE"
+}
+
+test_upstream_guard_refuses_squash_when_check_is_unknown() {
+  local err="$TMP_ROOT/l4.err"
+  load_upstream_guard
+  FM_UPSTREAM_GUARD=unknown
+  FM_UPSTREAM_GUARD_COUNT=
+  FM_UPSTREAM_GUARD_THROUGH=
+  FM_UPSTREAM_GUARD_REASON="public upstream unreachable"
+  run_guard_refuse "$err" "$GUARD_URL" squash false
+  expect_code 1 "$GUARD_RC" "L4 squash when the guard is unknown"
+  assert_equals "$GUARD_UNKNOWN_REFUSAL" "$(cat "$err")" "L4 stderr is the unknown refusal"
+  pass "L4 squash is refused when upstream content could not be checked"
+}
+
+test_upstream_guard_allows_any_method_when_clear_or_not_applicable() {
+  local verdict method err
+  load_upstream_guard
+  for verdict in clear not-applicable; do
+    for method in squash rebase merge MERGE; do
+      err="$TMP_ROOT/l5-$verdict-$method.err"
+      FM_UPSTREAM_GUARD=$verdict
+      FM_UPSTREAM_GUARD_COUNT=
+      FM_UPSTREAM_GUARD_THROUGH=
+      FM_UPSTREAM_GUARD_REASON=
+      run_guard_refuse "$err" "$GUARD_URL" "$method" false
+      expect_code 0 "$GUARD_RC" "L5 $verdict method $method"
+      assert_equals "" "$(cat "$err")" "L5 $verdict method $method prints nothing"
+      assert_equals "" "$(cat "$err.out")" "L5 $verdict method $method prints nothing on stdout"
+    done
+  done
+  pass "L5 a clear or not-applicable pull request is merged by any method"
+}
+
+test_upstream_guard_refuses_auto_even_for_a_merge_commit() {
+  local err="$TMP_ROOT/l6.err"
+  load_upstream_guard
+  guard_set_carries
+  run_guard_refuse "$err" "$GUARD_URL" merge true
+  expect_code 1 "$GUARD_RC" "L6 auto merge of carried commits"
+  assert_equals "$GUARD_AUTO_REFUSAL" "$(cat "$err")" "L6 stderr is the auto refusal"
+  pass "L6 --auto is refused when the pull request carries upstream commits"
+}
+
 test_no_new_upstream
 test_upstream_already_contained
 test_reconcilable_divergence
@@ -1123,5 +1228,11 @@ test_pr_guard_head_not_on_pr_ref_is_unknown
 test_guard_verbs_require_full_sha
 test_pr_landed_verdicts
 test_carried_reports_the_recorded_incident
+test_upstream_guard_refuses_squash_of_carried_commits
+test_upstream_guard_refuses_rebase_of_carried_commits
+test_upstream_guard_allows_merge_of_carried_commits
+test_upstream_guard_refuses_squash_when_check_is_unknown
+test_upstream_guard_allows_any_method_when_clear_or_not_applicable
+test_upstream_guard_refuses_auto_even_for_a_merge_commit
 
 echo "# all fm-upstream tests passed"

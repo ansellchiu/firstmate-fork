@@ -1810,6 +1810,147 @@ test_extra_merge_args_forwarded() {
   pass "fm-pr-merge refuses branch deletion unless --attended-override is passed"
 }
 
+# M1-M6. The GitHub path asks pr-guard before it merges. These cases point
+# FM_UPSTREAM_GUARD_CMD at a fakebin stub that prints a fixed verdict, so the
+# refusal is decided here and gh pr merge runs only when the guard allows it.
+write_upstream_guard_stub() {
+  local case_dir=$1 kind=$2
+  case "$kind" in
+    carries)
+      cat > "$case_dir/fakebin/upstream-guard" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  pr-guard)
+    printf '%s\n' \
+      'upstream-guard: carries' \
+      'upstream-carried-commits: 51' \
+      'upstream-carried-through: 427056c4181c41074ad24f051f79919330df0fa5'
+    ;;
+  pr-landed)
+    printf '%s\n' 'upstream-ancestry: landed'
+    ;;
+esac
+exit 0
+SH
+      ;;
+    clear)
+      cat > "$case_dir/fakebin/upstream-guard" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  pr-guard)
+    printf '%s\n' 'upstream-guard: clear'
+    ;;
+  pr-landed)
+    printf '%s\n' 'upstream-ancestry: landed'
+    ;;
+esac
+exit 0
+SH
+      ;;
+    unknown)
+      cat > "$case_dir/fakebin/upstream-guard" <<'SH'
+#!/usr/bin/env bash
+case "${1:-}" in
+  pr-guard)
+    printf '%s\n' 'upstream-guard: unknown: public upstream unreachable'
+    ;;
+  pr-landed)
+    printf '%s\n' 'upstream-ancestry: landed'
+    ;;
+esac
+exit 0
+SH
+      ;;
+    *) fail "write_upstream_guard_stub: unknown kind '$kind'" ;;
+  esac
+  chmod +x "$case_dir/fakebin/upstream-guard"
+}
+
+prepare_upstream_guard_case() {
+  local name=$1 kind=$2 case_dir
+  case_dir=$(make_case "$name")
+  mkdir -p "$case_dir/wt"
+  add_gh_mocks "$case_dir" 2222222222222222222222222222222222222222
+  : > "$case_dir/gh-axi.log"
+  write_upstream_guard_stub "$case_dir" "$kind"
+  printf '%s\n' "$case_dir"
+}
+
+run_upstream_guard_merge() {
+  local case_dir=$1
+  shift
+  set +e
+  FM_UPSTREAM_GUARD_CMD="$case_dir/fakebin/upstream-guard" \
+    run_pr_merge "$case_dir" "$@" >"$case_dir/stdout" 2>"$case_dir/stderr"
+  UPSTREAM_GUARD_RC=$?
+  set -e
+}
+
+test_upstream_guard_refuses_default_method_when_pr_carries() {
+  local case_dir
+  case_dir=$(prepare_upstream_guard_case upstream-guard-m1 carries)
+  run_upstream_guard_merge "$case_dir" task-x1 https://github.com/example/repo/pull/69
+  expect_code 1 "$UPSTREAM_GUARD_RC" "M1 carried pull request with the default method"
+  assert_grep 'carries 51 public upstream commits (through 427056c4)' "$case_dir/stderr" \
+    "M1 names the carried count and short upstream commit"
+  assert_grep 'rerun with: -- --merge' "$case_dir/stderr" \
+    "M1 names the merge-commit remedy"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "M1 does not ask GitHub to merge"
+  pass "M1 default squash is refused when the pull request carries upstream commits"
+}
+
+test_upstream_guard_refuses_explicit_squash_when_pr_carries() {
+  local case_dir
+  case_dir=$(prepare_upstream_guard_case upstream-guard-m2 carries)
+  run_upstream_guard_merge "$case_dir" task-x1 https://github.com/example/repo/pull/69 -- --squash
+  expect_code 1 "$UPSTREAM_GUARD_RC" "M2 carried pull request with --squash"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "M2 does not ask GitHub to merge"
+  pass "M2 explicit squash is refused when the pull request carries upstream commits"
+}
+
+test_upstream_guard_refuses_explicit_rebase_when_pr_carries() {
+  local case_dir
+  case_dir=$(prepare_upstream_guard_case upstream-guard-m3 carries)
+  run_upstream_guard_merge "$case_dir" task-x1 https://github.com/example/repo/pull/69 -- --rebase
+  expect_code 1 "$UPSTREAM_GUARD_RC" "M3 carried pull request with --rebase"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "M3 does not ask GitHub to merge"
+  pass "M3 explicit rebase is refused when the pull request carries upstream commits"
+}
+
+test_upstream_guard_allows_merge_commit_when_pr_carries() {
+  local case_dir
+  case_dir=$(prepare_upstream_guard_case upstream-guard-m4 carries)
+  run_upstream_guard_merge "$case_dir" task-x1 https://github.com/example/repo/pull/69 -- --merge
+  expect_code 0 "$UPSTREAM_GUARD_RC" "M4 carried pull request with --merge"
+  assert_logged_gh_merge "$case_dir" 69 example/repo --merge
+  pass "M4 a merge commit is allowed when the pull request carries upstream commits"
+}
+
+test_upstream_guard_keeps_default_squash_when_pr_is_clear() {
+  local case_dir
+  case_dir=$(prepare_upstream_guard_case upstream-guard-m5 clear)
+  run_upstream_guard_merge "$case_dir" task-x1 https://github.com/example/repo/pull/69
+  expect_code 0 "$UPSTREAM_GUARD_RC" "M5 clear pull request with the default method"
+  assert_logged_gh_merge "$case_dir" 69 example/repo --squash
+  pass "M5 a pull request that carries nothing still squash-merges by default"
+}
+
+test_upstream_guard_refuses_default_method_when_check_is_unknown() {
+  local case_dir
+  case_dir=$(prepare_upstream_guard_case upstream-guard-m6 unknown)
+  run_upstream_guard_merge "$case_dir" task-x1 https://github.com/example/repo/pull/69
+  expect_code 1 "$UPSTREAM_GUARD_RC" "M6 unknown guard with the default method"
+  assert_grep 'error: refusing to merge https://github.com/example/repo/pull/69 with merge method "squash": could not prove it carries no public upstream commits (public upstream unreachable); rerun with: -- --merge, which is safe either way' \
+    "$case_dir/stderr" \
+    "M6 uses the unknown-guard refusal"
+  assert_no_grep 'pr merge' "$case_dir/gh.log" \
+    "M6 does not ask GitHub to merge"
+  pass "M6 an unchecked pull request is refused unless the method is a merge commit"
+}
+
 test_missing_meta_refuses_before_merge() {
   local case_dir fakebin rc
   case_dir="$TMP_ROOT/missing-meta"
@@ -3586,6 +3727,12 @@ test_github_verified_merge_requires_poll_recording
 test_github_queued_outcome_is_verified
 test_github_queue_required_refusal_names_retry_flags
 test_extra_merge_args_forwarded
+test_upstream_guard_refuses_default_method_when_pr_carries
+test_upstream_guard_refuses_explicit_squash_when_pr_carries
+test_upstream_guard_refuses_explicit_rebase_when_pr_carries
+test_upstream_guard_allows_merge_commit_when_pr_carries
+test_upstream_guard_keeps_default_squash_when_pr_is_clear
+test_upstream_guard_refuses_default_method_when_check_is_unknown
 test_missing_meta_refuses_before_merge
 test_malformed_url_refuses_before_merge
 test_help_prints_usage_and_exits_zero
