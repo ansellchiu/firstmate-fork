@@ -27,5 +27,6 @@ They exit 0 with `inventory: attention` so `/updatefirstmate` can surface them a
 ## When it is consulted and refreshed
 
 `bin/fm-upstream.sh` runs this check on every `/updatefirstmate` upstream check and again on the prepared reconciliation branch.
+A pull request that carries public upstream commits must land as a merge commit; the merge script refuses any other method, and the check reports a squashed reconciliation as an ancestry gap with a content-free repair.
 The [`updatefirstmate` skill](../.agents/skills/updatefirstmate/SKILL.md) owns the workflow that acts on the reported lines, including recording a review with `--refresh-reviewed`.
 Refresh an entry only in the isolated reconciliation worktree, and only for entries actually re-examined; refreshing everything by reflex is how a review record stops meaning anything.

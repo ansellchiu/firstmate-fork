@@ -25,7 +25,7 @@ The shared no-mistakes gate lifecycle boundary is summarized in [architecture.md
 | `fm-update.sh`           | Guarded self-update of firstmate and local or remote secondmate homes, reconciling redundant divergence and classifying every live mate left on the target commit for restart or fallback nudge |
 | `fm-secondmate-restart.sh` | Persist open conversational work, then restart eligible second mates or report the fallback outcome |
 | `fm-secondmate-restart-lib.sh` | Shared second-mate restart capability and persistence-request contract |
-| `fm-upstream.sh`         | Check public upstream against the private origin and prepare an isolated, never-forced reconciliation branch |
+| `fm-upstream.sh`         | Check public upstream against the private origin and prepare an isolated, never-forced reconciliation branch, report and repair an upstream merge landed without its ancestry, and answer whether a pull request carries public upstream commits |
 | `fm-private-divergence.sh` | Validate, report, and refresh the inventory of intentional private divergence from public Firstmate core |
 | `fm-on.sh`               | Execute one tracked Firstmate command in a configured remote secondmate home, using its job worker except for the doctor bootstrap |
 | `fm-remote-job-lib.sh`   | Shared bounded remote job queue, worker readiness, LaunchAgent contract, and filesystem-composed PATH |

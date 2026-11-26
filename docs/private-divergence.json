@@ -249,9 +249,13 @@
         "README.md",
         "AGENTS.md",
         "tests/fm-upstream.test.sh",
-        "tests/fm-private-divergence.test.sh"
+        "tests/fm-private-divergence.test.sh",
+        "bin/fm-upstream-guard-lib.sh",
+        "bin/fm-pr-merge.sh",
+        "tests/fm-pr-merge.test.sh",
+        ".github/workflows/ci.yml"
       ],
-      "intent": "This home has a private origin and a fetch-only public upstream, so \"origin is current\" never means \"we carry everything public upstream published\"; every self-update checks upstream first and reconciles genuinely new public commits through an isolated branch and a private pull request.",
+      "intent": "This home has a private origin and a fetch-only public upstream, so \"origin is current\" never means \"we carry everything public upstream published\"; every self-update checks upstream first and reconciles genuinely new public commits through an isolated branch and a private pull request. A pull request that carries public upstream commits must land as a merge commit; the merge script refuses any other method, and the check reports a squashed reconciliation as an ancestry gap with a content-free repair.",
       "provenance": {
         "commits": [
           "ecfcdf0"
