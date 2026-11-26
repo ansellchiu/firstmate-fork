@@ -1,0 +1,18 @@
+world: upstream tip 4d0a86edafde2b9b7539a5fca79f41dd6f952029 carry-head ef7c381d7576b09e7bf2f7ed65f4fe6c79a9bfa3 clear-head 58cd2df6ac0b4257e0349f235ef125900cb1b742
+### attended --auto --merge on a carried PR
+=== e2e-carry-attended-auto-merge: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 --attended-override -- --auto --merge -> exit 1
+--- guard verdict (real pr-guard):
+    upstream-guard: carries
+    upstream-carried-commits: 2
+    upstream-carried-through: 4d0a86edafde2b9b7539a5fca79f41dd6f952029
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head ef7c381d7576b09e7bf2f7ed65f4fe6c79a9bfa3
+    error: refusing to merge https://github.com/example/repo/pull/69: it carries 2 public upstream commits and --auto can hand it to a merge queue that applies its own method; merge it synchronously with: -- --merge
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+--- gh pr merge calls:
+
+### lost ancestry: forge mock reports merged but origin main never received the merge
+### landed ancestry: forge really creates the merge commit on origin main
+origin main now: 01f079e base; upstream tip ancestor? no
+### unknown: public upstream unreachable

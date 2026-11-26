@@ -1,0 +1,8 @@
+ok - fm-pr-merge refuses branch deletion unless --attended-override is passed
+ok - M1 default squash is refused when the pull request carries upstream commits
+ok - M2 explicit squash is refused when the pull request carries upstream commits
+ok - M3 explicit rebase is refused when the pull request carries upstream commits
+ok - M4 a merge commit is allowed when the pull request carries upstream commits
+ok - M5 a pull request that carries nothing still squash-merges by default
+ok - M6 an unchecked pull request is refused unless the method is a merge commit
+# selected done

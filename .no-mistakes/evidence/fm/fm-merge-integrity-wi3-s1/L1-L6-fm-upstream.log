@@ -1,0 +1,9 @@
+ok - G1 pr-guard reports two carried upstream commits before the squash
+ok - pr-landed distinguishes landed, lost, unresolvable and fetch failure
+ok - L1 squash is refused when the pull request carries upstream commits
+ok - L2 rebase is refused when the pull request carries upstream commits
+ok - L3 a merge commit is allowed whether the method is spelled merge or MERGE
+ok - L4 squash is refused when upstream content could not be checked
+ok - L5 a clear or not-applicable pull request is merged by any method
+ok - L6 --auto is refused when the pull request carries upstream commits
+# selected done

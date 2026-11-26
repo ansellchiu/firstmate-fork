@@ -1,0 +1,118 @@
+world: upstream tip 29098c6b5b81b506b8040300a94b3609b525c396 carry-head 87f83d62523ab4f04499e0a64529939e1959e254 clear-head 16ae478a6b147e777f713fd6c79a81adda322521
+=== e2e-carry-default: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69  -> exit 1
+--- guard verdict (real pr-guard):
+    upstream-guard: carries
+    upstream-carried-commits: 2
+    upstream-carried-through: 29098c6b5b81b506b8040300a94b3609b525c396
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+    error: refusing to merge https://github.com/example/repo/pull/69: it carries 2 public upstream commits (through 29098c6b) and merge method "squash" would discard their ancestry; rerun with: -- --merge
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+--- gh pr merge calls:
+
+=== e2e-carry-squash: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 -- --squash -> exit 1
+--- guard verdict (real pr-guard):
+    upstream-guard: carries
+    upstream-carried-commits: 2
+    upstream-carried-through: 29098c6b5b81b506b8040300a94b3609b525c396
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+    error: refusing to merge https://github.com/example/repo/pull/69: it carries 2 public upstream commits (through 29098c6b) and merge method "squash" would discard their ancestry; rerun with: -- --merge
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+--- gh pr merge calls:
+
+=== e2e-carry-rebase: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 -- --rebase -> exit 1
+--- guard verdict (real pr-guard):
+    upstream-guard: carries
+    upstream-carried-commits: 2
+    upstream-carried-through: 29098c6b5b81b506b8040300a94b3609b525c396
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+    error: refusing to merge https://github.com/example/repo/pull/69: it carries 2 public upstream commits (through 29098c6b) and merge method "rebase" would discard their ancestry; rerun with: -- --merge
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+--- gh pr merge calls:
+
+=== e2e-carry-auto-merge: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 -- --merge --auto -> exit 1
+--- guard verdict (real pr-guard):
+    upstream-guard: carries
+    upstream-carried-commits: 2
+    upstream-carried-through: 29098c6b5b81b506b8040300a94b3609b525c396
+--- stderr:
+    error: extra merge arguments must not request auto-merge, a protection bypass, or branch deletion; pass --attended-override only for an explicit captain instruction
+--- stdout (tail):
+--- gh pr merge calls:
+
+=== e2e-clear-default: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/70  -> exit 0
+--- guard verdict (real pr-guard):
+    upstream-guard: clear
+--- stderr:
+    verified: https://github.com/example/repo/pull/70 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 16ae478a6b147e777f713fd6c79a81adda322521
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+    verified: https://github.com/example/repo/pull/70 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+--- gh pr merge calls:
+    pr merge 70 --repo example/repo --match-head-commit 16ae478a6b147e777f713fd6c79a81adda322521 --squash
+
+### lost ancestry: forge mock reports merged but origin main never received the merge
+=== e2e-carry-merge-lost: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 -- --merge -> exit 0
+--- guard verdict (real pr-guard):
+    upstream-guard: carries
+    upstream-carried-commits: 2
+    upstream-carried-through: 29098c6b5b81b506b8040300a94b3609b525c396
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+    actionable: merged https://github.com/example/repo/pull/69 but public upstream ancestry through 29098c6b is not on main; run bin/fm-upstream.sh check
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+    verified: https://github.com/example/repo/pull/69 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+--- gh pr merge calls:
+    pr merge 69 --repo example/repo --match-head-commit 87f83d62523ab4f04499e0a64529939e1959e254 --merge
+
+### landed ancestry: forge really creates the merge commit on origin main
+=== e2e-carry-merge-landed: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 -- --merge -> exit 0
+--- guard verdict (real pr-guard):
+    upstream-guard: clear
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+    verified: https://github.com/example/repo/pull/69 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+--- gh pr merge calls:
+    pr merge 69 --repo example/repo --match-head-commit 87f83d62523ab4f04499e0a64529939e1959e254 --merge
+
+origin main now: 3b9cd50 Merge PR 69; upstream tip ancestor? yes
+### unknown: public upstream unreachable
+=== e2e-unknown-default: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69  -> exit 1
+--- guard verdict (real pr-guard):
+    fatal: '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//nm-e2e-world.hTGD3W/does-not-exist.git' does not appear to be a git repository
+    fatal: Could not read from remote repository.
+    
+    Please make sure you have the correct access rights
+    and the repository exists.
+    upstream-guard: unknown: public upstream unreachable
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+    error: refusing to merge https://github.com/example/repo/pull/69 with merge method "squash": could not prove it carries no public upstream commits (public upstream unreachable); rerun with: -- --merge, which is safe either way
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+--- gh pr merge calls:
+
+=== e2e-unknown-merge: fm-pr-merge.sh task-x1 https://github.com/example/repo/pull/69 -- --merge -> exit 0
+--- guard verdict (real pr-guard):
+    fatal: '/var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//nm-e2e-world.hTGD3W/does-not-exist.git' does not appear to be a git repository
+    fatal: Could not read from remote repository.
+    
+    Please make sure you have the correct access rights
+    and the repository exists.
+    upstream-guard: unknown: public upstream unreachable
+--- stderr:
+    verified: https://github.com/example/repo/pull/69 is open and mergeable, with every unwaived required check reported and every unwaived check green at head 87f83d62523ab4f04499e0a64529939e1959e254
+--- stdout (tail):
+    armed: state/task-x1.check.sh
+    verified: https://github.com/example/repo/pull/69 is merged (state=MERGED, merged=true, isInMergeQueue=false)
+--- gh pr merge calls:
+    pr merge 69 --repo example/repo --match-head-commit 87f83d62523ab4f04499e0a64529939e1959e254 --merge
+
