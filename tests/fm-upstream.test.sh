@@ -33,6 +33,13 @@
 #   - No decision line is ever printed before the invariants behind it hold.
 #   - After a reconciliation lands on origin, the ordinary guarded fast-forward
 #     in bin/fm-update.sh advances the home.
+#   - pr-guard counts public upstream commits a pull request actually carries,
+#     from a fresh fetch into a scratch repository, and never from the cached
+#     upstream ref. A pull request that carries none is clear. A repo URL that
+#     is not this home's origin is not-applicable and does not fetch. An
+#     unreachable public upstream, and a head commit the pull-request ref
+#     cannot reach, are unknown. carried on the recorded incident commits
+#     reports the 51-commit gap.
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -151,6 +158,28 @@ break_inventory() {
 
 upstream_tip() {
   git -C "$1/upstream.git" rev-parse refs/heads/main
+}
+
+# Two public commits on a private fork, merged for real onto a reconcile-shaped
+# branch and pushed to origin, not squash-merged. Sets RECONCILE_HEAD,
+# RECONCILE_UPSTREAM, and RECONCILE_BRANCH. Leaves the working clone on main.
+prepare_unmerged_reconcile() {
+  local w=$1
+  bump_private "$w" private.txt "private only"
+  bump_upstream "$w" docs/u1.txt "one" "public-one"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  RECONCILE_UPSTREAM=$(upstream_tip "$w")
+  RECONCILE_BRANCH="fm/fm-upstream-reconcile-${RECONCILE_UPSTREAM}-s1"
+  git -C "$w/main" fetch -q upstream
+  git -C "$w/main" checkout -q -b "$RECONCILE_BRANCH"
+  git -C "$w/main" merge -q --no-ff upstream/main -m "reconcile upstream"
+  git -C "$w/main" push -q origin "$RECONCILE_BRANCH"
+  RECONCILE_HEAD=$(git -C "$w/main" rev-parse HEAD)
+  git -C "$w/main" checkout -q main
+}
+
+origin_url_of() {
+  git -C "$1/main" remote get-url origin
 }
 
 # --- T1: no new public commits --------------------------------------------
@@ -796,6 +825,269 @@ test_uncomputable_merge_base_reports_itself() {
   pass "T23 a requested comparison with no merge base says the merge base could not be computed"
 }
 
+# --- G1: a real merge of two upstream commits carries both ----------------
+test_pr_guard_carries_two_upstream_commits() {
+  local w out rc before
+  w=$(new_world g1)
+  prepare_unmerged_reconcile "$w"
+  before=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_upstream "$w" pr-guard \
+    --repo-url "$(origin_url_of "$w")" \
+    --pr-ref "refs/heads/$RECONCILE_BRANCH" \
+    --head "$RECONCILE_HEAD" \
+    --base main)
+  rc=$?
+  expect_code 0 "$rc" "a carrying pull request exits 0"
+  assert_contains "$out" "upstream-guard: carries" "the guard sees the upstream commits"
+  assert_contains "$out" "upstream-carried-commits: 2" "both public commits are carried"
+  assert_contains "$out" "upstream-carried-through: $RECONCILE_UPSTREAM" \
+    "the carried tip is the upstream commit itself"
+  assert_not_contains "$out" "upstream-topology:" "the guard does not run the topology check"
+  [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] \
+    || fail "pr-guard moved the working clone"
+  pass "G1 pr-guard reports two carried upstream commits before the squash"
+}
+
+# --- G2: an ordinary feature branch carries nothing -----------------------
+test_pr_guard_ordinary_feature_is_clear() {
+  local w out rc head
+  w=$(new_world g2)
+  bump_private "$w" private.txt "private only"
+  bump_upstream "$w" docs/u1.txt "one" "public-one"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  git -C "$w/main" checkout -q -b fm/ordinary-feature
+  printf 'feature\n' > "$w/main/feature.txt"
+  git -C "$w/main" add feature.txt
+  git -C "$w/main" commit -qm "ordinary feature"
+  git -C "$w/main" push -q origin fm/ordinary-feature
+  head=$(git -C "$w/main" rev-parse HEAD)
+  git -C "$w/main" checkout -q main
+  out=$(run_upstream "$w" pr-guard \
+    --repo-url "$(origin_url_of "$w")" \
+    --pr-ref refs/heads/fm/ordinary-feature \
+    --head "$head" \
+    --base main)
+  rc=$?
+  expect_code 0 "$rc" "a clear pull request exits 0"
+  assert_contains "$out" "upstream-guard: clear" "a private feature carries no upstream commit"
+  assert_not_contains "$out" "upstream-guard: carries" "clear is not reported as carries"
+  assert_not_contains "$out" "upstream-carried-commits:" "a clear result has no carried count"
+  pass "G2 an ordinary feature branch is clear"
+}
+
+# --- G3: a foreign repo URL never fetches ---------------------------------
+test_pr_guard_foreign_repo_does_not_fetch() {
+  local w out rc real head
+  w=$(new_world g3)
+  bump_private "$w" private.txt "private only"
+  head=$(git -C "$w/main" rev-parse HEAD)
+  real=$(command -v git)
+  mkdir -p "$w/shim"
+  cat > "$w/shim/git" <<SHIM
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$w/git.log"
+case " \$* " in
+  *" fetch "*) echo "fatal: injected fetch failure" >&2; exit 1 ;;
+esac
+exec "$real" "\$@"
+SHIM
+  chmod +x "$w/shim/git"
+  out=$(PATH="$w/shim:$PATH" FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" \
+    "$UPSTREAM" pr-guard \
+    --repo-url https://example.invalid/other/repo \
+    --pr-ref refs/heads/main \
+    --head "$head" \
+    --base main 2>/dev/null)
+  rc=$?
+  expect_code 0 "$rc" "a foreign repo URL is not an error"
+  assert_contains "$out" "upstream-guard: not-applicable: https://example.invalid/other/repo is not this home's origin" \
+    "the foreign URL is named in the not-applicable result"
+  assert_not_contains "$out" "upstream-guard: unknown:" "the guard did not go on to fetch"
+  if grep -F " fetch " "$w/git.log" >/dev/null 2>&1; then
+    fail "pr-guard fetched for a repo URL that is not this home's origin"
+  fi
+  pass "G3 a foreign repo URL is not-applicable and does not fetch"
+}
+
+# --- G4: public upstream cannot be fetched --------------------------------
+test_pr_guard_unreachable_upstream_is_unknown() {
+  local w out rc head
+  w=$(new_world g4)
+  bump_private "$w" private.txt "private only"
+  head=$(git -C "$w/main" rev-parse HEAD)
+  git -C "$w/main" remote set-url upstream "$w/does-not-exist.git"
+  out=$(run_upstream "$w" pr-guard \
+    --repo-url "$(origin_url_of "$w")" \
+    --pr-ref refs/heads/main \
+    --head "$head" \
+    --base main)
+  rc=$?
+  expect_code 0 "$rc" "an unreachable public upstream exits 0"
+  assert_contains "$out" "upstream-guard: unknown: public upstream unreachable" \
+    "the guard says the public upstream could not be fetched"
+  assert_not_contains "$out" "upstream-guard: clear" "unreachable is not clear"
+  assert_not_contains "$out" "upstream-guard: carries" "unreachable is not carries"
+  pass "G4 an unreachable public upstream is unknown"
+}
+
+# --- G5: a rewound cached upstream ref is never consulted -----------------
+test_pr_guard_ignores_rewound_cached_upstream() {
+  local w out rc fork
+  w=$(new_world g5)
+  prepare_unmerged_reconcile "$w"
+  fork=$(git -C "$w/main" rev-parse 'origin/main^')
+  git -C "$w/main" update-ref refs/remotes/upstream/main "$fork"
+  [ "$(git -C "$w/main" rev-parse refs/remotes/upstream/main)" = "$fork" ] \
+    || fail "the cached upstream ref was not rewound"
+  [ "$(git -C "$w/upstream.git" rev-parse refs/heads/main)" = "$RECONCILE_UPSTREAM" ] \
+    || fail "the public upstream itself moved"
+  out=$(run_upstream "$w" pr-guard \
+    --repo-url "$(origin_url_of "$w")" \
+    --pr-ref "refs/heads/$RECONCILE_BRANCH" \
+    --head "$RECONCILE_HEAD" \
+    --base main)
+  rc=$?
+  expect_code 0 "$rc" "a stale cached ref does not change the exit"
+  assert_contains "$out" "upstream-guard: carries" "the fresh fetch still sees the upstream commits"
+  assert_contains "$out" "upstream-carried-commits: 2" "the cached ref was not the comparison"
+  pass "G5 pr-guard ignores a rewound cached upstream ref"
+}
+
+# --- G6: a head the pull-request ref cannot reach -------------------------
+test_pr_guard_head_not_on_pr_ref_is_unknown() {
+  local w out rc head side
+  w=$(new_world g6)
+  bump_private "$w" private.txt "private only"
+  git -C "$w/main" checkout -q -b fm/ordinary-feature
+  printf 'feature\n' > "$w/main/feature.txt"
+  git -C "$w/main" add feature.txt
+  git -C "$w/main" commit -qm "ordinary feature"
+  git -C "$w/main" push -q origin fm/ordinary-feature
+  git -C "$w/main" checkout -q main
+  printf 'side\n' > "$w/main/side.txt"
+  git -C "$w/main" add side.txt
+  git -C "$w/main" commit -qm "not on the pull request"
+  side=$(git -C "$w/main" rev-parse HEAD)
+  git -C "$w/main" reset -q --hard HEAD~1
+  head=$side
+  out=$(run_upstream "$w" pr-guard \
+    --repo-url "$(origin_url_of "$w")" \
+    --pr-ref refs/heads/fm/ordinary-feature \
+    --head "$head" \
+    --base main)
+  rc=$?
+  expect_code 0 "$rc" "an unavailable head exits 0"
+  assert_contains "$out" "upstream-guard: unknown: head $head is not available from refs/heads/fm/ordinary-feature" \
+    "a commit the pull-request ref does not contain is unknown"
+  assert_not_contains "$out" "upstream-guard: clear" "the unrelated commit is not judged clear"
+  assert_not_contains "$out" "upstream-guard: carries" "the unrelated commit is not judged as the pull request"
+  pass "G6 a head the pull-request ref does not contain is unknown"
+}
+
+test_guard_verbs_require_full_sha() {
+  local w out rc rev head
+  w=$(new_world full-sha)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  for rev in refs/guard/head refs/guard/base HEAD "${head:0:12}" \
+    "${head}0" "${head}00000000000000000000000" \
+    "${head}0000000000000000000000000" \
+    zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz ''; do
+    out=$(FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPSTREAM" pr-guard --repo-url "$(origin_url_of "$w")" \
+      --pr-ref refs/heads/main --head "$rev" --base main 2>&1)
+    rc=$?
+    expect_code 1 "$rc" "pr-guard rejects a non-full SHA: $rev"
+    assert_contains "$out" "usage: fm-upstream.sh" "invalid head is usage"
+    out=$(FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPSTREAM" pr-landed --through "$rev" --base main 2>&1)
+    rc=$?
+    expect_code 1 "$rc" "pr-landed rejects a non-full SHA: $rev"
+    assert_contains "$out" "usage: fm-upstream.sh" "invalid through is usage"
+  done
+  for rev in 1111111111111111111111111111111111111111 \
+    ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789; do
+    out=$(run_upstream "$w" pr-guard --repo-url "$(origin_url_of "$w")" \
+      --pr-ref refs/heads/main --head "$rev" --base main)
+    rc=$?
+    expect_code 0 "$rc" "a full hexadecimal head reaches availability checking"
+    assert_contains "$out" "upstream-guard: unknown: head $rev" "a missing full head is unknown"
+    out=$(run_upstream "$w" pr-landed --through "$rev" --base main)
+    rc=$?
+    expect_code 0 "$rc" "a full hexadecimal through reaches ancestry checking"
+    assert_contains "$out" "upstream-ancestry: unknown: unresolvable $rev" "a missing full through is unknown"
+  done
+  pass "guard verbs require full hexadecimal SHAs"
+}
+
+test_pr_landed_verdicts() {
+  local w out rc through real
+  w=$(new_world landed)
+  through=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "landed exits 0"
+  assert_equals "upstream-ancestry: landed" "$out" "origin contains the fork point"
+
+  bump_upstream "$w" public.txt "public only"
+  git -C "$w/main" fetch -q upstream
+  through=$(upstream_tip "$w")
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "lost exits 0"
+  assert_equals "upstream-ancestry: lost" "$out" "origin lacks the locally available public commit"
+
+  through=1111111111111111111111111111111111111111
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "unresolvable exits 0"
+  assert_equals "upstream-ancestry: unknown: unresolvable $through" "$out" "an absent object is not lost"
+
+  real=$(command -v git)
+  mkdir -p "$w/shim"
+  cat > "$w/shim/git" <<SHIM
+#!/usr/bin/env bash
+case "\$*" in
+  *"merge-base --is-ancestor"*) exit 128 ;;
+esac
+exec "$real" "\$@"
+SHIM
+  chmod +x "$w/shim/git"
+  through=$(git -C "$w/main" rev-parse HEAD)
+  out=$(PATH="$w/shim:$PATH" run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "fatal ancestry check exits 0"
+  assert_equals "upstream-ancestry: unknown: unresolvable $through" "$out" "fatal errors never assert lost"
+
+  git -C "$w/main" remote set-url origin "$w/does-not-exist.git"
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "fetch failure exits 0"
+  assert_equals "upstream-ancestry: unknown: origin refs unavailable" "$out" "fetch failure remains unknown"
+  pass "pr-landed distinguishes landed, lost, unresolvable and fetch failure"
+}
+
+# --- H1: the recorded 51-commit incident ----------------------------------
+test_carried_reports_the_recorded_incident() {
+  local head=43f0b705195989a748d70b94cce1c5aa84394ead
+  local base=ad4c924551b0dc2f46292fbf8e4e61ae2ece66ab
+  local upstream=427056c4181c41074ad24f051f79919330df0fa5
+  local sha out rc home
+  for sha in "$head" "$base" "$upstream"; do
+    if ! git -C "$ROOT" cat-file -e "${sha}^{commit}" >/dev/null 2>&1; then
+      printf 'skip: H1 incident commits are not in this clone\n'
+      pass "H1 skipped: incident commits are not in this clone"
+      return 0
+    fi
+  done
+  home=$(mktemp -d "$TMP_ROOT/h1-home.XXXXXX")
+  mkdir -p "$home/state"
+  touch "$home/state/.last-watcher-beat"
+  out=$(FM_ROOT_OVERRIDE="$ROOT" FM_HOME="$home" "$UPSTREAM" carried "$head" "$base" "$upstream" 2>/dev/null)
+  rc=$?
+  expect_code 0 "$rc" "carried on the incident commits exits 0"
+  assert_contains "$out" "upstream-carried-commits: 51" "the incident carried 51 upstream commits"
+  assert_contains "$out" "upstream-carried-through: $upstream" "the carried tip is the upstream commit"
+  pass "H1 carried reports the 51 commits of the recorded incident"
+}
+
 test_no_new_upstream
 test_upstream_already_contained
 test_reconcilable_divergence
@@ -822,5 +1114,14 @@ test_degraded_reports_a_distinct_unavailable_reason
 test_missing_upstream_default_branch_degrades
 test_non_conflicting_merge_failure_is_not_a_conflict
 test_uncomputable_merge_base_reports_itself
+test_pr_guard_carries_two_upstream_commits
+test_pr_guard_ordinary_feature_is_clear
+test_pr_guard_foreign_repo_does_not_fetch
+test_pr_guard_unreachable_upstream_is_unknown
+test_pr_guard_ignores_rewound_cached_upstream
+test_pr_guard_head_not_on_pr_ref_is_unknown
+test_guard_verbs_require_full_sha
+test_pr_landed_verdicts
+test_carried_reports_the_recorded_incident
 
 echo "# all fm-upstream tests passed"

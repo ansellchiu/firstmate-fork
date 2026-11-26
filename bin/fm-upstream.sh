@@ -16,6 +16,11 @@
 #   reconcile             prepare an isolated reconciliation branch, never touching
 #                         the active checkout
 #   cleanup               remove a reconciliation worktree, keeping its branch
+#   carried <head> <base> <upstream>
+#                         count commits reachable from both <head> and <upstream>
+#                         that <base> does not contain
+#   pr-guard              say whether one pull request carries public upstream
+#   pr-landed             say whether a carried upstream commit is on a branch
 #
 # check classifies into exactly three answers, reported separately:
 #   current   - upstream has no commit origin lacks
@@ -50,6 +55,39 @@
 #   fm-upstream.sh [check]
 #   fm-upstream.sh reconcile [--branch <name>] [--worktree <dir>]
 #   fm-upstream.sh cleanup --worktree <dir>
+#   fm-upstream.sh carried <head> <base> <upstream>
+#   fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
+#   fm-upstream.sh pr-landed --through <full-sha> --base <branch>
+#
+# carried, pr-guard, and pr-landed do their git work in a disposable bare
+# repository that alternates to this repo's object store. They never fetch into
+# this repo, never call the topology check, and never write under this repo or
+# under state. The scratch repository is removed on exit.
+#
+# carried resolves every argument in that scratch repository, then prints:
+#   upstream-carried-commits: <N>
+#   upstream-carried-through: <full sha>
+# The through line is printed only when N is greater than zero. A missing
+# argument is usage. A revision that does not resolve to a commit prints
+# `carried: unresolvable: <rev>` and exits 2.
+#
+# pr-guard decides in order, and stops at the first decision. A missing or
+# empty flag, or a --head that is not a full 40- or 64-hex-character SHA, is
+# usage and exits 1 before any network. A repo URL that is not this home's
+# origin, or a missing upstream remote, prints
+# `upstream-guard: not-applicable: <why>` with no network. No default branch, a failed fetch, or a head commit the pull-request
+# ref cannot reach prints `upstream-guard: unknown: <why>`. Otherwise it prints
+# `upstream-guard: clear`, or `upstream-guard: carries` followed by the carried
+# lines above. Every one of those results exits 0.
+#
+# pr-landed takes the same usage rule: a missing --base, or a --through that is
+# not a full 40- or 64-hex-character SHA, is usage and exits 1. Otherwise it
+# fetches <base> from origin into the scratch repository and prints
+# `upstream-ancestry: landed` when <through> is an ancestor of that tip,
+# `upstream-ancestry: lost` when it is not,
+# `upstream-ancestry: unknown: origin refs unavailable` when the fetch fails, and
+# `upstream-ancestry: unknown: unresolvable <through>` when <through> does not
+# resolve to a commit there. All four exit 0.
 #
 # Environment:
 #   FM_UPSTREAM_REMOTE        remote name to fetch (default: upstream)
@@ -68,8 +106,10 @@
 # an upstream whose PUSH url would let a push reach the public repo, or an
 # unusable inventory - still refuses.
 #
-# Exit: 0 the command completed (read `upstream-status:`); 1 usage;
-#       2 wrong remote topology or a refusal;
+# Exit: 0 the command completed (read `upstream-status:`, or the guard line);
+#       1 usage;
+#       2 wrong remote topology or a refusal, or `carried` was given a revision
+#         that does not resolve to a commit;
 #       4 reconciliation needs a semantic judgement (conflict) - stop and escalate;
 #       5 the private-divergence inventory is missing or schema-invalid, so the
 #         classification that separates intentional divergence from drift is
@@ -95,10 +135,28 @@ usage() {
 usage: fm-upstream.sh [check]
        fm-upstream.sh reconcile [--branch <name>] [--worktree <dir>]
        fm-upstream.sh cleanup --worktree <dir>
+       fm-upstream.sh carried <head> <base> <upstream>
+       fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
+       fm-upstream.sh pr-landed --through <full-sha> --base <branch>
 USAGE
 }
 
 git_root() { git -C "$FM_ROOT" "$@"; }
+
+# Disposable bare repository sharing this repo's objects. Fetches and later
+# merge-tree writes land here, never in the shared object store. SCRATCH is
+# removed on exit.
+SCRATCH=""
+scratch_open() {
+  local common
+  SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/fm-upstream-scratch.XXXXXX")
+  git init -q --bare "$SCRATCH"
+  common=$(git -C "$FM_ROOT" rev-parse --path-format=absolute --git-common-dir)
+  printf '%s\n' "$common/objects" > "$SCRATCH/objects/info/alternates"
+  trap 'rm -rf "$SCRATCH"' EXIT
+}
+
+sg() { git --git-dir="$SCRATCH" "$@"; }
 
 remote_url() { git_root remote get-url "$1" 2>/dev/null || true; }
 
@@ -471,6 +529,167 @@ cmd_cleanup() {
   return 0
 }
 
+# Bounded fetch into the scratch repository. Never targets $FM_ROOT.
+# A non-zero status is returned to the caller; set -e must not swallow it.
+scratch_fetch() {
+  local rc
+  set +e
+  fm_run_timed "$FETCH_TIMEOUT" git --git-dir="$SCRATCH" fetch -q "$@"
+  rc=$?
+  set -e
+  return "$rc"
+}
+
+# Commits that <head> and <upstream> share which <base> does not contain.
+# All three revisions must already resolve in the scratch repository.
+# Sets CARRIED_N and CARRIED_THROUGH. An empty merge-base is zero, not an error.
+CARRIED_N=0
+CARRIED_THROUGH=""
+carried_count() {
+  local head=$1 base=$2 upstream=$3
+  local mbs rc member count best
+  local -a tips=()
+  CARRIED_N=0
+  CARRIED_THROUGH=""
+  set +e
+  mbs=$(sg merge-base --all "$head" "$upstream" 2>/dev/null)
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ] || [ -z "$mbs" ]; then
+    return 0
+  fi
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    tips+=("$member")
+  done <<EOF
+$mbs
+EOF
+  CARRIED_N=$(sg rev-list --count "${tips[@]}" --not "$base")
+  best=-1
+  for member in "${tips[@]}"; do
+    count=$(sg rev-list --count "$member")
+    if [ "$count" -gt "$best" ]; then
+      best=$count
+      CARRIED_THROUGH=$member
+    fi
+  done
+}
+
+print_carried() {
+  echo "upstream-carried-commits: $CARRIED_N"
+  if [ "$CARRIED_N" -gt 0 ]; then
+    echo "upstream-carried-through: $CARRIED_THROUGH"
+  fi
+}
+
+cmd_carried() {
+  local head=${1:-} base=${2:-} upstream=${3:-} rev
+  [ $# -eq 3 ] && [ -n "$head" ] && [ -n "$base" ] && [ -n "$upstream" ] || {
+    usage
+    return 1
+  }
+  scratch_open
+  for rev in "$head" "$base" "$upstream"; do
+    if ! sg cat-file -e "${rev}^{commit}" >/dev/null 2>&1; then
+      echo "carried: unresolvable: $rev"
+      return 2
+    fi
+  done
+  carried_count "$head" "$base" "$upstream"
+  print_carried
+  return 0
+}
+
+cmd_pr_guard() {
+  local repo_url="" pr_ref="" head="" base="" origin_url upstream_url
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo-url) repo_url=${2:-}; shift 2 || { usage; return 1; } ;;
+      --pr-ref) pr_ref=${2:-}; shift 2 || { usage; return 1; } ;;
+      --head) head=${2:-}; shift 2 || { usage; return 1; } ;;
+      --base) base=${2:-}; shift 2 || { usage; return 1; } ;;
+      *) usage; return 1 ;;
+    esac
+  done
+  if [ -z "$repo_url" ] || [ -z "$pr_ref" ] || [ -z "$base" ] \
+    || ! [[ "$head" =~ ^([[:xdigit:]]{40}|[[:xdigit:]]{64})$ ]]; then
+    usage
+    return 1
+  fi
+  # No network until the request is actually about this home's origin.
+  origin_url=$(remote_url origin)
+  if [ "$(normalize_url "$repo_url")" != "$(normalize_url "$origin_url")" ]; then
+    echo "upstream-guard: not-applicable: $repo_url is not this home's origin"
+    return 0
+  fi
+  upstream_url=$(remote_url "$UPSTREAM_REMOTE")
+  if [ -z "$upstream_url" ]; then
+    echo "upstream-guard: not-applicable: no $UPSTREAM_REMOTE remote"
+    return 0
+  fi
+  if ! DEFAULT_BRANCH=$(fm_default_branch "$FM_ROOT"); then
+    echo "upstream-guard: unknown: no default branch"
+    return 0
+  fi
+  scratch_open
+  if ! scratch_fetch "$upstream_url" "+refs/heads/${DEFAULT_BRANCH}:refs/guard/upstream"; then
+    echo "upstream-guard: unknown: public upstream unreachable"
+    return 0
+  fi
+  if ! scratch_fetch "$origin_url" "+refs/heads/${base}:refs/guard/base" "+${pr_ref}:refs/guard/head"; then
+    echo "upstream-guard: unknown: origin refs unavailable"
+    return 0
+  fi
+  # Judge the caller-supplied commit, not refs/guard/head. It is available from
+  # the pull-request ref only when that ref can reach it; an object visible
+  # solely through the alternates is not.
+  if ! sg cat-file -e "${head}^{commit}" >/dev/null 2>&1 \
+    || ! sg merge-base --is-ancestor "$head" refs/guard/head >/dev/null 2>&1; then
+    echo "upstream-guard: unknown: head $head is not available from $pr_ref"
+    return 0
+  fi
+  carried_count "$head" refs/guard/base refs/guard/upstream
+  if [ "$CARRIED_N" -eq 0 ]; then
+    echo "upstream-guard: clear"
+    return 0
+  fi
+  echo "upstream-guard: carries"
+  print_carried
+  return 0
+}
+
+cmd_pr_landed() {
+  local through="" base="" origin_url rc
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --through) through=${2:-}; shift 2 || { usage; return 1; } ;;
+      --base) base=${2:-}; shift 2 || { usage; return 1; } ;;
+      *) usage; return 1 ;;
+    esac
+  done
+  if [ -z "$base" ] || ! [[ "$through" =~ ^([[:xdigit:]]{40}|[[:xdigit:]]{64})$ ]]; then
+    usage
+    return 1
+  fi
+  origin_url=$(remote_url origin)
+  scratch_open
+  if ! scratch_fetch "$origin_url" "+refs/heads/${base}:refs/guard/base"; then
+    echo "upstream-ancestry: unknown: origin refs unavailable"
+    return 0
+  fi
+  if sg merge-base --is-ancestor "$through" refs/guard/base >/dev/null 2>&1; then
+    echo "upstream-ancestry: landed"
+  else
+    rc=$?
+    if [ "$rc" -eq 1 ]; then
+      echo "upstream-ancestry: lost"
+    else
+      echo "upstream-ancestry: unknown: unresolvable $through"
+    fi
+  fi
+  return 0
+}
+
 "$SCRIPT_DIR/fm-guard.sh" || true
 
 case "${1:-check}" in
@@ -478,5 +697,8 @@ case "${1:-check}" in
   check) shift || true; [ $# -eq 0 ] || { usage; exit 1; }; cmd_check ;;
   reconcile) shift; cmd_reconcile "$@" ;;
   cleanup) shift; cmd_cleanup "$@" ;;
+  carried) shift; cmd_carried "$@" ;;
+  pr-guard) shift; cmd_pr_guard "$@" ;;
+  pr-landed) shift; cmd_pr_landed "$@" ;;
   *) usage; exit 1 ;;
 esac
