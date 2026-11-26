@@ -21,14 +21,19 @@
 #                         that <base> does not contain
 #   pr-guard              say whether one pull request carries public upstream
 #   pr-landed             say whether a carried upstream commit is on a branch
+#   repair-ancestry       record a proven ancestry gap as a content-free merge
+#                         on an isolated branch
 #
-# check classifies into exactly three answers, reported separately:
-#   current   - upstream has no commit origin lacks
-#   contained - every upstream commit origin lacks is already patch-equivalent
-#               to something origin carries (`git cherry`), so replaying them
-#               would duplicate work
-#   diverged  - at least one genuinely new upstream commit; reconciliation is owed
-# A comparison that could not run at all is not a fourth answer: it degrades.
+# check classifies into exactly four answers, reported separately:
+#   current      - upstream has no commit origin lacks
+#   contained    - every upstream commit origin lacks is already patch-equivalent
+#                  to something origin carries (`git cherry`), so replaying them
+#                  would duplicate work
+#   ancestry-gap - upstream through a recorded point is already in origin by
+#                  content, but the landing dropped the upstream parent; repair
+#                  that ancestry before reconciling
+#   diverged     - at least one genuinely new upstream commit; reconciliation is owed
+# A comparison that could not run at all is not one of those answers: it degrades.
 #
 # reconcile builds the merge in a fresh worktree on a NEW branch based on
 # origin/<default>, so every private commit is preserved by construction and the
@@ -41,9 +46,10 @@
 # under the same teardown rules. Nothing is ever forced, stashed, reset, or
 # rewritten.
 #
-# The prepared branch then ships through Firstmate's ordinary no-mistakes
-# delivery path to a pull request against origin. After that pull request lands,
-# `bin/fm-update.sh` performs the ordinary guarded fast-forward.
+# The prepared branch then ships through Firstmate's no-mistakes delivery path
+# to a pull request against origin, and that pull request must land as a merge
+# commit (`merge-method-required: merge`): a squash or rebase keeps the files
+# and discards the upstream parent.
 # `.agents/skills/updatefirstmate/SKILL.md` owns that end-to-end workflow.
 #
 # bin/fm-private-divergence.sh owns the private-divergence inventory; check and
@@ -58,6 +64,7 @@
 #   fm-upstream.sh carried <head> <base> <upstream>
 #   fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
 #   fm-upstream.sh pr-landed --through <full-sha> --base <branch>
+#   fm-upstream.sh repair-ancestry [--dry-run] [--branch <name>] [--worktree <dir>]
 #
 # carried, pr-guard, and pr-landed do their git work in a disposable bare
 # repository that alternates to this repo's object store. They never fetch into
@@ -93,6 +100,9 @@
 #   FM_UPSTREAM_REMOTE        remote name to fetch (default: upstream)
 #   FM_UPSTREAM_FETCH_TIMEOUT seconds bounding the fetch (default: 60)
 #   FM_UPSTREAM_COMMIT_LIMIT  upstream commits listed by check (default: 20)
+#   FM_UPSTREAM_GAP_SCAN_LIMIT
+#                         how many origin commits each candidate may scan while
+#                         proving an ancestry gap (default: 200)
 #
 # Public upstream being UNAVAILABLE is not the same as the setup being UNSAFE,
 # and the two are answered differently. ANY reason the public comparison cannot
@@ -115,7 +125,8 @@
 #         classification that separates intentional divergence from drift is
 #         unavailable - a hard refusal;
 #       6 a reconciliation invariant did not hold, or a merge git refused
-#         outright never started.
+#         outright never started, or an ancestry repair assertion failed;
+#       7 an ancestry gap exists; repair it before reconciling.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -138,6 +149,7 @@ usage: fm-upstream.sh [check]
        fm-upstream.sh carried <head> <base> <upstream>
        fm-upstream.sh pr-guard --repo-url <url> --pr-ref <refname> --head <full-sha> --base <branch>
        fm-upstream.sh pr-landed --through <full-sha> --base <branch>
+       fm-upstream.sh repair-ancestry [--dry-run] [--branch <name>] [--worktree <dir>]
 USAGE
 }
 
@@ -265,6 +277,114 @@ fetch_upstream() {
 UPSTREAM_STATUS=""
 NEW_COMMITS=0
 UNAVAILABLE_REASON=""
+# Set only when classify proves an ancestry gap. Empty otherwise.
+GAP_THROUGH=""
+GAP_COMMITS=0
+GAP_CANDIDATE=""
+GAP_PROOF=""
+GAP_ANCHOR=""
+
+# 0 when `git merge-tree --write-tree` of the two commits yields exactly $want.
+# A conflict or an unsupported invocation is not a match.
+gap_tree_matches() {
+  local left=$1 right=$2 want=$3 mt
+  mt=$(sg merge-tree --write-tree "$left" "$right" 2>/dev/null) || return 1
+  [ "$(printf '%s\n' "$mt" | sed -n '1p')" = "$want" ]
+}
+
+# Prove that a diverged comparison is upstream content landed without its
+# parents. Returns 0 and sets the GAP_* globals when a candidate proves it,
+# and 1 when it does not. current and contained never reach here: a gap that
+# cannot be proven stays diverged.
+find_ancestry_gap() {
+  local origin_ref=$1 upstream_ref=$2
+  local O U otree candidates c up b0 seen kind anchor n
+  local best="" bestc="" bestkind="" bestanchor="" bestn=-1
+  local fetch_out fetch_rc scans s want gap_scan_limit
+  gap_scan_limit="${FM_UPSTREAM_GAP_SCAN_LIMIT:-200}"
+  GAP_THROUGH=""
+  GAP_COMMITS=0
+  GAP_CANDIDATE=""
+  GAP_PROOF=""
+  GAP_ANCHOR=""
+  O=$(git_root rev-parse "$origin_ref^{commit}")
+  U=$(git_root rev-parse "$upstream_ref^{commit}")
+  scratch_open
+  if ! sg merge-tree -h 2>&1 | grep -q -- '--write-tree'; then
+    echo "upstream-ancestry-proof: unavailable: git merge-tree --write-tree is not supported"
+    return 1
+  fi
+  set +e
+  fetch_out=$(fm_run_timed "$FETCH_TIMEOUT" git --git-dir="$SCRATCH" fetch -q "$ORIGIN_URL" \
+    '+refs/pull/*/head:refs/cand/pull/*' \
+    '+refs/merge-requests/*/head:refs/cand/mr/*' 2>&1)
+  fetch_rc=$?
+  set -e
+  if [ "$fetch_rc" -ne 0 ]; then
+    echo "upstream-ancestry-candidates: local-only: $(first_line "$fetch_out" "git fetch exited with status $fetch_rc")"
+  fi
+  candidates=$(
+    {
+      sg for-each-ref --format='%(objectname)' refs/cand
+      git_root for-each-ref --format='%(objectname)' refs/remotes/origin refs/heads
+    } | sort -u
+  )
+  otree=$(sg rev-parse "$O^{tree}")
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    up=$(sg merge-base "$c" "$U" 2>/dev/null) || continue
+    # F1: U' is not an ancestor of O. The merge base equaling U' is that test.
+    seen=$(sg merge-base "$up" "$O" 2>/dev/null) || continue
+    [ "$seen" = "$up" ] && continue
+    b0=$(sg merge-base "$O" "$c" 2>/dev/null) || continue
+    # F2: the fork from origin is not an ancestor of upstream.
+    seen=$(sg merge-base "$b0" "$U" 2>/dev/null) || continue
+    [ "$seen" = "$b0" ] && continue
+    kind=""
+    anchor=""
+    if gap_tree_matches "$O" "$c" "$otree"; then
+      kind=tip
+      anchor=$O
+    else
+      scans=""
+      # A zero limit scans nothing. macOS head rejects -n 0, so skip the
+      # pipeline rather than treating that refusal as a failed proof.
+      if [ "$gap_scan_limit" -gt 0 ] 2>/dev/null; then
+        scans=$(sg rev-list --first-parent --reverse --max-parents=1 "$b0..$O" | head -n "$gap_scan_limit" || true)
+      fi
+      while IFS= read -r s; do
+        [ -n "$s" ] || continue
+        want=$(sg rev-parse "$s^{tree}")
+        if gap_tree_matches "$s^1" "$c" "$want"; then
+          kind=squash
+          anchor=$s
+          break
+        fi
+      done <<EOF
+$scans
+EOF
+    fi
+    [ -n "$kind" ] || continue
+    n=$(sg rev-list --count "$O..$up")
+    if [ "$n" -gt "$bestn" ] || { [ "$n" -eq "$bestn" ] && [ "$c" \< "$bestc" ]; }; then
+      bestn=$n
+      best=$up
+      bestc=$c
+      bestkind=$kind
+      bestanchor=$anchor
+    fi
+  done <<EOF
+$candidates
+EOF
+  [ -n "$best" ] || return 1
+  GAP_THROUGH=$best
+  GAP_COMMITS=$bestn
+  GAP_CANDIDATE=$bestc
+  GAP_PROOF=$bestkind
+  GAP_ANCHOR=$bestanchor
+  return 0
+}
+
 classify() {
   local origin_ref="origin/$DEFAULT_BRANCH" upstream_ref="$UPSTREAM_REMOTE/$DEFAULT_BRANCH"
   local cherry equivalent sha
@@ -281,16 +401,27 @@ classify() {
   cherry=$(git_root cherry "$origin_ref" "$upstream_ref" 2>/dev/null || true)
   NEW_COMMITS=$(printf '%s\n' "$cherry" | grep -c '^+ ' || true)
   equivalent=$(printf '%s\n' "$cherry" | grep -c '^- ' || true)
-  echo "upstream-new-commits: $NEW_COMMITS"
-  echo "upstream-equivalent-commits: $equivalent"
   if [ -z "$cherry" ]; then
     UPSTREAM_STATUS=current
   elif [ "$NEW_COMMITS" -eq 0 ]; then
     UPSTREAM_STATUS=contained
+  elif find_ancestry_gap "$origin_ref" "$upstream_ref"; then
+    UPSTREAM_STATUS=ancestry-gap
+    cherry=$(git_root cherry "$origin_ref" "$upstream_ref" "$GAP_THROUGH" 2>/dev/null || true)
+    NEW_COMMITS=$(printf '%s\n' "$cherry" | grep -c '^+ ' || true)
+    equivalent=$(printf '%s\n' "$cherry" | grep -c '^- ' || true)
   else
     UPSTREAM_STATUS=diverged
   fi
+  echo "upstream-new-commits: $NEW_COMMITS"
+  echo "upstream-equivalent-commits: $equivalent"
   echo "upstream-status: $UPSTREAM_STATUS"
+  if [ "$UPSTREAM_STATUS" = ancestry-gap ]; then
+    echo "upstream-ancestry-gap-through: $GAP_THROUGH"
+    echo "upstream-ancestry-gap-commits: $GAP_COMMITS"
+    echo "upstream-ancestry-gap-candidate: $GAP_CANDIDATE"
+    echo "upstream-ancestry-gap-proof: $GAP_PROOF $GAP_ANCHOR"
+  fi
   printf '%s\n' "$cherry" | grep '^+ ' | head -"$COMMIT_LIMIT" | while read -r _ sha; do
     [ -n "$sha" ] || continue
     echo "upstream-commit: $(git_root rev-parse --short "$sha") $(git_root log -1 --format=%s "$sha")"
@@ -338,7 +469,11 @@ report_inventory() {
   upstream_arg=""
   if [ "$UPSTREAM_COMPARED" -eq 1 ]; then
     upstream_arg="$UPSTREAM_REMOTE/$DEFAULT_BRANCH"
-    base=$(git -C "$root" merge-base "origin/$DEFAULT_BRANCH" "$upstream_arg" 2>/dev/null || true)
+    if [ "$UPSTREAM_STATUS" = ancestry-gap ]; then
+      base=$GAP_THROUGH
+    else
+      base=$(git -C "$root" merge-base "origin/$DEFAULT_BRANCH" "$upstream_arg" 2>/dev/null || true)
+    fi
   fi
   set +e
   out=$("$SCRIPT_DIR/fm-private-divergence.sh" --root "$root" \
@@ -360,17 +495,29 @@ cmd_check() {
     report_inventory "$FM_ROOT" "origin/$DEFAULT_BRANCH" || return 5
     return 0
   fi
-  if [ "$UPSTREAM_STATUS" = diverged ]; then
-    echo "reconcile-required: yes"
-  else
-    echo "reconcile-required: no"
-  fi
+  case "$UPSTREAM_STATUS" in
+    ancestry-gap)
+      if [ "$NEW_COMMITS" -gt 0 ]; then
+        echo "reconcile-required: after-ancestry-repair"
+      else
+        echo "reconcile-required: no"
+      fi
+      echo "ancestry-repair: bin/fm-upstream.sh repair-ancestry"
+      ;;
+    diverged)
+      echo "reconcile-required: yes"
+      ;;
+    *)
+      echo "reconcile-required: no"
+      ;;
+  esac
   report_inventory "$FM_ROOT" "origin/$DEFAULT_BRANCH" || return 5
   return 0
 }
 
 cmd_reconcile() {
   local branch="" worktree="" upstream_ref origin_ref before_head merge_out merge_rc conflicts out rc
+  local through_short
   while [ $# -gt 0 ]; do
     case "$1" in
       --branch) branch=${2:-}; shift 2 || return 1 ;;
@@ -385,6 +532,12 @@ cmd_reconcile() {
     report_degraded "$UNAVAILABLE_REASON"
     echo "reconcile: not-required: no public upstream comparison was possible"
     return 0
+  fi
+  if [ "$UPSTREAM_STATUS" = ancestry-gap ]; then
+    through_short=$(git_root rev-parse --short "$GAP_THROUGH")
+    echo "reconcile: refused: ancestry-gap through $through_short, upstream is already present by content but not by ancestry"
+    echo "reconcile-recovery: bin/fm-upstream.sh repair-ancestry, land that pull request with a merge commit, then rerun"
+    return 7
   fi
   if [ "$UPSTREAM_STATUS" != diverged ]; then
     echo "reconcile: not-required: upstream is $UPSTREAM_STATUS"
@@ -458,6 +611,8 @@ cmd_reconcile() {
     discard_scratch "$worktree" "$branch"
     return 5
   fi
+  echo "reconcile-upstream-tip: $(git_root rev-parse "$upstream_ref")"
+  echo "merge-method-required: merge"
   echo "reconcile: ready"
   return 0
 }
@@ -690,6 +845,92 @@ cmd_pr_landed() {
   return 0
 }
 
+# Record a proven ancestry gap as a merge that changes no file. Any other
+# comparison result needs no repair. The merge uses `-s ours` only after the
+# proof: it records the candidate as a parent and keeps origin's tree, so a
+# later private revert of an upstream hunk survives.
+cmd_repair_ancestry() {
+  local dry=0 branch="" worktree="" rc=0
+  local origin_ref before_head origin_sha origin_tree head_tree p1 p2 out short_through
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry=1; shift ;;
+      --branch) branch=${2:-}; shift 2 || return 1 ;;
+      --worktree) worktree=${2:-}; shift 2 || return 1 ;;
+      *) usage; return 1 ;;
+    esac
+  done
+  check_topology || rc=$?
+  [ "$rc" -eq 0 ] || [ "$rc" -eq "$TOPOLOGY_DEGRADED" ] || return 2
+  if ! attempt_comparison "$rc"; then
+    report_degraded "$UNAVAILABLE_REASON"
+    echo "repair: not-required: upstream is not-compared"
+    return 0
+  fi
+  if [ "$UPSTREAM_STATUS" != ancestry-gap ]; then
+    echo "repair: not-required: upstream is $UPSTREAM_STATUS"
+    return 0
+  fi
+  echo "upstream-ancestry-gap-through: $GAP_THROUGH"
+  echo "upstream-ancestry-gap-commits: $GAP_COMMITS"
+  echo "upstream-ancestry-gap-candidate: $GAP_CANDIDATE"
+  echo "upstream-ancestry-gap-proof: $GAP_PROOF $GAP_ANCHOR"
+  if [ "$dry" -eq 1 ]; then
+    echo "repair: dry-run"
+    return 0
+  fi
+
+  origin_ref="origin/$DEFAULT_BRANCH"
+  short_through=$(git_root rev-parse --short "$GAP_THROUGH")
+  branch=${branch:-"fm/upstream-ancestry-repair-$short_through"}
+  worktree=${worktree:-"$STATE/upstream-reconcile/$(printf '%s' "$branch" | tr '/' '-')"}
+  before_head=$(git_root rev-parse HEAD)
+  mkdir -p "$(dirname "$worktree")"
+  if ! out=$(git_root worktree add -q -b "$branch" "$worktree" "$origin_ref" 2>&1); then
+    echo "repair: failed: cannot create isolated worktree: $(first_line "$out" "git worktree add failed")"
+    return 6
+  fi
+  if ! git -C "$worktree" merge -s ours --no-ff --no-edit \
+    -m "Record upstream ancestry through $short_through" "$GAP_CANDIDATE"; then
+    git -C "$worktree" merge --abort >/dev/null 2>&1 || true
+    discard_scratch "$worktree" "$branch"
+    echo "repair: failed: merge"
+    return 6
+  fi
+  origin_sha=$(git_root rev-parse "$origin_ref")
+  origin_tree=$(git_root rev-parse "$origin_ref^{tree}")
+  head_tree=$(git -C "$worktree" rev-parse 'HEAD^{tree}')
+  if [ "$head_tree" != "$origin_tree" ]; then
+    discard_scratch "$worktree" "$branch"
+    echo "repair: failed: tree changed"
+    return 6
+  fi
+  if ! git -C "$worktree" merge-base --is-ancestor "$GAP_THROUGH" HEAD; then
+    discard_scratch "$worktree" "$branch"
+    echo "repair: failed: upstream ancestry was not recorded"
+    return 6
+  fi
+  p1=$(git -C "$worktree" rev-parse 'HEAD^1')
+  p2=$(git -C "$worktree" rev-parse 'HEAD^2' 2>/dev/null || true)
+  if [ "$p1" != "$origin_sha" ] || [ "$p2" != "$GAP_CANDIDATE" ]; then
+    discard_scratch "$worktree" "$branch"
+    echo "repair: failed: parents are not the origin tip and the candidate"
+    return 6
+  fi
+  if ! assert_active_checkout "$before_head"; then
+    discard_scratch "$worktree" "$branch"
+    echo "repair: failed: active checkout moved"
+    return 6
+  fi
+  echo "repair-worktree: $worktree"
+  echo "repair-branch: $branch"
+  echo "repair-tree: unchanged"
+  echo "repair-parents: $origin_sha $GAP_CANDIDATE"
+  echo "merge-method-required: merge"
+  echo "repair: ready"
+  return 0
+}
+
 "$SCRIPT_DIR/fm-guard.sh" || true
 
 case "${1:-check}" in
@@ -697,6 +938,7 @@ case "${1:-check}" in
   check) shift || true; [ $# -eq 0 ] || { usage; exit 1; }; cmd_check ;;
   reconcile) shift; cmd_reconcile "$@" ;;
   cleanup) shift; cmd_cleanup "$@" ;;
+  repair-ancestry) shift; cmd_repair_ancestry "$@" ;;
   carried) shift; cmd_carried "$@" ;;
   pr-guard) shift; cmd_pr_guard "$@" ;;
   pr-landed) shift; cmd_pr_landed "$@" ;;

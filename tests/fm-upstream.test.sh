@@ -3,10 +3,11 @@
 # reconciliation that precedes a private-origin self-update.
 #
 # The guarantees under test:
-#   - Every invocation actually consults public upstream and reports the three
+#   - Every invocation actually consults public upstream and reports the four
 #     answers separately: no new upstream commits (current), upstream commits
-#     already patch-equivalent to what origin carries (contained), and genuinely
-#     new upstream commits (diverged).
+#     already patch-equivalent to what origin carries (contained), upstream
+#     content landed without its ancestry (ancestry-gap), and genuinely new
+#     upstream commits (diverged).
 #   - Reconciliation is isolated: the merge happens on a NEW branch in its own
 #     worktree, every private commit stays reachable, and the active checkout
 #     never moves.
@@ -1123,5 +1124,525 @@ test_pr_guard_head_not_on_pr_ref_is_unknown
 test_guard_verbs_require_full_sha
 test_pr_landed_verdicts
 test_carried_reports_the_recorded_incident
+
+# --- Ancestry gap: verdict, reconcile refusal, repair ----------------------
+# One contiguous block. A private commit always lands before the upstream
+# change it is paired with, and a squash is a real merge on a reconcile-shaped
+# branch followed by `git merge --squash` onto origin main.
+
+# Merge upstream into a reconcile-shaped branch, push that branch, and squash
+# it onto origin main. A conflict is resolved by taking upstream's side.
+# Sets SQUASH_BRANCH and SQUASH_COMMIT. Leaves the reconcile branch in place.
+squash_upstream_onto_origin() {
+  local w=$1 path
+  git -C "$w/main" fetch -q upstream
+  SQUASH_BRANCH="fm/fm-upstream-reconcile-$(upstream_tip "$w")-s1"
+  git -C "$w/main" checkout -q -b "$SQUASH_BRANCH"
+  if ! git -C "$w/main" merge -q --no-ff upstream/main -m "reconcile upstream" >/dev/null 2>&1; then
+    git -C "$w/main" diff --name-only --diff-filter=U | while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      git -C "$w/main" checkout --theirs -- "$path" 2>/dev/null \
+        || git -C "$w/main" rm -q -- "$path"
+      git -C "$w/main" add -- "$path"
+    done
+    git -C "$w/main" add -A
+    git -C "$w/main" commit -qm "reconcile upstream" \
+      || fail "fixture could not commit the conflict resolution"
+  fi
+  git -C "$w/main" push -q origin "$SQUASH_BRANCH"
+  git -C "$w/main" checkout -q main
+  git -C "$w/main" merge -q --squash "$SQUASH_BRANCH" >/dev/null 2>&1 \
+    || fail "fixture squash did not apply"
+  git -C "$w/main" commit -qm "squash upstream reconciliation" \
+    || fail "fixture squash commit failed"
+  git -C "$w/main" push -q origin main
+  SQUASH_COMMIT=$(git -C "$w/main" rev-parse HEAD)
+}
+
+# The private commit every gap fixture needs before upstream moves.
+private_first() {
+  bump_private "$1" private.txt "private only"
+}
+
+# Two public commits, so a later squash is not patch-equivalent to one of them.
+two_upstream_commits() {
+  local w=$1
+  bump_upstream "$w" docs/u1.txt "one" "public-one"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+}
+
+assert_no_gap_lines() {
+  local out=$1 why=$2
+  assert_not_contains "$out" "upstream-ancestry-gap-" "$why"
+}
+
+# reconcile and repair must not have created their own branch or worktree.
+# The fixture's fm/fm-upstream-reconcile-* branch is not one of those names.
+assert_no_repair_scratch() {
+  local w=$1
+  [ -z "$(git -C "$w/main" branch --list 'fm/upstream-reconcile-*' 'fm/upstream-ancestry-repair-*')" ] \
+    || fail "a reconcile or repair branch was created in $w"
+  [ ! -d "$w/home/state/upstream-reconcile" ] \
+    || fail "a reconcile or repair worktree was created in $w"
+}
+
+test_ancestry_v0_squash_after_conflict_is_a_gap() {
+  local w out rc
+  w=$(new_world v0)
+  bump_private "$w" core.txt "private version of the contended line"
+  bump_upstream "$w" core.txt "public version of the contended line" "public-contended"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V0 check exits 0"
+  assert_contains "$out" "upstream-status: ancestry-gap" "a resolved squash is an ancestry gap"
+  assert_contains "$out" "upstream-ancestry-gap-proof: tip" "the squash still matches the tip"
+  assert_contains "$out" "upstream-new-commits: 0" "nothing upstream is new after the squashed tip"
+  assert_contains "$out" "reconcile-required: no" "a pure gap does not ask for reconcile"
+  assert_contains "$out" "ancestry-repair: bin/fm-upstream.sh repair-ancestry" "the repair command is named"
+  pass "V0 a squash after conflict resolution is an ancestry gap with nothing new"
+}
+
+test_ancestry_v1_genuine_divergence_is_not_a_gap() {
+  local w out rc
+  w=$(new_world v1)
+  private_first "$w"
+  bump_upstream "$w" core.txt "public edit only" "public-edit"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V1 check exits 0"
+  assert_contains "$out" "upstream-status: diverged" "an unlanded upstream edit diverges"
+  assert_no_gap_lines "$out" "genuine divergence is not reported as a gap"
+  assert_contains "$out" "reconcile-required: yes" "genuine divergence still asks for reconcile"
+  pass "V1 genuine divergence is diverged, not an ancestry gap"
+}
+
+test_ancestry_v1b_upstream_deletion_is_not_a_gap() {
+  local w out rc
+  w=$(new_world v1b)
+  private_first "$w"
+  git -C "$w/pub" pull -q origin main
+  git -C "$w/pub" rm -q core.txt
+  git -C "$w/pub" commit -qm "public deletes core"
+  git -C "$w/pub" push -q origin main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V1b check exits 0"
+  assert_contains "$out" "upstream-status: diverged" "an unlanded upstream deletion diverges"
+  assert_no_gap_lines "$out" "an upstream deletion is not reported as a gap"
+  assert_contains "$out" "reconcile-required: yes" "the deletion still asks for reconcile"
+  pass "V1b an upstream deletion is diverged, not an ancestry gap"
+}
+
+test_ancestry_v2_partial_squash_counts_only_what_is_new() {
+  local w out rc
+  w=$(new_world v2)
+  private_first "$w"
+  bump_upstream "$w" docs/u1.txt "one" "public-one"
+  squash_upstream_onto_origin "$w"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V2 check exits 0"
+  assert_contains "$out" "upstream-status: ancestry-gap" "the squashed half is a gap"
+  assert_contains "$out" "upstream-ancestry-gap-commits: 1" "only the squashed commit is the gap"
+  assert_contains "$out" "upstream-new-commits: 1" "the later upstream commit is still new"
+  assert_contains "$out" "reconcile-required: after-ancestry-repair" \
+    "new commits after a gap wait for the repair"
+  pass "V2 a partial squash reports the gap and the one commit after it"
+}
+
+test_ancestry_v3_private_deletion_then_squash_is_a_gap() {
+  local w out rc
+  w=$(new_world v3)
+  git -C "$w/main" rm -q core.txt
+  git -C "$w/main" commit -qm "private deletion"
+  git -C "$w/main" push -q origin main
+  two_upstream_commits "$w"
+  squash_upstream_onto_origin "$w"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V3 check exits 0"
+  assert_contains "$out" "upstream-status: ancestry-gap" "a squash after a private deletion is a gap"
+  pass "V3 a private deletion followed by a two-commit squash is an ancestry gap"
+}
+
+test_ancestry_v3b_deletion_of_an_upstream_edit_is_a_gap() {
+  local w out rc
+  w=$(new_world v3b)
+  git -C "$w/main" rm -q core.txt
+  git -C "$w/main" commit -qm "private deletion of core"
+  git -C "$w/main" push -q origin main
+  bump_upstream "$w" core.txt "public rewrote core" "public-rewrote-core"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V3b check exits 0"
+  assert_contains "$out" "upstream-status: ancestry-gap" \
+    "squashing a resolved deletion of an upstream edit is a gap"
+  pass "V3b deleting a file upstream edited, then squashing, is an ancestry gap"
+}
+
+test_ancestry_v4_cherry_pick_stays_contained() {
+  local w out rc sha
+  w=$(new_world v4)
+  private_first "$w"
+  bump_upstream "$w" public.txt "public only" "public-only"
+  sha=$(upstream_tip "$w")
+  reapply_privately "$w" "$sha"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V4 check exits 0"
+  assert_contains "$out" "upstream-status: contained" "a cherry-pick is contained"
+  assert_no_gap_lines "$out" "contained keeps precedence over a gap"
+  pass "V4 cherry-picked upstream commits stay contained"
+}
+
+test_ancestry_v4b_rebase_onto_upstream_is_current() {
+  local w out rc
+  w=$(new_world v4b)
+  private_first "$w"
+  bump_upstream "$w" public.txt "public only" "public-only"
+  git -C "$w/main" fetch -q upstream
+  git -C "$w/main" rebase -q upstream/main
+  git -C "$w/main" push -q --force origin main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V4b check exits 0"
+  assert_contains "$out" "upstream-status: current" "a rebase onto upstream is current"
+  pass "V4b a fork rebased onto upstream is current"
+}
+
+test_ancestry_v5_real_merge_is_current() {
+  local w out rc
+  w=$(new_world v5)
+  private_first "$w"
+  bump_upstream "$w" public.txt "public only" "public-only"
+  git -C "$w/main" fetch -q upstream
+  git -C "$w/main" merge -q --no-ff upstream/main -m "merge upstream"
+  git -C "$w/main" push -q origin main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V5 check exits 0"
+  assert_contains "$out" "upstream-status: current" "a real merge commit is current"
+  pass "V5 a real merge commit is current"
+}
+
+test_ancestry_v6_private_revert_is_a_squash_proof() {
+  local w out rc
+  w=$(new_world v6)
+  private_first "$w"
+  git -C "$w/pub" pull -q origin main
+  printf 'keep\nupstream-hunk\n' > "$w/pub/other.txt"
+  git -C "$w/pub" add other.txt
+  git -C "$w/pub" commit -qm "public other"
+  git -C "$w/pub" push -q origin main
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  printf 'keep\nprivate-revert\n' > "$w/main/other.txt"
+  git -C "$w/main" add other.txt
+  git -C "$w/main" commit -qm "revert the upstream hunk"
+  git -C "$w/main" push -q origin main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V6 check exits 0"
+  assert_contains "$out" "upstream-status: ancestry-gap" "a reverted hunk is still a gap"
+  assert_contains "$out" "upstream-ancestry-gap-proof: squash" "the proof is the squash anchor"
+  pass "V6 a private revert after a squash is an ancestry gap proved at the squash"
+}
+
+test_ancestry_v7_later_edit_anchors_on_the_squash() {
+  local w out rc
+  w=$(new_world v7)
+  private_first "$w"
+  two_upstream_commits "$w"
+  squash_upstream_onto_origin "$w"
+  printf 'edited after the squash\n' > "$w/main/docs/u1.txt"
+  git -C "$w/main" add docs/u1.txt
+  git -C "$w/main" commit -qm "edit an upstream-added file"
+  git -C "$w/main" push -q origin main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V7 check exits 0"
+  assert_contains "$out" "upstream-status: ancestry-gap" "a later edit does not hide the gap"
+  assert_contains "$out" "upstream-ancestry-gap-proof: squash $SQUASH_COMMIT" \
+    "the anchor is the squash commit"
+  pass "V7 a later edit of an upstream-added file anchors the proof on the squash"
+}
+
+test_ancestry_v8_unmerged_reconcile_branch_is_diverged() {
+  local w out rc
+  w=$(new_world v8)
+  prepare_unmerged_reconcile "$w"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V8 check exits 0"
+  assert_contains "$out" "upstream-status: diverged" "an unmerged reconcile branch is not a gap"
+  assert_contains "$out" "reconcile-required: yes" "the unmerged upstream commits are still owed"
+  assert_no_gap_lines "$out" "a branch that was not landed does not prove a gap"
+  pass "V8 a reconcile branch that was not merged stays diverged"
+}
+
+test_ancestry_v9_contribution_branch_is_diverged() {
+  local w out rc
+  w=$(new_world v9)
+  private_first "$w"
+  two_upstream_commits "$w"
+  git -C "$w/main" fetch -q upstream
+  git -C "$w/main" checkout -q -b contrib upstream/main
+  printf 'contribution\n' > "$w/main/contrib.txt"
+  git -C "$w/main" add contrib.txt
+  git -C "$w/main" commit -qm "contribution from upstream"
+  git -C "$w/main" push -q origin contrib
+  git -C "$w/main" checkout -q main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V9 check exits 0"
+  assert_contains "$out" "upstream-status: diverged" "a contribution branch is not a gap"
+  assert_no_gap_lines "$out" "a branch forked from upstream does not prove a gap"
+  pass "V9 an upstream-based contribution branch stays diverged"
+}
+
+test_ancestry_v10_deleted_candidate_is_diverged() {
+  local w out rc
+  w=$(new_world v10)
+  private_first "$w"
+  two_upstream_commits "$w"
+  squash_upstream_onto_origin "$w"
+  git -C "$w/main" push -q origin --delete "$SQUASH_BRANCH"
+  git -C "$w/main" branch -D "$SQUASH_BRANCH" >/dev/null
+  git -C "$w/main" update-ref -d "refs/remotes/origin/$SQUASH_BRANCH"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V10 check exits 0"
+  assert_contains "$out" "upstream-status: diverged" "a squash with no surviving candidate stays diverged"
+  assert_no_gap_lines "$out" "no candidate means no gap"
+  pass "V10 deleting the squashed branch leaves an honest divergence"
+}
+
+test_ancestry_v11_candidate_fetch_failure_uses_local_refs() {
+  local w out rc
+  w=$(new_world v11)
+  private_first "$w"
+  two_upstream_commits "$w"
+  squash_upstream_onto_origin "$w"
+  git -C "$w/main" remote set-url origin "$w/does-not-exist.git"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V11 check exits 0"
+  assert_contains "$out" "upstream-ancestry-candidates: local-only:" \
+    "a failed candidate fetch is reported and is not fatal"
+  assert_contains "$out" "upstream-status: ancestry-gap" "the local branch still proves the gap"
+  pass "V11 a failed candidate fetch still proves the gap from local refs"
+}
+
+test_ancestry_v12_zero_scan_limit_hides_the_squash_proof() {
+  local w out rc
+  w=$(new_world v12)
+  private_first "$w"
+  two_upstream_commits "$w"
+  squash_upstream_onto_origin "$w"
+  printf 'edited after the squash\n' > "$w/main/docs/u1.txt"
+  git -C "$w/main" add docs/u1.txt
+  git -C "$w/main" commit -qm "edit an upstream-added file"
+  git -C "$w/main" push -q origin main
+  out=$(FM_UPSTREAM_GAP_SCAN_LIMIT=0 run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "V12 check exits 0"
+  assert_contains "$out" "upstream-status: diverged" "a zero scan limit cannot prove the squash"
+  assert_no_gap_lines "$out" "the scan limit is honoured"
+  pass "V12 a zero scan limit leaves the post-squash edit diverged"
+}
+
+test_ancestry_r1_reconcile_refuses_a_pure_gap() {
+  local w out rc
+  w=$(new_world r1)
+  bump_private "$w" core.txt "private version of the contended line"
+  bump_upstream "$w" core.txt "public version of the contended line" "public-contended"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  out=$(run_upstream "$w" reconcile)
+  rc=$?
+  expect_code 7 "$rc" "R1 reconcile refuses an ancestry gap"
+  assert_contains "$out" "reconcile: refused: ancestry-gap through" "the refusal names the gap"
+  assert_no_repair_scratch "$w"
+  pass "R1 reconcile refuses a pure ancestry gap and creates nothing"
+}
+
+test_ancestry_r2_reconcile_refuses_a_partial_gap() {
+  local w out rc
+  w=$(new_world r2)
+  private_first "$w"
+  bump_upstream "$w" docs/u1.txt "one" "public-one"
+  squash_upstream_onto_origin "$w"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  out=$(run_upstream "$w" reconcile)
+  rc=$?
+  expect_code 7 "$rc" "R2 reconcile refuses when commits remain after the gap"
+  assert_contains "$out" "reconcile: refused: ancestry-gap through" "the partial gap is still a refusal"
+  pass "R2 reconcile refuses a gap that still has new upstream commits"
+}
+
+test_ancestry_r3_real_divergence_requires_a_merge_commit() {
+  local w out rc ready_at tip_at method_at tip
+  w=$(new_world r3)
+  private_first "$w"
+  bump_upstream "$w" core.txt "public edit only" "public-edit"
+  tip=$(upstream_tip "$w")
+  out=$(run_upstream "$w" reconcile)
+  rc=$?
+  expect_code 0 "$rc" "R3 reconcile of a real divergence exits 0"
+  assert_contains "$out" "reconcile: ready" "the reconciliation is ready"
+  assert_contains "$out" "merge-method-required: merge" "the ready branch must land as a merge"
+  assert_contains "$out" "reconcile-upstream-tip: $tip" "the upstream tip being merged is named"
+  ready_at=$(printf '%s\n' "$out" | grep -n '^reconcile: ready$' | cut -d: -f1)
+  tip_at=$(printf '%s\n' "$out" | grep -n '^reconcile-upstream-tip: ' | cut -d: -f1)
+  method_at=$(printf '%s\n' "$out" | grep -n '^merge-method-required: merge$' | cut -d: -f1)
+  [ -n "$ready_at" ] && [ -n "$tip_at" ] && [ -n "$method_at" ] \
+    || fail "R3 did not print the ready line and both predecessors"
+  [ "$tip_at" -eq $((ready_at - 2)) ] && [ "$method_at" -eq $((ready_at - 1)) ] \
+    || fail "R3 did not print the upstream tip and merge method immediately before ready"
+  pass "R3 a real divergence is ready only as a merge commit"
+}
+
+test_ancestry_r4_repair_is_not_required_when_diverged() {
+  local w out rc
+  w=$(new_world r4)
+  private_first "$w"
+  bump_upstream "$w" core.txt "public edit only" "public-edit"
+  out=$(run_upstream "$w" repair-ancestry)
+  rc=$?
+  expect_code 0 "$rc" "R4 repair of a real divergence exits 0"
+  assert_contains "$out" "repair: not-required: upstream is diverged" \
+    "repair declines when the comparison is a real divergence"
+  assert_no_repair_scratch "$w"
+  pass "R4 repair-ancestry is not required for a real divergence"
+}
+
+test_ancestry_p1_dry_run_creates_nothing() {
+  local w out rc
+  w=$(new_world p1)
+  bump_private "$w" core.txt "private version of the contended line"
+  bump_upstream "$w" core.txt "public version of the contended line" "public-contended"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  out=$(run_upstream "$w" repair-ancestry --dry-run)
+  rc=$?
+  expect_code 0 "$rc" "P1 dry-run exits 0"
+  assert_contains "$out" "repair: dry-run" "dry-run stops before creating a branch"
+  assert_no_repair_scratch "$w"
+  pass "P1 repair-ancestry --dry-run reports the gap and creates nothing"
+}
+
+test_ancestry_p2_repair_records_ancestry_without_changing_the_tree() {
+  local w out rc before branch origin_tree repair_tree parents upstream
+  w=$(new_world p2)
+  bump_private "$w" core.txt "private version of the contended line"
+  bump_upstream "$w" core.txt "public version of the contended line" "public-contended"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  before=$(git -C "$w/main" rev-parse HEAD)
+  upstream=$(upstream_tip "$w")
+  out=$(run_upstream "$w" repair-ancestry)
+  rc=$?
+  expect_code 0 "$rc" "P2 repair exits 0"
+  assert_contains "$out" "repair: ready" "the repair is ready"
+  assert_contains "$out" "repair-tree: unchanged" "the repair claims an unchanged tree"
+  assert_contains "$out" "active-checkout: unchanged" "the active checkout was proved unchanged"
+  [ "$(git -C "$w/main" rev-parse HEAD)" = "$before" ] \
+    || fail "P2 moved the active checkout"
+  branch=$(printf '%s\n' "$out" | sed -n 's/^repair-branch: //p' | head -n 1)
+  [ -n "$branch" ] || fail "P2 did not name the repair branch"
+  origin_tree=$(git -C "$w/main" rev-parse 'origin/main^{tree}')
+  repair_tree=$(git -C "$w/main" rev-parse "$branch^{tree}")
+  [ "$repair_tree" = "$origin_tree" ] || fail "P2 repair tree differs from origin/main"
+  parents=$(git -C "$w/main" rev-parse "$branch^@")
+  [ "$(printf '%s\n' "$parents" | grep -c .)" -eq 2 ] \
+    || fail "P2 repair commit does not have two parents"
+  git -C "$w/main" merge-base --is-ancestor "$upstream" "$branch" \
+    || fail "P2 upstream tip is not an ancestor of the repair"
+  pass "P2 repair records the upstream parent and leaves the tree unchanged"
+}
+
+test_ancestry_p3_repair_keeps_a_private_revert_and_becomes_current() {
+  local w out rc branch line
+  w=$(new_world p3)
+  private_first "$w"
+  git -C "$w/pub" pull -q origin main
+  printf 'keep\nupstream-hunk\n' > "$w/pub/other.txt"
+  git -C "$w/pub" add other.txt
+  git -C "$w/pub" commit -qm "public other"
+  git -C "$w/pub" push -q origin main
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  squash_upstream_onto_origin "$w"
+  printf 'keep\nprivate-revert\n' > "$w/main/other.txt"
+  git -C "$w/main" add other.txt
+  git -C "$w/main" commit -qm "revert the upstream hunk"
+  git -C "$w/main" push -q origin main
+  out=$(run_upstream "$w" repair-ancestry)
+  rc=$?
+  expect_code 0 "$rc" "P3 repair exits 0"
+  assert_contains "$out" "repair: ready" "the revert fixture repairs"
+  branch=$(printf '%s\n' "$out" | sed -n 's/^repair-branch: //p' | head -n 1)
+  git -C "$w/main" push -q origin "$branch:main"
+  git -C "$w/main" fetch -q origin main
+  line=$(git -C "$w/main" show 'origin/main:other.txt')
+  assert_contains "$line" "private-revert" "the private revert survives the repair"
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "P3 check after landing exits 0"
+  assert_contains "$out" "upstream-status: current" "landing the repair makes upstream current"
+  pass "P3 a landed repair keeps the private revert and reports current"
+}
+
+test_ancestry_p4_landed_partial_repair_leaves_the_new_commit() {
+  local w out rc branch
+  w=$(new_world p4)
+  private_first "$w"
+  bump_upstream "$w" docs/u1.txt "one" "public-one"
+  squash_upstream_onto_origin "$w"
+  bump_upstream "$w" docs/u2.txt "two" "public-two"
+  out=$(run_upstream "$w" repair-ancestry)
+  rc=$?
+  expect_code 0 "$rc" "P4 repair exits 0"
+  assert_contains "$out" "repair: ready" "the partial gap repairs"
+  branch=$(printf '%s\n' "$out" | sed -n 's/^repair-branch: //p' | head -n 1)
+  git -C "$w/main" push -q origin "$branch:main"
+  git -C "$w/main" fetch -q origin main
+  out=$(run_upstream "$w" check)
+  rc=$?
+  expect_code 0 "$rc" "P4 check after landing exits 0"
+  assert_contains "$out" "upstream-status: diverged" "the commit after the gap is still divergence"
+  assert_contains "$out" "upstream-new-commits: 1" "exactly one upstream commit remains new"
+  assert_no_gap_lines "$out" "landing the repair clears the gap"
+  pass "P4 landing a partial repair leaves the one genuinely new commit"
+}
+
+test_ancestry_v0_squash_after_conflict_is_a_gap
+test_ancestry_v1_genuine_divergence_is_not_a_gap
+test_ancestry_v1b_upstream_deletion_is_not_a_gap
+test_ancestry_v2_partial_squash_counts_only_what_is_new
+test_ancestry_v3_private_deletion_then_squash_is_a_gap
+test_ancestry_v3b_deletion_of_an_upstream_edit_is_a_gap
+test_ancestry_v4_cherry_pick_stays_contained
+test_ancestry_v4b_rebase_onto_upstream_is_current
+test_ancestry_v5_real_merge_is_current
+test_ancestry_v6_private_revert_is_a_squash_proof
+test_ancestry_v7_later_edit_anchors_on_the_squash
+test_ancestry_v8_unmerged_reconcile_branch_is_diverged
+test_ancestry_v9_contribution_branch_is_diverged
+test_ancestry_v10_deleted_candidate_is_diverged
+test_ancestry_v11_candidate_fetch_failure_uses_local_refs
+test_ancestry_v12_zero_scan_limit_hides_the_squash_proof
+test_ancestry_r1_reconcile_refuses_a_pure_gap
+test_ancestry_r2_reconcile_refuses_a_partial_gap
+test_ancestry_r3_real_divergence_requires_a_merge_commit
+test_ancestry_r4_repair_is_not_required_when_diverged
+test_ancestry_p1_dry_run_creates_nothing
+test_ancestry_p2_repair_records_ancestry_without_changing_the_tree
+test_ancestry_p3_repair_keeps_a_private_revert_and_becomes_current
+test_ancestry_p4_landed_partial_repair_leaves_the_new_commit
 
 echo "# all fm-upstream tests passed"
