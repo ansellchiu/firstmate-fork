@@ -1,0 +1,241 @@
+=== SCENARIO A: genuine divergence before reconciliation ===
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 49106f8
+upstream-new-commits: 2
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: a2d6ab2 public-contended
+upstream-commit: d3302a5 public-two
+reconcile-required: yes
+inventory: attention
+inventory-entries: 0
+inventory-drift: compared 6177c042f4094349e8e9b0c6f1254dc13398390c..origin/main vs 6177c042f4094349e8e9b0c6f1254dc13398390c..upstream/main
+inventory-contended: core.txt
+inventory-uncovered: core.txt
+inventory-uncovered-count: 1
+[exit 0]
+
+=== reconcile a real divergence (expect conflict-stop, since core.txt contended) ===
+$ fm-upstream.sh reconcile
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 49106f8
+upstream-new-commits: 2
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: a2d6ab2 public-contended
+upstream-commit: d3302a5 public-two
+pr-target: origin /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+push-to-upstream: never
+reconcile-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/home/state/upstream-reconcile/fm-upstream-reconcile-d3302a5
+reconcile-branch: fm/upstream-reconcile-d3302a5
+reconcile-scratch: discarded, nothing was left behind
+active-checkout: unchanged
+reconcile: conflict
+reconcile-conflict-path: core.txt
+reconcile-next: captain decision required, nothing was changed
+[exit 4]
+
+=== repair-ancestry on a real divergence ===
+$ fm-upstream.sh repair-ancestry
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 49106f8
+upstream-new-commits: 2
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: a2d6ab2 public-contended
+upstream-commit: d3302a5 public-two
+repair: not-required: upstream is diverged
+[exit 0]
+
+Updated 1 path from the index
+candidate present locally? no
+
+=== SCENARIO B: squashed reconciliation (PR head only on origin) ===
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 5fec1ea
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: d3302a5c7e783e1b97191cb8c3b56e30141bc1dc
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 69766803b65ff4d1eb0b8f489156c6535d09e07f
+upstream-ancestry-gap-proof: tip 5fec1eabe505535cc531655e37d38e5223f90f10
+reconcile-required: no
+ancestry-repair: bin/fm-upstream.sh repair-ancestry
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..origin/main vs d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..upstream/main
+inventory-uncovered-count: 0
+[exit 0]
+
+$ fm-upstream.sh reconcile
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 5fec1ea
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: d3302a5c7e783e1b97191cb8c3b56e30141bc1dc
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 69766803b65ff4d1eb0b8f489156c6535d09e07f
+upstream-ancestry-gap-proof: tip 5fec1eabe505535cc531655e37d38e5223f90f10
+reconcile: refused: ancestry-gap through d3302a5, upstream is already present by content but not by ancestry
+reconcile-recovery: bin/fm-upstream.sh repair-ancestry, land that pull request with a merge commit, then rerun
+[exit 7]
+
+branches after refused reconcile: 
+worktree dir exists: yes
+
+$ fm-upstream.sh repair-ancestry --dry-run
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 5fec1ea
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: d3302a5c7e783e1b97191cb8c3b56e30141bc1dc
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 69766803b65ff4d1eb0b8f489156c6535d09e07f
+upstream-ancestry-gap-proof: tip 5fec1eabe505535cc531655e37d38e5223f90f10
+repair: dry-run
+[exit 0]
+
+branches after dry-run: 
+
+$ fm-upstream.sh repair-ancestry
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 5fec1ea
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: ancestry-gap
+upstream-ancestry-gap-through: d3302a5c7e783e1b97191cb8c3b56e30141bc1dc
+upstream-ancestry-gap-commits: 2
+upstream-ancestry-gap-candidate: 69766803b65ff4d1eb0b8f489156c6535d09e07f
+upstream-ancestry-gap-proof: tip 5fec1eabe505535cc531655e37d38e5223f90f10
+active-checkout: unchanged
+repair-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/home/state/upstream-reconcile/fm-upstream-ancestry-repair-d3302a5
+repair-branch: fm/upstream-ancestry-repair-d3302a5
+repair-tree: unchanged
+repair-parents: 5fec1eabe505535cc531655e37d38e5223f90f10 69766803b65ff4d1eb0b8f489156c6535d09e07f
+merge-method-required: merge
+repair: ready
+[exit 0]
+
+active checkout unchanged: yes
+repair tree == origin/main tree: yes
+repair parents: 76bd5204147811f686156149b954c0fb95099753 5fec1eabe505535cc531655e37d38e5223f90f10 69766803b65ff4d1eb0b8f489156c6535d09e07f
+upstream tip ancestor of repair: yes
+
+=== SCENARIO C: land repair as a merge commit, recheck ===
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main d3302a5
+origin-ref: origin/main 76bd520
+upstream-new-commits: 0
+upstream-equivalent-commits: 0
+upstream-status: current
+reconcile-required: no
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..origin/main vs d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..upstream/main
+inventory-uncovered-count: 0
+[exit 0]
+
+private text kept? core.txt=public line
+
+=== SCENARIO D: a new upstream commit after the repair is a real divergence ===
+$ fm-upstream.sh check
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 8a22e86
+origin-ref: origin/main 76bd520
+upstream-new-commits: 1
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: 8a22e86 public-three
+reconcile-required: yes
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..origin/main vs d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..upstream/main
+inventory-uncovered-count: 0
+[exit 0]
+
+$ fm-upstream.sh reconcile
+origin-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+upstream-remote: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/upstream.git
+default-branch: main
+upstream-push-url: DISABLED
+upstream-topology: ok
+upstream-fetch: ok
+upstream-ref: upstream/main 8a22e86
+origin-ref: origin/main 76bd520
+upstream-new-commits: 1
+upstream-equivalent-commits: 0
+upstream-status: diverged
+upstream-commit: 8a22e86 public-three
+pr-target: origin /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/origin.git
+push-to-upstream: never
+reconcile-worktree: /var/folders/52/xcqf00nn5kd1k_zk6377bs340000gn/T//fm-ug-world.A8xHDU/home/state/upstream-reconcile/fm-upstream-reconcile-8a22e86
+reconcile-branch: fm/upstream-reconcile-8a22e86
+private-commits: preserved
+active-checkout: unchanged
+reconcile-merged-commits: 1
+inventory: ok
+inventory-entries: 0
+inventory-drift: compared d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..HEAD vs d3302a5c7e783e1b97191cb8c3b56e30141bc1dc..upstream/main
+inventory-uncovered-count: 0
+reconcile-upstream-tip: 8a22e867ad24cc9dd47180b253e8b0016c12b8d8
+merge-method-required: merge
+reconcile: ready
+[exit 0]

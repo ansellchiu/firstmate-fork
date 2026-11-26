@@ -1,0 +1,61 @@
+ok - T1 public upstream with no new commits reports current
+ok - T2 patch-equivalent upstream work is reported as already contained
+ok - T3 divergence reconciles on an isolated branch, preserving both sides
+ok - T4 a conflicting reconciliation aborts cleanly and stops for a decision
+ok - T5 a home with no public upstream remote degrades to origin-only updating
+ok - T5b reconcile with no public upstream remote is not-required, not a refusal
+ok - T5c an upstream whose push url reaches the public repo refuses
+ok - T6 an upstream that is the private origin refuses
+ok - T7 an unreachable public upstream degrades to origin-only updating
+ok - T7b reconcile against an unreachable public upstream is not-required
+ok - T8 a landed reconciliation reaches the home through the guarded fast-forward
+ok - T9 cleanup removes the scratch worktree and keeps the branch
+ok - T10 cleanup refuses to discard uncommitted reconciliation work
+ok - T11 a missing or schema-invalid inventory refuses with its own exit code
+ok - T12 a refused reconciliation leaves nothing behind and a retry succeeds
+ok - T13 no reconcile decision is printed before its invariants are proven
+ok - T14 the reported merged-commit count matches what the merge actually brings in
+ok - T15 a teardown that could not complete says so and names what was left
+ok - T16 a degraded check never compares against the cached upstream ref
+ok - T17 a broken reconciliation invariant returns the dedicated invariant code
+ok - T18 a fetch that fails without output still reports a concrete reason
+ok - T19 a conflict whose teardown cannot complete reports the kept scratch
+ok - T20 a withheld comparison and an unresolvable revision report different reasons
+ok - T21 a public repo with no matching default branch degrades to origin-only updating
+ok - T22 a merge git refuses outright reports a failure, not a conflict
+ok - T23 a requested comparison with no merge base says the merge base could not be computed
+ok - G1 pr-guard reports two carried upstream commits before the squash
+ok - G2 an ordinary feature branch is clear
+ok - G3 a foreign repo URL is not-applicable and does not fetch
+ok - G4 an unreachable public upstream is unknown
+ok - G5 pr-guard ignores a rewound cached upstream ref
+ok - G6 a head the pull-request ref does not contain is unknown
+ok - guard verbs require full hexadecimal SHAs
+ok - pr-landed distinguishes landed, lost, unresolvable and fetch failure
+ok - H1 carried reports the 51 commits of the recorded incident
+ok - V0 a squash after conflict resolution is an ancestry gap with nothing new
+ok - V1 genuine divergence is diverged, not an ancestry gap
+ok - V1b an upstream deletion is diverged, not an ancestry gap
+ok - V2 a partial squash reports the gap and the one commit after it
+ok - V3 a private deletion followed by a two-commit squash is an ancestry gap
+ok - V3b deleting a file upstream edited, then squashing, is an ancestry gap
+ok - V4 cherry-picked upstream commits stay contained
+ok - V4b a fork rebased onto upstream is current
+ok - V5 a real merge commit is current
+ok - V6 a private revert after a squash is an ancestry gap proved at the squash
+ok - V7 a later edit of an upstream-added file anchors the proof on the squash
+ok - V8 a reconcile branch that was not merged stays diverged
+ok - V9 an upstream-based contribution branch stays diverged
+ok - V10 deleting the squashed branch leaves an honest divergence
+ok - V11 a failed candidate fetch still proves the gap from local refs
+ok - V12 a zero scan limit leaves the post-squash edit diverged
+ok - R1 reconcile refuses a pure ancestry gap and creates nothing
+ok - R2 reconcile refuses a gap that still has new upstream commits
+ok - R3 a real divergence is ready only as a merge commit
+ok - R4 repair-ancestry is not required for a real divergence
+ok - P1 repair-ancestry --dry-run reports the gap and creates nothing
+ok - P2 repair records the upstream parent and leaves the tree unchanged
+ok - P3 a landed repair keeps the private revert and reports current
+ok - P4 landing a partial repair leaves the one genuinely new commit
+ok - repair imports a candidate that exists only as a pull-request head
+# all fm-upstream tests passed
