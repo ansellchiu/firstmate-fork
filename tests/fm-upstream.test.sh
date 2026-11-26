@@ -984,6 +984,86 @@ test_pr_guard_head_not_on_pr_ref_is_unknown() {
   pass "G6 a head the pull-request ref does not contain is unknown"
 }
 
+test_guard_verbs_require_full_sha() {
+  local w out rc rev head
+  w=$(new_world full-sha)
+  head=$(git -C "$w/main" rev-parse HEAD)
+  for rev in refs/guard/head refs/guard/base HEAD "${head:0:12}" \
+    "${head}0" "${head}00000000000000000000000" \
+    "${head}0000000000000000000000000" \
+    zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz ''; do
+    out=$(FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPSTREAM" pr-guard --repo-url "$(origin_url_of "$w")" \
+      --pr-ref refs/heads/main --head "$rev" --base main 2>&1)
+    rc=$?
+    expect_code 1 "$rc" "pr-guard rejects a non-full SHA: $rev"
+    assert_contains "$out" "usage: fm-upstream.sh" "invalid head is usage"
+    out=$(FM_ROOT_OVERRIDE="$w/main" FM_HOME="$w/home" "$UPSTREAM" pr-landed --through "$rev" --base main 2>&1)
+    rc=$?
+    expect_code 1 "$rc" "pr-landed rejects a non-full SHA: $rev"
+    assert_contains "$out" "usage: fm-upstream.sh" "invalid through is usage"
+  done
+  for rev in 1111111111111111111111111111111111111111 \
+    ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789; do
+    out=$(run_upstream "$w" pr-guard --repo-url "$(origin_url_of "$w")" \
+      --pr-ref refs/heads/main --head "$rev" --base main)
+    rc=$?
+    expect_code 0 "$rc" "a full hexadecimal head reaches availability checking"
+    assert_contains "$out" "upstream-guard: unknown: head $rev" "a missing full head is unknown"
+    out=$(run_upstream "$w" pr-landed --through "$rev" --base main)
+    rc=$?
+    expect_code 0 "$rc" "a full hexadecimal through reaches ancestry checking"
+    assert_contains "$out" "upstream-ancestry: unknown: unresolvable $rev" "a missing full through is unknown"
+  done
+  pass "guard verbs require full hexadecimal SHAs"
+}
+
+test_pr_landed_verdicts() {
+  local w out rc through real
+  w=$(new_world landed)
+  through=$(git -C "$w/main" rev-parse HEAD)
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "landed exits 0"
+  assert_equals "upstream-ancestry: landed" "$out" "origin contains the fork point"
+
+  bump_upstream "$w" public.txt "public only"
+  git -C "$w/main" fetch -q upstream
+  through=$(upstream_tip "$w")
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "lost exits 0"
+  assert_equals "upstream-ancestry: lost" "$out" "origin lacks the locally available public commit"
+
+  through=1111111111111111111111111111111111111111
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "unresolvable exits 0"
+  assert_equals "upstream-ancestry: unknown: unresolvable $through" "$out" "an absent object is not lost"
+
+  real=$(command -v git)
+  mkdir -p "$w/shim"
+  cat > "$w/shim/git" <<SHIM
+#!/usr/bin/env bash
+case "\$*" in
+  *"merge-base --is-ancestor"*) exit 128 ;;
+esac
+exec "$real" "\$@"
+SHIM
+  chmod +x "$w/shim/git"
+  through=$(git -C "$w/main" rev-parse HEAD)
+  out=$(PATH="$w/shim:$PATH" run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "fatal ancestry check exits 0"
+  assert_equals "upstream-ancestry: unknown: unresolvable $through" "$out" "fatal errors never assert lost"
+
+  git -C "$w/main" remote set-url origin "$w/does-not-exist.git"
+  out=$(run_upstream "$w" pr-landed --through "$through" --base main)
+  rc=$?
+  expect_code 0 "$rc" "fetch failure exits 0"
+  assert_equals "upstream-ancestry: unknown: origin refs unavailable" "$out" "fetch failure remains unknown"
+  pass "pr-landed distinguishes landed, lost, unresolvable and fetch failure"
+}
+
 # --- H1: the recorded 51-commit incident ----------------------------------
 test_carried_reports_the_recorded_incident() {
   local head=43f0b705195989a748d70b94cce1c5aa84394ead
@@ -1040,6 +1120,8 @@ test_pr_guard_foreign_repo_does_not_fetch
 test_pr_guard_unreachable_upstream_is_unknown
 test_pr_guard_ignores_rewound_cached_upstream
 test_pr_guard_head_not_on_pr_ref_is_unknown
+test_guard_verbs_require_full_sha
+test_pr_landed_verdicts
 test_carried_reports_the_recorded_incident
 
 echo "# all fm-upstream tests passed"

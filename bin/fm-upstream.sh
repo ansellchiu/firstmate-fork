@@ -606,7 +606,8 @@ cmd_pr_guard() {
       *) usage; return 1 ;;
     esac
   done
-  if [ -z "$repo_url" ] || [ -z "$pr_ref" ] || [ -z "$head" ] || [ -z "$base" ]; then
+  if [ -z "$repo_url" ] || [ -z "$pr_ref" ] || [ -z "$base" ] \
+    || ! [[ "$head" =~ ^([[:xdigit:]]{40}|[[:xdigit:]]{64})$ ]]; then
     usage
     return 1
   fi
@@ -653,7 +654,7 @@ cmd_pr_guard() {
 }
 
 cmd_pr_landed() {
-  local through="" base="" origin_url
+  local through="" base="" origin_url rc
   while [ $# -gt 0 ]; do
     case "$1" in
       --through) through=${2:-}; shift 2 || { usage; return 1; } ;;
@@ -661,7 +662,7 @@ cmd_pr_landed() {
       *) usage; return 1 ;;
     esac
   done
-  if [ -z "$through" ] || [ -z "$base" ]; then
+  if [ -z "$base" ] || ! [[ "$through" =~ ^([[:xdigit:]]{40}|[[:xdigit:]]{64})$ ]]; then
     usage
     return 1
   fi
@@ -674,7 +675,12 @@ cmd_pr_landed() {
   if sg merge-base --is-ancestor "$through" refs/guard/base >/dev/null 2>&1; then
     echo "upstream-ancestry: landed"
   else
-    echo "upstream-ancestry: lost"
+    rc=$?
+    if [ "$rc" -eq 1 ]; then
+      echo "upstream-ancestry: lost"
+    else
+      echo "upstream-ancestry: unknown: unresolvable $through"
+    fi
   fi
   return 0
 }
