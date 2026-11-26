@@ -72,17 +72,22 @@
 # `carried: unresolvable: <rev>` and exits 2.
 #
 # pr-guard decides in order, and stops at the first decision. A missing or
-# empty flag is usage. A repo URL that is not this home's origin, or a missing
-# upstream remote, prints `upstream-guard: not-applicable: <why>` with no
-# network. No default branch, a failed fetch, or a head commit the pull-request
+# empty flag, or a --head that is not a full 40- or 64-hex-character SHA, is
+# usage and exits 1 before any network. A repo URL that is not this home's
+# origin, or a missing upstream remote, prints
+# `upstream-guard: not-applicable: <why>` with no network. No default branch, a failed fetch, or a head commit the pull-request
 # ref cannot reach prints `upstream-guard: unknown: <why>`. Otherwise it prints
 # `upstream-guard: clear`, or `upstream-guard: carries` followed by the carried
 # lines above. Every one of those results exits 0.
 #
-# pr-landed fetches <base> from origin into the scratch repository and prints
+# pr-landed takes the same usage rule: a missing --base, or a --through that is
+# not a full 40- or 64-hex-character SHA, is usage and exits 1. Otherwise it
+# fetches <base> from origin into the scratch repository and prints
 # `upstream-ancestry: landed` when <through> is an ancestor of that tip,
-# `upstream-ancestry: lost` when it is not, and
-# `upstream-ancestry: unknown: <why>` when the fetch fails. All three exit 0.
+# `upstream-ancestry: lost` when it is not,
+# `upstream-ancestry: unknown: origin refs unavailable` when the fetch fails, and
+# `upstream-ancestry: unknown: unresolvable <through>` when <through> does not
+# resolve to a commit there. All four exit 0.
 #
 # Environment:
 #   FM_UPSTREAM_REMOTE        remote name to fetch (default: upstream)
