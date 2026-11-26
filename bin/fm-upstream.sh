@@ -281,6 +281,7 @@ UNAVAILABLE_REASON=""
 GAP_THROUGH=""
 GAP_COMMITS=0
 GAP_CANDIDATE=""
+GAP_CANDIDATE_REF=""
 GAP_PROOF=""
 GAP_ANCHOR=""
 
@@ -298,13 +299,14 @@ gap_tree_matches() {
 # cannot be proven stays diverged.
 find_ancestry_gap() {
   local origin_ref=$1 upstream_ref=$2
-  local O U otree candidates c up b0 seen kind anchor n
-  local best="" bestc="" bestkind="" bestanchor="" bestn=-1
+  local O U otree candidates c cref up b0 seen kind anchor n taken
+  local best="" bestc="" bestref="" bestkind="" bestanchor="" bestn=-1
   local fetch_out fetch_rc scans s want gap_scan_limit
   gap_scan_limit="${FM_UPSTREAM_GAP_SCAN_LIMIT:-200}"
   GAP_THROUGH=""
   GAP_COMMITS=0
   GAP_CANDIDATE=""
+  GAP_CANDIDATE_REF=""
   GAP_PROOF=""
   GAP_ANCHOR=""
   O=$(git_root rev-parse "$origin_ref^{commit}")
@@ -323,15 +325,22 @@ find_ancestry_gap() {
   if [ "$fetch_rc" -ne 0 ]; then
     echo "upstream-ancestry-candidates: local-only: $(first_line "$fetch_out" "git fetch exited with status $fetch_rc")"
   fi
+  # One ref per commit. The ref is how repair copies a candidate that
+  # exists only in this scratch repository into the main object store.
   candidates=$(
     {
-      sg for-each-ref --format='%(objectname)' refs/cand
-      git_root for-each-ref --format='%(objectname)' refs/remotes/origin refs/heads
-    } | sort -u
+      sg for-each-ref --format='%(objectname) %(refname)' refs/cand
+      git_root for-each-ref --format='%(objectname) %(refname)' refs/remotes/origin refs/heads
+    } | sort -k1,1 -k2,2 -u
   )
   otree=$(sg rev-parse "$O^{tree}")
-  while IFS= read -r c; do
+  taken=" "
+  while IFS=' ' read -r c cref; do
     [ -n "$c" ] || continue
+    case "$taken" in
+      *" $c "*) continue ;;
+    esac
+    taken="$taken$c "
     up=$(sg merge-base "$c" "$U" 2>/dev/null) || continue
     # F1: U' is not an ancestor of O. The merge base equaling U' is that test.
     seen=$(sg merge-base "$up" "$O" 2>/dev/null) || continue
@@ -370,6 +379,7 @@ EOF
       bestn=$n
       best=$up
       bestc=$c
+      bestref=$cref
       bestkind=$kind
       bestanchor=$anchor
     fi
@@ -380,9 +390,31 @@ EOF
   GAP_THROUGH=$best
   GAP_COMMITS=$bestn
   GAP_CANDIDATE=$bestc
+  GAP_CANDIDATE_REF=$bestref
   GAP_PROOF=$bestkind
   GAP_ANCHOR=$bestanchor
   return 0
+}
+
+# A proving commit may exist only as a pull-request head fetched into the
+# scratch repository. Copy it in under a ref that is not a branch, so the
+# repair merge can see the object, then drop that ref. The merge itself keeps
+# the object reachable.
+import_gap_candidate() {
+  if git_root cat-file -e "${GAP_CANDIDATE}^{commit}" >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -z "$GAP_CANDIDATE_REF" ]; then
+    return 1
+  fi
+  if ! git_root fetch -q "$SCRATCH" "+${GAP_CANDIDATE_REF}:refs/fm-upstream/repair-candidate"; then
+    return 1
+  fi
+  git_root cat-file -e "${GAP_CANDIDATE}^{commit}" >/dev/null 2>&1
+}
+
+drop_repair_candidate_ref() {
+  git_root update-ref -d refs/fm-upstream/repair-candidate >/dev/null 2>&1 || true
 }
 
 classify() {
@@ -871,10 +903,6 @@ cmd_repair_ancestry() {
     echo "repair: not-required: upstream is $UPSTREAM_STATUS"
     return 0
   fi
-  echo "upstream-ancestry-gap-through: $GAP_THROUGH"
-  echo "upstream-ancestry-gap-commits: $GAP_COMMITS"
-  echo "upstream-ancestry-gap-candidate: $GAP_CANDIDATE"
-  echo "upstream-ancestry-gap-proof: $GAP_PROOF $GAP_ANCHOR"
   if [ "$dry" -eq 1 ]; then
     echo "repair: dry-run"
     return 0
@@ -890,13 +918,21 @@ cmd_repair_ancestry() {
     echo "repair: failed: cannot create isolated worktree: $(first_line "$out" "git worktree add failed")"
     return 6
   fi
-  if ! git -C "$worktree" merge -s ours --no-ff --no-edit \
-    -m "Record upstream ancestry through $short_through" "$GAP_CANDIDATE"; then
+  if ! import_gap_candidate; then
+    drop_repair_candidate_ref
+    discard_scratch "$worktree" "$branch"
+    echo "repair: failed: candidate is not available"
+    return 6
+  fi
+  if ! out=$(git -C "$worktree" merge -s ours --no-ff --no-edit \
+    -m "Record upstream ancestry through $short_through" "$GAP_CANDIDATE" 2>&1); then
     git -C "$worktree" merge --abort >/dev/null 2>&1 || true
+    drop_repair_candidate_ref
     discard_scratch "$worktree" "$branch"
     echo "repair: failed: merge"
     return 6
   fi
+  drop_repair_candidate_ref
   origin_sha=$(git_root rev-parse "$origin_ref")
   origin_tree=$(git_root rev-parse "$origin_ref^{tree}")
   head_tree=$(git -C "$worktree" rev-parse 'HEAD^{tree}')

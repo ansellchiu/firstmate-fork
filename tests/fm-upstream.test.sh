@@ -1645,4 +1645,38 @@ test_ancestry_p2_repair_records_ancestry_without_changing_the_tree
 test_ancestry_p3_repair_keeps_a_private_revert_and_becomes_current
 test_ancestry_p4_landed_partial_repair_leaves_the_new_commit
 
+# The proving commit exists only as refs/pull/*/head on origin. It is not a
+# local branch and not an origin-tracking ref, and the clone has been pruned
+# so the object is absent until repair copies it out of the scratch fetch.
+test_ancestry_repair_imports_a_pull_request_candidate() {
+  local w out rc cand parents
+  w=$(new_world pull-only)
+  private_first "$w"
+  two_upstream_commits "$w"
+  squash_upstream_onto_origin "$w"
+  cand=$(git -C "$w/main" rev-parse "$SQUASH_BRANCH")
+  git -C "$w/origin.git" update-ref refs/pull/7/head "$cand"
+  git -C "$w/main" push -q origin --delete "$SQUASH_BRANCH"
+  git -C "$w/main" branch -D "$SQUASH_BRANCH" >/dev/null
+  git -C "$w/main" update-ref -d "refs/remotes/origin/$SQUASH_BRANCH"
+  git -C "$w/main" reflog expire --expire=now --all
+  git -C "$w/main" gc --prune=now >/dev/null 2>&1
+  if git -C "$w/main" cat-file -e "${cand}^{commit}" >/dev/null 2>&1; then
+    fail "the pull-request candidate was still in the clone"
+  fi
+  git -C "$w/origin.git" cat-file -e "${cand}^{commit}" >/dev/null 2>&1 \
+    || fail "origin lost the pull-request head"
+  out=$(run_upstream "$w" repair-ancestry)
+  rc=$?
+  expect_code 0 "$rc" "repair of a pull-request-only candidate exits 0"
+  assert_contains "$out" "repair: ready" "a candidate that existed only on a pull ref still repairs"
+  assert_contains "$out" "repair-parents: $(git -C "$w/main" rev-parse 'origin/main') $cand" \
+    "the imported commit is the repair's second parent"
+  parents=$(git -C "$w/main" rev-parse "$(printf '%s\n' "$out" | sed -n 's/^repair-branch: //p' | head -n 1)^@")
+  assert_contains "$parents" "$cand" "the repair commit records the pull-request candidate"
+  pass "repair imports a candidate that exists only as a pull-request head"
+}
+
+test_ancestry_repair_imports_a_pull_request_candidate
+
 echo "# all fm-upstream tests passed"
