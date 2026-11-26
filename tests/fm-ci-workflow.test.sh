@@ -752,6 +752,7 @@ RUBY
 # FM_UPSTREAM_URL set, stays idle otherwise, and fails only on ancestry-gap.
 test_upstream_ancestry_runs_only_on_push_when_configured() {
   local runs
+  # shellcheck disable=SC2016  # Ruby text, not shell expansions
   ruby -ryaml -ropen3 -rtmpdir -e "$EXPRESSION_RUBY" -e "$CONTEXT_RUBY" -e '
 job = YAML.load_file(ARGV[0]).fetch("jobs").fetch("upstream-ancestry")
 checkout = job.fetch("steps").find { |step| step["uses"].to_s.start_with?("actions/checkout@") }
